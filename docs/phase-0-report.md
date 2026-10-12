@@ -12,6 +12,10 @@ Btrfs-root boot: [CI 38293373666](https://github.com/ManoharPaturi/mano-os/actio
 PR #4 merged. Actual root `/dev/vdc[/@]`, preserved original disk hash,
 20 passing probes, zero failures, eight pending checks.
 
+Root recovery: [CI 38294272602](https://github.com/ManoharPaturi/mano-os/actions/runs/38294272602),
+PR #5 merged. Actual `@recovery` boot, distinct boot ID, restored sentinel,
+changed `@` retained, separate snapshot store; 21 passing probes, zero failures.
+
 Current architecture decision: **NO-GO for production execution**.
 CI emits `report.json`, hashed logs, a package manifest, memory observations,
 mount inventory, Sway screenshot and independent-stop outputs.
@@ -29,8 +33,11 @@ mount inventory, Sway screenshot and independent-stop outputs.
 | P0-09 | Agent denied human runtime; authentic approval and physical spoof proof pending |
 | P0-10 | Systemd stop with frozen mock core; stopd/grant/physical trigger pending |
 | P0-11 | Snapper exact data restore verified; root snapshot clone/third boot implemented for CI |
-| P0-12 | Raw VM observations; OOM containment follow-up implemented for CI; physical 8 GB measurements and final go/no-go pending |
+| P0-12 | Live VM memory/Sway/cgroup metrics implemented for CI; final architecture remains NO-GO |
 
 Nothing is marked fully complete merely because its harness exists. Read the
 specific CI run artifact for actual probe outcomes. CI failing blocks merges;
 mandatory pending proofs block architecture promotion. These are separate gates.
+
+Physical 8 GB performance remains a separate Phase 6 requirement; installer and
+firmware boot remain Phase 7 requirements. VM observations cannot fulfill these.

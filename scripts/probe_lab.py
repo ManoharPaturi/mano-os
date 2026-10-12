@@ -14,10 +14,12 @@ import time
 from pathlib import Path
 
 from mano_lab.evidence import Probe, write_report
+from mano_lab.resources import process_memory, system_memory
 
 ROOT = Path("/opt/mano-lab")
 OUT = ROOT / "evidence"
 PROBES = []
+RESOURCE_OBSERVATIONS = {}
 
 
 def call(argv, timeout=60):
@@ -101,6 +103,7 @@ def sandbox_probes():
 
 
 def desktop_probe():
+    launch_started = time.monotonic()
     log = (OUT / "sway.txt").open("w")
     compositor = subprocess.Popen(
         agent(
@@ -143,6 +146,15 @@ def desktop_probe():
         except (ValueError, TypeError):
             result = subprocess.CompletedProcess([], 1, result.stdout, result.stderr)
         record("P0-04", "headless-sway-output", result)
+        if result.returncode == 0:
+            RESOURCE_OBSERVATIONS["sway_launch_to_output_seconds"] = (
+                time.monotonic() - launch_started
+            )
+            pid_query = call(["pgrep", "-u", "mano-agent", "-x", "sway"])
+            sway_pids = [int(value) for value in pid_query.stdout.split()]
+            if len(sway_pids) != 1:
+                raise RuntimeError("Cannot identify the single lab Sway process")
+            RESOURCE_OBSERVATIONS["sway_memory_bytes"] = process_memory(sway_pids[0])
         # Diagnostic renderer checks are not sandboxed GUI-worker release proof.
         record(
             "P0-05",
@@ -254,6 +266,43 @@ def stop_probe():
     )
     if not record("P0-10", "cgroup-task-start", result):
         return
+    limits = call(
+        [
+            "systemctl",
+            "show",
+            "mano-lab-task.service",
+            "-p",
+            "MemoryMax",
+            "-p",
+            "TasksMax",
+            "-p",
+            "CPUQuotaPerSecUSec",
+            "-p",
+            "ControlGroup",
+        ]
+    )
+    values = dict(line.split("=", 1) for line in limits.stdout.splitlines() if "=" in line)
+    if (
+        limits.returncode != 0
+        or values.get("MemoryMax") != "67108864"
+        or values.get("TasksMax") != "16"
+        or values.get("CPUQuotaPerSecUSec") != "200ms"
+    ):
+        raise RuntimeError(f"Observed task limits differ from requested limits: {values}")
+    RESOURCE_OBSERVATIONS["observed_task_cgroup_limits"] = values
+    kernel_group = Path("/sys/fs/cgroup") / values["ControlGroup"].lstrip("/")
+    memory_max = int((kernel_group / "memory.max").read_text().strip())
+    pids_max = int((kernel_group / "pids.max").read_text().strip())
+    quota, period = (int(value) for value in (kernel_group / "cpu.max").read_text().split())
+    if memory_max != 67108864 or pids_max != 16 or quota * 5 != period:
+        raise RuntimeError("Kernel cgroup limits differ from the selected task profile")
+    RESOURCE_OBSERVATIONS["kernel_task_cgroup_limits"] = {
+        "memory_max_bytes": memory_max,
+        "pids_max": pids_max,
+        "cpu_quota_microseconds": quota,
+        "cpu_period_microseconds": period,
+    }
+    (OUT / "task-cgroup-limits.txt").write_text(limits.stdout)
     started = call(
         [
             "systemd-run",
@@ -440,6 +489,8 @@ def oom_probe():
 def main():
     if os.getuid() != 0 or not Path("/dev/vdb").exists():
         raise RuntimeError("Run only in the disposable VM through guest_lab.sh")
+    started = time.monotonic()
+    RESOURCE_OBSERVATIONS["pre_probe_guest_memory_bytes"] = system_memory()
     PROBES.extend(
         [
             Probe(
@@ -485,12 +536,6 @@ def main():
                 else "Root recovery has not run yet",
                 ("root-recovery.json",) if (OUT / "root-recovery.json").is_file() else (),
             ),
-            Probe(
-                "P0-12",
-                "physical-8gb-performance",
-                "pending",
-                "VM memory is not physical laptop performance",
-            ),
         ]
     )
     try:
@@ -501,6 +546,43 @@ def main():
     except Exception as exc:
         (OUT / "exception.txt").write_text(repr(exc))
         PROBES.append(Probe("P0-12", "probe-harness", "fail", str(exc), ("exception.txt",)))
+    RESOURCE_OBSERVATIONS.update(
+        {
+            "post_probe_guest_memory_bytes": system_memory(),
+            "probe_suite_elapsed_seconds": time.monotonic() - started,
+            "measurement_scope": "VM primitives; production core/broker and human UI absent",
+            "physical_hardware": False,
+            "human_compositor_memory_bytes": None,
+            "verified_product_task_success_rate": None,
+            "model_cost": None,
+            "ci_cost": None,
+            "model_connected": False,
+        }
+    )
+    (OUT / "resources.json").write_text(json.dumps(RESOURCE_OBSERVATIONS, indent=2) + "\n")
+    resources_complete = (
+        all(
+            RESOURCE_OBSERVATIONS.get(key)
+            for key in (
+                "sway_launch_to_output_seconds",
+                "sway_memory_bytes",
+                "observed_task_cgroup_limits",
+                "kernel_task_cgroup_limits",
+            )
+        )
+        and (OUT / "task-cgroup-limits.txt").is_file()
+    )
+    PROBES.append(
+        Probe(
+            "P0-12",
+            "measured-vm-resource-observations",
+            "pass" if resources_complete else "fail",
+            "Live guest memory, Sway RSS/high-watermark/launch time and actual cgroup limits",
+            ("resources.json", "task-cgroup-limits.txt")
+            if resources_complete
+            else ("resources.json",),
+        )
+    )
     report = write_report(
         OUT,
         PROBES,
@@ -509,6 +591,10 @@ def main():
             "ram_ceiling_mib": 4096,
             "physical_hardware": False,
             "agent_connected": False,
+            "deferred_release_gates": {
+                "phase6_physical_8gb_performance": "pending; user chose CI VM development",
+                "phase7_firmware_installer_boot": "pending; current lab uses direct kernel boot",
+            },
         },
     )
     print(json.dumps(report, indent=2))
