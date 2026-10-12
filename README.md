@@ -2,8 +2,8 @@
 
 AI-native, prompt-first Linux with a trusted broker and isolated agent desktop.
 
-**Status: Phase 0 lab in development. No production runtime, native prompt,
-coding-agent integration, .deb or ISO yet.**
+**Status: Phase 0 lab in development. A native prompt prototype is implemented.
+Production runtime, coding-agent integration, .deb and ISO remain pending.**
 
 The complete original [v2.1 specification](docs/spec-v2.1.md) is preserved verbatim.
 Its architecture and acceptance gates remain the product contract.
@@ -22,8 +22,9 @@ Its architecture and acceptance gates remain the product contract.
 
 Writer hidden-menu coordinates remain unavailable. A visible-control scale probe
 checks actual coordinate saves at scales 1 and 2; CI artifacts determine acceptance.
-Cross-session input, native prompt/rescue, authentic approval and the trusted stop
-route remain pending.
+Native GTK4 prompt input is tested in the separate CI human session. Real serial
+rescue authentication is being validated; cross-session input, authentic approval
+and the trusted stop route remain pending.
 
 ## Development
 

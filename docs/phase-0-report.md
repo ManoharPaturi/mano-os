@@ -24,7 +24,7 @@ mount inventory, Sway screenshot and independent-stop outputs.
 |---|---|
 | P0-01 | Debian 13 QEMU guest at 4 GiB; real btrfs-root second boot implemented for CI acceptance |
 | P0-02 | Security updates and minimum patched bubblewrap/proxy checks implemented |
-| P0-03 | Human Sway design template only; real native prompt and rescue TTY pending |
+| P0-03 | Native GTK4 human prompt implemented and exercised; real serial PAM/TTY rescue under CI acceptance |
 | P0-04 | Separate agent identity/runtime, headless output and capture probes |
 | P0-05 | Real sandboxed Chromium locator and Writer named Save/ODT/PDF contracts; cross-session input proof pending |
 | P0-06 | Real task-private accessible Save; visible-control window-coordinate/scale probe added for CI acceptance |
@@ -54,3 +54,10 @@ Visible-control follow-up tests scales 1 and 2 using independently observed Sway
 client/output geometry, actual controller clicks and exact saved ODT content.
 The worker never receives compositor IPC. Read the final CI artifact for acceptance;
 these probe additions do not promote the architecture or prove physical input.
+
+Native human prompt candidate uses GTK4 in its separate CI human Sway session,
+with an actual accessible editable/Send action, fullscreen window and screenshot.
+The serial recovery probe authenticates via real ttyS0/getty/login/PAM, checks a
+complete challenge/UID/TTY response with stopped mock core, verifies account/core
+cleanup, and redacts temporary fixture material. Final-head CI determines acceptance.
+Physical display/input and a broker-bound approval service remain unverified.
