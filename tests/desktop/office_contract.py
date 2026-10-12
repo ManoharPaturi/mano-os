@@ -48,12 +48,15 @@ def main():
     )
     import pyatspi
 
-    env = dict(os.environ, SAL_USE_VCLPLUGIN="gtk3", SAL_ACCESSIBILITY_ENABLED="1")
+    env = dict(
+        os.environ, SAL_USE_VCLPLUGIN="gtk3", SAL_ACCESSIBILITY_ENABLED="1", WAYLAND_DEBUG="client"
+    )
     log = (ROOT / "office-process.txt").open("w")
     proc = subprocess.Popen(
         [
             "/usr/bin/libreoffice",
             "--writer",
+            "--nologo",
             "--norestore",
             "--nodefault",
             "--nofirststartwizard",

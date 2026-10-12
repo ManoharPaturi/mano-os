@@ -145,8 +145,14 @@ def command(
             "--ro-bind",
             "/etc/fonts",
             "/etc/fonts",
+            "--ro-bind",
+            "/etc/libreoffice",
+            "/etc/libreoffice",
             "--setenv",
             "GDK_BACKEND",
+            "wayland",
+            "--setenv",
+            "XDG_SESSION_TYPE",
             "wayland",
         ]
     if browser:
