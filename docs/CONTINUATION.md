@@ -6,28 +6,22 @@ User authorized implementation, PRs and mostly carrying them through to merge.
 Merge only after every current-head CI passes; main protection is enforced for admins.
 User explicitly chose CI VM development for now. No agents have been delegated.
 
-Verified merged work: PRs #1-11. Latest main 63b4ea0cfac3edf80c2668c7681572ae7b832071.
-PR #11 accepted CI 38311211301; post-merge main 38311680967 passed all checks.
-Recovered report: 30 pass, 0 fail, 4 pending; architecture remains NO-GO.
-Includes actual root/recovery boots, original disk preservation, privileged Wayland
-bind denials, private XWayland, Chromium, Writer semantic and coordinate saves at
-scales 1 and 2. Worker virtual-pointer creation denied. Full goal remains active.
+Verified merged work: PRs #1-12. Main 47947b1898990b214ec14c37525ef10018df65d0.
+PR #12 accepted CI 38314745160; post-merge main 38315316185 passed all checks.
+Recovered report: 31 pass, 0 fail, 3 pending (P0-05/09/10); architecture NO-GO.
+Native GTK4 prompt and real authenticated ttyS0 recovery with frozen core verified.
+Prior geometry/Wayland/XWayland/browser/root recovery contracts remain passing.
 
-Current branch: feat/phase0-native-prompt-rescue. Adds minimal native GTK4 prompt
-under the separate human principal, actual accessible editable/Send contract and
-request-data receipt. No execution or approval authority is wired to this UI.
-Human Sway starts only the native prompt by default; recovery foot is explicit.
-CI console changes from write-only logfile to logged Unix socket-backed serial.
-Trusted runner authenticates the temporary human fixture via agetty/login/PAM on
-real ttyS0, checks a secret challenge response/actual UID/TTY while mock core remains
-SIGSTOP'ed. No PTY substitute, physical-input or full approval-service claim.
-Fixture credentials are captured privately, never passed on argv/env or retained in
-artifacts; serial output is redacted, fixture is cleaned and human password locked.
-Runner combines the serial/native evidence into the report after guest export.
-Both normal and recovered roots must run this flow. Use Type=exec so STOP targets
-the credential-switched core, not the pre-exec root launcher. Require complete
-UART JSON frames; token substrings alone are insufficient. Verify cleanup lock/PID. Candidate remains unverified
-until final-head CI succeeds; merge only via merge_checked.py.
+Current branch: feat/phase0-cross-session-focus. Keep the real human prompt alive
+while the separate agent compositor runs its actual browser, Writer pointer saves,
+and XWayland app contracts. GTK4 AT-SPI text/focus getters returned empty/unfocused despite functional editable
+input. Observe the actual native GTK widgets/signals in a CI wrapper of the same
+Prompt class instead. A trusted virtual keyboard gives the headless human seat an
+actual keyboard-focus path. Monitor an unsent canary and 50 ms snapshots, unchanged receipt count, and protected compositor focus
+checkpoints. Verify distinct net namespaces and actual human Wayland/command IPC
+connection denial for agent, core and worker principals. No physical-input claim.
+This is one P0-05 issue; no approval/runtime/model/stop authority is enabled.
+Candidate remains unverified until final-head CI passes normal/recovered roots.
 
 Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
 No production broker, core/model execution, coding delegate, .deb or ISO exists yet.

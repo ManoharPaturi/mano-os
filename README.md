@@ -23,8 +23,9 @@ Its architecture and acceptance gates remain the product contract.
 Writer hidden-menu coordinates remain unavailable. A visible-control scale probe
 checks actual coordinate saves at scales 1 and 2; CI artifacts determine acceptance.
 Native GTK4 prompt input is tested in the separate CI human session. Real serial
-rescue authentication is being validated; cross-session input, authentic approval
-and the trusted stop route remain pending.
+rescue authentication is verified on the VM serial console with a stopped mock core.
+A concurrent human/agent focus and input witness is under CI acceptance. Authentic
+approval and the trusted stop route remain pending.
 
 ## Development
 

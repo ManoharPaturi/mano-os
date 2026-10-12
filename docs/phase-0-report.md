@@ -24,9 +24,9 @@ mount inventory, Sway screenshot and independent-stop outputs.
 |---|---|
 | P0-01 | Debian 13 QEMU guest at 4 GiB; real btrfs-root second boot implemented for CI acceptance |
 | P0-02 | Security updates and minimum patched bubblewrap/proxy checks implemented |
-| P0-03 | Native GTK4 human prompt implemented and exercised; real serial PAM/TTY rescue under CI acceptance |
+| P0-03 | Native GTK4 prompt and actual serial PAM/TTY rescue with stopped mock core verified in CI |
 | P0-04 | Separate agent identity/runtime, headless output and capture probes |
-| P0-05 | Real sandboxed Chromium locator and Writer named Save/ODT/PDF contracts; cross-session input proof pending |
+| P0-05 | Real sandboxed app contracts; concurrent human canary/focus and socket-denial probe under CI acceptance |
 | P0-06 | Real task-private accessible Save; visible-control window-coordinate/scale probe added for CI acceptance |
 | P0-07 | Restricted Wayland forged privileged binds denied; authenticated private XWayland domain verified |
 | P0-08 | Positive artifact plus kernel filesystem/IPC/device/network denial probes |
@@ -61,3 +61,9 @@ The serial recovery probe authenticates via real ttyS0/getty/login/PAM, checks a
 complete challenge/UID/TTY response with stopped mock core, verifies account/core
 cleanup, and redacts temporary fixture material. Final-head CI determines acceptance.
 Physical display/input and a broker-bound approval service remain unverified.
+
+Concurrent-session follow-up keeps the human prompt alive while real agent browser,
+Writer and XWayland actions execute. It requires focused unsent text and unchanged
+request count, records focus/text events and 50 ms snapshots, and checks compositor
+focus checkpoints plus denied human-socket access from agent-side principals. Final
+CI artifacts determine acceptance; physical input provenance remains unverified.

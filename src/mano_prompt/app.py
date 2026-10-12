@@ -43,6 +43,7 @@ class Prompt(Gtk.Application):
                 store_request(entry.get_text())
                 status.set_text("Request received")
                 entry.set_text("")
+                entry.grab_focus()
             except (ValueError, OSError) as error:
                 status.set_text(str(error))
 
@@ -52,6 +53,7 @@ class Prompt(Gtk.Application):
         row.append(send)
         for widget in (title, subtitle, row, status):
             outer.append(widget)
+        self.entry, self.window = entry, window
         window.set_child(outer)
         css = Gtk.CssProvider()
         css.load_from_string("""
