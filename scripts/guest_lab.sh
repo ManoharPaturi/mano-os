@@ -12,7 +12,7 @@ apt-get -y upgrade
 apt-get install -y --no-install-recommends python3 python3-venv bubblewrap \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
-  libreoffice-calc fonts-dejavu-core jq procps rsync gcc libc6-dev pkg-config libwayland-dev wayland-protocols xauth x11-utils xfonts-base
+  libreoffice-calc libreoffice-gtk3 python3-uno poppler-utils fonts-dejavu-core jq procps rsync gcc libc6-dev pkg-config libwayland-dev wayland-protocols xauth x11-utils xfonts-base
 apt-get clean
 # Use system Chromium; never run playwright install/download a separate browser.
 python3 -m venv /usr/local/lib/mano-browser
@@ -21,6 +21,8 @@ python3 -m venv /usr/local/lib/mano-browser
 printf '# Task-local launcher configuration; no host policy or credential data.\n' \
   > /usr/local/lib/mano-browser/launcher-config
 chmod 0444 /usr/local/lib/mano-browser/launcher-config
+mkdir -p /usr/local/lib/mano-lab
+install -m 0444 packaging/dbus/task-session.conf /usr/local/lib/mano-lab/task-session.conf
 # Every installed package is recorded; no security floor downgrade.
 dpkg-query -W > evidence/packages.tsv
 uname -a > evidence/kernel.txt
@@ -31,6 +33,12 @@ useradd -m -s /bin/bash mano-agent
 useradd -m -s /bin/bash mano-human
 useradd -m -s /bin/bash mano-core
 useradd -m -s /bin/bash mano-worker
+# D-Bus EXTERNAL authentication needs a resolvable UID. Synthetic task accounts
+# contain no host names, password hashes, supplementary groups or login authority.
+printf 'task:x:%s:%s:mano task:/home/task:/usr/sbin/nologin\n' \
+  "$(id -u mano-worker)" "$(id -g mano-worker)" > /usr/local/lib/mano-lab/task-passwd
+printf 'task:x:%s:\n' "$(id -g mano-worker)" > /usr/local/lib/mano-lab/task-group
+chmod 0444 /usr/local/lib/mano-lab/task-passwd /usr/local/lib/mano-lab/task-group
 cat > /etc/tmpfiles.d/mano-lab.conf <<'TMPFILES'
 d /run/mano-agent 0700 mano-agent mano-agent -
 d /run/mano-human 0700 mano-human mano-human -

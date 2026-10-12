@@ -6,18 +6,20 @@ User authorized implementation, PRs and mostly carrying them through to merge.
 Merge only after every current-head CI passes; main protection is enforced for admins.
 User explicitly chose CI VM development for now. No agents have been delegated.
 
-Verified merged work:
-- PRs #1-3: 19 passing primitive probes, no failures, 9 pending.
-- PR #4, run 38293373666: real btrfs-root boot, read-only/hash-preserved original disk.
-- PR #5, run 38294272602: third boot from Snapper recovery clone, exact restored sentinel,
-  retained changed @ root, separate snapshot store and complete security rerun.
-  21 passing probes, no failures, 7 pending. Both artifact sets independently hash-checked.
+Verified merged work: PRs #1-9, latest main 85eb00c. Last accepted run 38306024397;
+post-merge main run 38306499487 passed all three checks. 27 passing primitives,
+zero failures, five pending requirements; architecture remains NO-GO.
+Includes real btrfs root/recovery boots, original disk preserved, cgroup OOM/stop,
+restricted Wayland forged-bind denials, private authenticated XWayland namespace,
+and headed Chromium locator contract with actual kernel renderer seccomp proof.
 
-Current branch: feat/phase0-resource-evidence. Collect actual VM memory/Sway/cgroup
-metrics and correct Phase 6 physical performance being incorrectly tracked as P0-12.
-Physical performance remains required for project completion; no VM claim substitutes it.
-Architecture stays NO-GO while native prompt/recovery, GUI/browser/accessibility,
-privileged Wayland protocols, authentic approval and trusted stop proofs remain pending.
+Current branch: feat/phase0-libreoffice-contract. Add Writer on restricted Wayland
+with a private task D-Bus/accessibility bus, real named Save action and independently
+observed mapped window plus exact ODT/PDF content. Acceptance candidate run
+38308357005 passed (29 pass, 0 fail, 5 pending on recovered root). Final head must
+pass again before merging PR #10. Known geometry sentinel -2147483648 is recorded
+as unusable; semantic Save works, coordinate/scale mapping remains pending.
+Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
 No production broker, core/model execution, coding delegate, .deb or ISO exists yet.
 
 Continue with remaining Phase 0 GUI and authority experiments, then audit every

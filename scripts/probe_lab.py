@@ -258,6 +258,31 @@ def desktop_probe():
                     ),
                 )
             )
+        if confinement.returncode == 0 and (OUT / "office-contract.json").is_file():
+            PROBES.append(
+                Probe(
+                    "P0-05",
+                    "writer-sandboxed-document-contract",
+                    "pass",
+                    "Real Writer window, named accessible Save, exact saved ODT and PDF text",
+                    (
+                        "office-contract.json",
+                        "office-window.json",
+                        "office-page.png",
+                        "contract.odt",
+                        "contract.pdf",
+                    ),
+                )
+            )
+            PROBES.append(
+                Probe(
+                    "P0-06",
+                    "atspi-named-save",
+                    "pass",
+                    "Task-private accessibility invokes enabled Save; geometry remains pending",
+                    ("office-contract.json", "office-accessibility-tree.json"),
+                )
+            )
         x11 = call(
             [
                 "python3",
