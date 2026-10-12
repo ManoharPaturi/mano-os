@@ -290,6 +290,18 @@ def stop_probe():
     ):
         raise RuntimeError(f"Observed task limits differ from requested limits: {values}")
     RESOURCE_OBSERVATIONS["observed_task_cgroup_limits"] = values
+    kernel_group = Path("/sys/fs/cgroup") / values["ControlGroup"].lstrip("/")
+    memory_max = int((kernel_group / "memory.max").read_text().strip())
+    pids_max = int((kernel_group / "pids.max").read_text().strip())
+    quota, period = (int(value) for value in (kernel_group / "cpu.max").read_text().split())
+    if memory_max != 67108864 or pids_max != 16 or quota * 5 != period:
+        raise RuntimeError("Kernel cgroup limits differ from the selected task profile")
+    RESOURCE_OBSERVATIONS["kernel_task_cgroup_limits"] = {
+        "memory_max_bytes": memory_max,
+        "pids_max": pids_max,
+        "cpu_quota_microseconds": quota,
+        "cpu_period_microseconds": period,
+    }
     (OUT / "task-cgroup-limits.txt").write_text(limits.stdout)
     started = call(
         [
@@ -555,6 +567,7 @@ def main():
                 "sway_launch_to_output_seconds",
                 "sway_memory_bytes",
                 "observed_task_cgroup_limits",
+                "kernel_task_cgroup_limits",
             )
         )
         and (OUT / "task-cgroup-limits.txt").is_file()
