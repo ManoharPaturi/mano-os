@@ -128,8 +128,34 @@ def main():
             core_after=after,
             agent_challenge_access_denied=True,
         )
+        client.sendall(
+            b"PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/approval_cli.py\r"
+        )
+        receive_until(lambda value: b"Wrong approval password:" in value)
+        client.sendall(b"not-a-real-password\r")
+        receive_until(lambda value: b"Approval password:" in value)
+        client.sendall(credentials["password"].encode() + b"\r")
+
+        def approval_values(data):
+            values = []
+            for line in data.decode(errors="replace").splitlines():
+                try:
+                    value = json.loads(line)
+                    if isinstance(value, dict) and "approval_outcomes" in value:
+                        values.append(value)
+                except json.JSONDecodeError:
+                    continue
+            return values
+
+        result = receive_until(lambda value: bool(approval_values(value)), timeout=30)
+        approvals = approval_values(result)
+        assert len(approvals) == 1 and approvals[0]["uid"] == credentials["human_uid"]
+        report["approval_client"] = approvals[0]
+        report["approval_evidence"] = fixture("approval-status")
+        report["approval_service_verified"] = True
         client.sendall(b"exit\r")
     except Exception as error:
+        report["passed"] = False
         report["error"] = str(error)
     finally:
         client.close()
@@ -159,6 +185,30 @@ def main():
             else ("serial-rescue.json",),
         )
     )
+    if report["passed"] and report["approval_service_verified"]:
+        probes = [p for p in probes if p.name != "physical-approval-provenance"]
+        (args.out / "authenticated-approval.json").write_text(
+            json.dumps(
+                {
+                    "client": report["approval_client"],
+                    "evidence": report["approval_evidence"],
+                    "authentication": "Per-request PAM, kernel peer UID, real human ttyS0",
+                    "physical_input_provenance": None,
+                    "production_broker": False,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        probes.append(
+            Probe(
+                "P0-09",
+                "request-bound-os-authenticated-approval",
+                "pass",
+                "Human-only IPC/PAM, request binding, root effect/journal and nine actor denials",
+                ("authenticated-approval.json",),
+            )
+        )
     write_report(args.out, probes, prior["environment"])
     print(json.dumps(report, indent=2))
     return 0 if report["passed"] and native else 1

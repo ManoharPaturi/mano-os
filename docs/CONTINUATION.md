@@ -6,21 +6,24 @@ User authorized implementation, PRs and mostly carrying them through to merge.
 Merge only after every current-head CI passes; main protection is enforced for admins.
 User explicitly chose CI VM development for now. No agents have been delegated.
 
-Verified merged work: PRs #1-13. Main c4ce63ab216d3ffdd659a886bb01489bcba2c5b9.
-PR #13 accepted CI 38318953207. Recovered report: 32 pass, 0 fail, 2 pending
-(P0-09/10); architecture remains NO-GO. Human/agent sessions simultaneously run
-real Chromium/Writer/XWayland tasks. Human native widget canary/focus/active state
-and request count unchanged across 335/362 snapshots, setup native signals verified,
-five compositor checkpoints, and six cross-socket denials per boot (IPC EACCES).
-GTK4 AT-SPI text/focus getters incomplete; native GTK observer uses the same actual
-Prompt class, direct getters/signals, and trusted virtual keyboard in human CI seat.
-No physical provenance, production model/broker/approval/stop authority is claimed.
+Verified merged work: PRs #1-14. Main e2f64e0fe0f1fe23a6af88567ac64f79e18fec62.
+PR14 accepted CI 38319743416; post-merge main 38320287725 passed all jobs.
+Recovered report 32 pass, 0 fail, 2 pending (P0-09/10), architecture NO-GO.
+All real root/recovery, sandbox, GUI/scale, concurrent focus, native prompt and
+PAM-authenticated real ttyS0 rescue contracts remain passing. Full goal is active.
 
-Current follow-up: fix/phase0-focus-capture-timing. Before screenshot captured inside
-GTK callback showed the prior frame although direct widget state was correct.
-Move both captures to trusted supervisor outside GTK event loop after paint settles.
-Keep all real isolation assertions; verify final screenshots and all final-head CI
-before merging. Finish this evidence repair before P0-09 auth/approval work.
+Current branch feat/phase0-authenticated-approval. Fixed CI root authority spike:
+human-only SOCK_SEQPACKET endpoint with kernel SO_PEERCRED, immutable task/op/target/
+risk/expiry/nonce digest, per-request Linux PAM through fixed C helper, single-use
+approval, root-only marker and journal. No arbitrary root executor or model API.
+Trusted ttyS0 client displays only broker operation and tests modified digest,
+wrong nonce, extra target, expiry, wrong password, valid approval and replay.
+Three actor principals must hit EACCES on approval IPC, journal write and uinput.
+If cloud kernel lacks uinput driver, a character-node permission test explicitly
+records driver_available=false; no physical/device-behavior claim is made. Strong
+OS-auth fallback follows original spec; authentication is still unverified until CI.
+Temporary credentials remain off argv/env/logs/artifacts, each flow fails closed,
+cleanup stops authority and locks account. Both normal/recovered roots required.
 
 Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
 No production broker, core/model execution, coding delegate, .deb or ISO exists yet.
