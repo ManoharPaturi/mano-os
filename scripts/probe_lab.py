@@ -249,7 +249,7 @@ def desktop_probe():
                     "P0-05",
                     "system-chromium-sandboxed-contract",
                     "pass",
-                    "System Chromium locator, mapped window, screenshot, sandbox and pipe transport",
+                    "Chromium locator, mapped window, screenshot, sandbox and pipe transport",
                     (
                         "browser-contract.json",
                         "browser-window.json",
