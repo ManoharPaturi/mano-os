@@ -247,16 +247,61 @@ def stop_probe():
             "CPUQuota=20%",
             "-p",
             "User=mano-agent",
-            "/bin/sleep",
-            "infinity",
+            "/bin/sh",
+            "-c",
+            "sleep infinity & wait",
         ]
     )
     if not record("P0-10", "cgroup-task-start", result):
         return
-    core = subprocess.Popen(["runuser", "-u", "mano-core", "--", "/bin/sleep", "infinity"])
+    started = call(
+        [
+            "systemd-run",
+            "--unit=mano-lab-core",
+            "-p",
+            "User=mano-core",
+            "-p",
+            "MemoryMax=64M",
+            "/bin/sleep",
+            "infinity",
+        ]
+    )
+    if not record("P0-10", "mock-core-service-start", started):
+        call(["systemctl", "stop", "mano-lab-tasks.slice"])
+        return
+    pid_result = call(["systemctl", "show", "mano-lab-core.service", "-p", "MainPID", "--value"])
+    core_pid = int(pid_result.stdout.strip())
+    if core_pid <= 0:
+        raise RuntimeError("No actual mock-core service process")
+    task_group = call(
+        [
+            "systemctl",
+            "show",
+            "mano-lab-task.service",
+            "-p",
+            "ControlGroup",
+            "--value",
+        ]
+    ).stdout.strip()
+    if not task_group.startswith("/mano-lab-tasks.slice/"):
+        raise RuntimeError("Task not placed in the expected slice")
     try:
-        os.kill(core.pid, 19)  # SIGSTOP: the root-owned supervisor freezes too.
-        time.sleep(0.2)
+        os.kill(core_pid, 19)  # SIGSTOP the actual service process, not a wrapper.
+        time.sleep(0.1)
+        state = Path(f"/proc/{core_pid}/status").read_text()
+        frozen = any(
+            line.startswith("State:") and "T (stopped)" in line for line in state.splitlines()
+        )
+        record(
+            "P0-10",
+            "mock-core-actually-frozen",
+            subprocess.CompletedProcess(
+                [],
+                0 if frozen else 1,
+                state,
+                "",
+            ),
+        )
         record(
             "P0-10",
             "independent-systemd-stop",
@@ -266,6 +311,21 @@ def stop_probe():
                     "stop",
                     "mano-lab-tasks.slice",
                 ]
+            ),
+        )
+        group = Path("/sys/fs/cgroup") / task_group.lstrip("/")
+        remaining = []
+        if group.exists():
+            for procs in group.rglob("cgroup.procs"):
+                remaining.extend(procs.read_text().split())
+        record(
+            "P0-10",
+            "task-descendants-terminated",
+            subprocess.CompletedProcess(
+                [],
+                1 if remaining else 0,
+                f"Remaining cgroup PIDs: {remaining}",
+                "",
             ),
         )
         record(
@@ -283,10 +343,8 @@ def stop_probe():
             ),
         )
     finally:
-        os.kill(core.pid, 18)  # SIGCONT then clean up supervisor and child.
-        core.terminate()
-        call(["pkill", "-u", "mano-core", "-x", "sleep"])
-        core.wait(timeout=10)
+        call(["systemctl", "kill", "--signal=SIGKILL", "mano-lab-core.service"])
+        call(["systemctl", "stop", "mano-lab-core.service", "mano-lab-tasks.slice"])
     PROBES.append(
         Probe(
             "P0-10",
