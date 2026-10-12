@@ -6,6 +6,7 @@ import os
 import pwd
 import select
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -365,6 +366,115 @@ def main():
                 raise RuntimeError(screenshot.stderr)
             shutil.copyfile("/run/mano-agent/office-page.png", out / "office-page.png")
             (workspace / "office-observer-done").touch()
+
+            def sway_query(arguments):
+                response = run(
+                    role(
+                        "mano-agent",
+                        raw_display,
+                        [
+                            "env",
+                            "SWAYSOCK="
+                            + str(next(Path("/run/mano-agent").glob("sway-ipc.*.sock"))),
+                            "swaymsg",
+                            "-r",
+                            *arguments,
+                        ],
+                    )
+                )
+                if response.returncode:
+                    raise RuntimeError(response.stderr)
+                value = json.loads(response.stdout)
+                if not arguments[0].startswith("-t"):
+                    if not all(item.get("success") is True for item in value):
+                        raise RuntimeError(f"Sway command rejected: {value}")
+                return value
+
+            def wait_worker_file(name, timeout=25):
+                deadline = time.monotonic() + timeout
+                while not (workspace / name).is_file():
+                    if office_worker.poll() is not None:
+                        raise RuntimeError(f"Office exited before {name}")
+                    if time.monotonic() > deadline:
+                        raise RuntimeError(f"Office timed out before {name}")
+                    time.sleep(0.1)
+                return json.loads((workspace / name).read_text())
+
+            office_id = matches[0]["id"]
+            sway_query([f"[con_id={office_id}] fullscreen enable"])
+            for scale in (1, 2):
+                sway_query([f"output HEADLESS-1 mode {1280 * scale}x{720 * scale} scale {scale}"])
+                time.sleep(0.5)
+                outputs = sway_query(["-t", "get_outputs"])
+                output = next(item for item in outputs if item["name"] == "HEADLESS-1")
+                assert output["scale"] == scale and output["transform"] == "normal"
+                window = next(
+                    node
+                    for node in nodes(sway_query(["-t", "get_tree"]))
+                    if node["id"] == office_id
+                )
+                assert window["visible"] and window["shell"] == "xdg_shell"
+                rect, client = window["rect"], window["window_rect"]
+                origin = [rect["x"] + client["x"], rect["y"] + client["y"]]
+                config = {
+                    "scale": scale,
+                    "output": output,
+                    "window": window,
+                    "client_size": [client["width"], client["height"]],
+                    "client_origin": origin,
+                }
+                (workspace / f"geometry-config-{scale}.json").write_text(
+                    json.dumps(config, indent=2) + "\n"
+                )
+                target = wait_worker_file(f"geometry-target-{scale}.json")
+                bounds = target["window_bounds"]
+                if len(bounds) != 4 or not all(type(v) is int for v in bounds):
+                    raise RuntimeError("Invalid accessible geometry")
+                x, y, width, height = bounds
+                if not (
+                    x >= 0
+                    and y >= 0
+                    and width > 0
+                    and height > 0
+                    and x + width <= client["width"]
+                    and y + height <= client["height"]
+                ):
+                    raise RuntimeError(
+                        "Accessible target outside independently observed task window"
+                    )
+                logical = [origin[0] + x + width // 2, origin[1] + y + height // 2]
+                pixels = [
+                    round((logical[0] - output["rect"]["x"]) * scale),
+                    round((logical[1] - output["rect"]["y"]) * scale),
+                ]
+                # In this lab-only route, Sway IPC stays with the controller. The
+                # task receives no raw socket or general compositor command API.
+                sway_query([f"seat seat0 cursor set {logical[0]} {logical[1]}"])
+                time.sleep(0.1)
+                sway_query(["seat seat0 cursor press button1"])
+                sway_query(["seat seat0 cursor release button1"])
+                shot_path = f"/run/mano-agent/office-scale-{scale}.png"
+                shot = run(role("mano-agent", raw_display, ["grim", "-o", "HEADLESS-1", shot_path]))
+                if shot.returncode:
+                    raise RuntimeError(shot.stderr)
+                header = Path(shot_path).read_bytes()[:24]
+                assert header[:8] == b"\x89PNG\r\n\x1a\n"
+                size = list(struct.unpack(">II", header[16:24]))
+                assert size == [1280 * scale, 720 * scale]
+                assert 0 <= pixels[0] < size[0] and 0 <= pixels[1] < size[1]
+                shutil.copyfile(shot_path, out / f"office-scale-{scale}.png")
+                click = {
+                    "config": config,
+                    "logical_click": logical,
+                    "pixel_click": pixels,
+                    "screenshot_size": size,
+                    "input_route": "trusted lab Sway IPC only",
+                }
+                (workspace / f"geometry-click-{scale}.json").write_text(
+                    json.dumps(click, indent=2) + "\n"
+                )
+                wait_worker_file(f"geometry-result-{scale}.json")
+            sway_query(["output HEADLESS-1 mode 1280x720 scale 1"])
             if office_worker.wait(timeout=20) != 0:
                 raise RuntimeError("Office contract failed after observation")
             for name in (
@@ -373,6 +483,8 @@ def main():
                 "contract.odt",
                 "contract.pdf",
                 "office-process.txt",
+                "office-geometry.json",
+                "geometry.odt",
             ):
                 shutil.copyfile(workspace / name, out / name)
             observations["office_contract"] = (
@@ -387,7 +499,14 @@ def main():
                     office_worker.kill()
                     office_worker.wait()
             # Keep worker diagnostics on failure, including the real accessibility inventory.
-            for name in ("office-accessibility-tree.json", "office-process.txt"):
+            for name in (
+                "office-accessibility-tree.json",
+                "office-process.txt",
+                "geometry-tree-1.json",
+                "geometry-tree-2.json",
+                "geometry-target-1.json",
+                "geometry-target-2.json",
+            ):
                 if (workspace / name).is_file():
                     shutil.copyfile(workspace / name, out / name)
             office_log.close()
