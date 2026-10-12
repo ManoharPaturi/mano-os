@@ -71,8 +71,8 @@ def sandbox_probes():
                 "python3",
                 "-c",
                 "from pathlib import Path; assert Path('/etc/mano/sentinel').read_text()=="
-                "'protected-policy\n'; assert Path('/var/lib/mano-broker/sentinel').read_text()=="
-                "'protected-journal\n'; print('unchanged')",
+                "'protected-policy\\n'; assert Path('/var/lib/mano-broker/sentinel').read_text()=="
+                "'protected-journal\\n'; print('unchanged')",
             ]
         ),
     )

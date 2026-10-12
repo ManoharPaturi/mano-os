@@ -41,6 +41,7 @@ local-hostname: mano-phase0
 cloud-localds "$lab_dir/seed.img" "$lab_dir/user-data" "$lab_dir/meta-data"
 accel=tcg
 if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then accel=kvm; fi
+printf 'QEMU accelerator: %s\n' "$accel" | tee "$repo_root/evidence/accelerator.txt"
 qemu-system-x86_64 -accel "$accel" -m 4096 -smp 2 -display none \
   -serial "file:$repo_root/evidence/serial.log" \
   -drive "file=$lab_dir/$image,format=qcow2,if=virtio" \

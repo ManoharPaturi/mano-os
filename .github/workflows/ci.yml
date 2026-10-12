@@ -32,7 +32,10 @@ jobs:
       - name: Install CI-only VM tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils acl
+          if [ -e /dev/kvm ]; then
+            sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          fi
       - name: Run real Debian VM negative and feasibility probes
         env:
           MANO_DISPOSABLE_CI: '1'
