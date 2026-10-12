@@ -8,9 +8,11 @@ Repo: https://github.com/ManoharPaturi/mano-os (private).
 Local checkout: work/mano-os under this chat workspace.
 Specification: docs/spec-v2.1.md preserved verbatim from supplied Downloads README.
 
-Current work: feat/phase-0-lab, first Phase 0 lab. Read CI and phase status before
+PR #1 merged after all three CI checks passed. CI run 38289411969 produced
+13 passing probes, zero failures and nine pending checks. Current follow-up:
+feat/phase0-oom-containment, kernel OOM isolation and stronger GUI postconditions. Read CI and phase status before
 changing anything. Core/delegates are not wired to host execution. Preserve NO-GO
-until mandatory proof exists. Root is ext4, btrfs data only; physical gates pending.
+until mandatory proof exists. Root is ext4, btrfs data only; physical gates pending. User explicitly chose CI VM development for now.
 
 Commands from checkout:
 
