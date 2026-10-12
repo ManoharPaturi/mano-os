@@ -8,6 +8,10 @@ OOM and GUI follow-up: [CI 38289976575](https://github.com/ManoharPaturi/mano-os
 PR #2 merged, 16 passing probes, zero failures, nine pending checks.
 Kernel reports `oom-kill`; the human-observer service remains active.
 
+Btrfs-root boot: [CI 38293373666](https://github.com/ManoharPaturi/mano-os/actions/runs/38293373666),
+PR #4 merged. Actual root `/dev/vdc[/@]`, preserved original disk hash,
+20 passing probes, zero failures, eight pending checks.
+
 Current architecture decision: **NO-GO for production execution**.
 CI emits `report.json`, hashed logs, a package manifest, memory observations,
 mount inventory, Sway screenshot and independent-stop outputs.
@@ -24,7 +28,7 @@ mount inventory, Sway screenshot and independent-stop outputs.
 | P0-08 | Positive artifact plus kernel filesystem/IPC/device/network denial probes |
 | P0-09 | Agent denied human runtime; authentic approval and physical spoof proof pending |
 | P0-10 | Systemd stop with frozen mock core; stopd/grant/physical trigger pending |
-| P0-11 | Snapper exact data restore; root/boot rescue pending |
+| P0-11 | Snapper exact data restore verified; root snapshot clone/third boot implemented for CI |
 | P0-12 | Raw VM observations; OOM containment follow-up implemented for CI; physical 8 GB measurements and final go/no-go pending |
 
 Nothing is marked fully complete merely because its harness exists. Read the

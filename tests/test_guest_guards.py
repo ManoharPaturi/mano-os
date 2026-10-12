@@ -6,7 +6,12 @@ import unittest
 class GuestGuardTests(unittest.TestCase):
     @unittest.skipIf(os.getuid() == 0, "Developer-host denial test requires unprivileged caller")
     def test_guest_mutation_scripts_reject_developer_host(self):
-        for name in ("guest_lab.sh", "migrate_btrfs_root.sh", "verify_btrfs_root.sh"):
+        for name in (
+            "guest_lab.sh",
+            "migrate_btrfs_root.sh",
+            "verify_btrfs_root.sh",
+            "prepare_root_recovery.sh",
+        ):
             with self.subTest(script=name):
                 result = subprocess.run(
                     ["bash", "scripts/" + name],

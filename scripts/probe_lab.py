@@ -9,6 +9,7 @@ import os
 import pwd
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -55,13 +56,12 @@ def agent(argv):
 
 
 def sandbox_probes():
-    workspace = Path("/home/mano-agent/workspace")
-    workspace.mkdir()
+    workspace = Path(tempfile.mkdtemp(prefix="mano-probe-", dir="/home/mano-agent"))
     account = pwd.getpwnam("mano-agent")
     os.chown(workspace, account.pw_uid, account.pw_gid)
     # One sandbox contains malicious attempts after proving it actually executes.
     source = (ROOT / "scripts/sandbox_negative.py").read_text()
-    result = call(agent(["python3", "-c", source]))
+    result = call(agent(["python3", "-c", source, str(workspace)]))
     record("P0-08", "sandbox-kernel-denials", result)
     record(
         "P0-02",
@@ -476,7 +476,15 @@ def main():
                 "Exact sentinel restored on btrfs data subvolume",
                 ("snapper.txt", "mounts.json"),
             ),
-            Probe("P0-11", "root-rollback-rescue", "pending", "Root/boot restoration not proven"),
+            Probe(
+                "P0-11",
+                "root-snapshot-boot-recovery",
+                "pass" if (OUT / "root-recovery.json").is_file() else "pending",
+                "Separate boot from Snapper recovery clone with preserved changed source root"
+                if (OUT / "root-recovery.json").is_file()
+                else "Root recovery has not run yet",
+                ("root-recovery.json",) if (OUT / "root-recovery.json").is_file() else (),
+            ),
             Probe(
                 "P0-12",
                 "physical-8gb-performance",
