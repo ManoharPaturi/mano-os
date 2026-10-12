@@ -99,6 +99,11 @@ def main():
     if positive.returncode or "number of screens:" not in positive.stdout:
         raise RuntimeError(f"Authorized X11 query failed: {positive.stderr}")
     observations["authorized_x11_query"] = True
+    no_cookie = run(sandbox_args(["/usr/bin/env", "-u", "XAUTHORITY", "/usr/bin/xdpyinfo"]))
+    if no_cookie.returncode == 0:
+        raise RuntimeError("X11 server accepted worker without its task cookie")
+    observations["missing_cookie_denied"] = True
+
     # An outside principal cannot use the abstract listener, despite knowing its name.
     deny_abstract = run(
         [
