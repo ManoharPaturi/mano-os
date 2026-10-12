@@ -12,7 +12,7 @@ apt-get -y upgrade
 apt-get install -y --no-install-recommends python3 python3-venv bubblewrap \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
-  libreoffice-calc fonts-dejavu-core jq procps rsync gcc pkg-config libwayland-dev wayland-protocols
+  libreoffice-calc fonts-dejavu-core jq procps rsync gcc libc6-dev pkg-config libwayland-dev wayland-protocols
 apt-get clean
 # Every installed package is recorded; no security floor downgrade.
 dpkg-query -W > evidence/packages.tsv
