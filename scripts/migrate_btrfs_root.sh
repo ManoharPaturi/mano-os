@@ -15,9 +15,12 @@ if blkid /dev/vdc >/dev/null 2>&1 || findmnt -rn -S /dev/vdc >/dev/null; then
 fi
 printf 'btrfs\nvirtio_blk\n' >> /etc/initramfs-tools/modules
 update-initramfs -u -k all
-kernel_path=$(readlink -f /vmlinuz)
-initrd_path=$(readlink -f /initrd.img)
-test -f "$kernel_path" && test -f "$initrd_path"
+kernels=(/boot/vmlinuz-*)
+kernel_path=$(printf '%s\n' "${kernels[@]}" | sort -V | tail -n 1)
+kernel_version=${kernel_path##*/vmlinuz-}
+initrd_path="/boot/initrd.img-$kernel_version"
+test -f "$kernel_path"
+test -f "$initrd_path"
 lsinitramfs "$initrd_path" | awk '/btrfs\.ko/ {found=1} END {exit !found}'
 mkfs.btrfs -L MANO_LAB_ROOT /dev/vdc
 root_uuid=$(blkid -s UUID -o value /dev/vdc)

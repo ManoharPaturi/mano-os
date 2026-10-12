@@ -80,9 +80,16 @@ ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo cloud-init status --wait'
 # Transfer only the tracked checkout; never CI credentials or host home.
 git -C "$repo_root" archive HEAD | ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo mkdir -p /opt/mano-lab; sudo tar -xf - -C /opt/mano-lab'
+set +e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo bash /opt/mano-lab/scripts/guest_lab.sh && sudo bash /opt/mano-lab/scripts/migrate_btrfs_root.sh' \
   2>&1 | tee "$repo_root/evidence/guest-prepare.log"
+prepare_result=${PIPESTATUS[0]}
+set -e
+# Export root-side evidence even when preparation fails; never hide its exit status.
+ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+  'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+if [ "$prepare_result" != 0 ]; then exit "$prepare_result"; fi
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo tar -cf - -C /tmp/mano-boot-export .' | tar -xf - -C "$lab_dir"
 # Preserve preparation diagnostics before shutdown, even if the next boot fails.
