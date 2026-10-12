@@ -43,6 +43,7 @@ class Prompt(Gtk.Application):
                 store_request(entry.get_text())
                 status.set_text("Request received")
                 entry.set_text("")
+                entry.grab_focus()
             except (ValueError, OSError) as error:
                 status.set_text(str(error))
 

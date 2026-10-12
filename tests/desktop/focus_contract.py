@@ -25,6 +25,8 @@ def main():
     tree = list(nodes(pyatspi.Registry.getDesktop(0)))
     entry = None
     for node in tree:
+        if node.getRoleName() not in {"text", "entry", "text entry"}:
+            continue
         try:
             editable = node.queryEditableText()
             entry = node
@@ -56,6 +58,7 @@ def main():
         }
 
     before = snapshot()
+    print(json.dumps({"initial_state": before, "role": entry.getRoleName()}), flush=True)
     assert before["text"] == CANARY and before["focused"]
     report["before"] = before
     subprocess.run(["grim", str(ROOT / "focus-before.png")], check=True, timeout=20)
