@@ -159,6 +159,20 @@ def desktop_probe():
             ),
         )
         time.sleep(2)
+        tree = call(agent([*env, "swaymsg", "-t", "get_tree", "-r"]))
+        try:
+
+            def nodes(node):
+                yield node
+                for child in node.get("nodes", []) + node.get("floating_nodes", []):
+                    yield from nodes(child)
+
+            observed = any(n.get("name") == "mano-phase0" for n in nodes(json.loads(tree.stdout)))
+            if not observed:
+                tree = subprocess.CompletedProcess([], 1, tree.stdout, "Expected window not mapped")
+        except (ValueError, TypeError):
+            tree = subprocess.CompletedProcess([], 1, tree.stdout, "Invalid Sway tree")
+        record("P0-05", "diagnostic-foot-observed", tree)
         record(
             "P0-04",
             "headless-screenshot",
@@ -283,6 +297,62 @@ def stop_probe():
     )
 
 
+def oom_probe():
+    observer = call(
+        [
+            "systemd-run",
+            "--unit=mano-lab-human-observer",
+            "-p",
+            "User=mano-human",
+            "/bin/sleep",
+            "infinity",
+        ]
+    )
+    if not record("P0-12", "oom-observer-start", observer):
+        return
+    try:
+        result = call(
+            [
+                "systemd-run",
+                "--unit=mano-lab-oom",
+                "--wait",
+                "--pipe",
+                "-p",
+                "MemoryMax=32M",
+                "-p",
+                "MemorySwapMax=0",
+                "-p",
+                "TasksMax=8",
+                "-p",
+                "OOMPolicy=kill",
+                "-p",
+                "User=mano-agent",
+                "/usr/bin/python3",
+                "-c",
+                "a=bytearray(128*1024*1024)",
+            ],
+            timeout=30,
+        )
+        (OUT / "oom-allocation.txt").write_text(
+            f"exit={result.returncode}\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
+        verify = call(
+            [
+                "python3",
+                "-c",
+                "import subprocess; p=subprocess.run(['systemctl','show','mano-lab-oom.service',"
+                "'-p','Result','--value'],capture_output=True,text=True); "
+                "assert p.stdout.strip()=='oom-kill',p.stdout; print(p.stdout); "
+                "q=subprocess.run(['systemctl','is-active','mano-lab-human-observer.service'],"
+                "capture_output=True,text=True); assert q.stdout.strip()=='active',q.stdout; "
+                "print('Human observer survived task OOM')",
+            ]
+        )
+        record("P0-12", "cgroup-oom-contained", verify)
+    finally:
+        call(["systemctl", "stop", "mano-lab-human-observer.service"])
+
+
 def main():
     if os.getuid() != 0 or not Path("/dev/vdb").exists():
         raise RuntimeError("Run only in the disposable VM through guest_lab.sh")
@@ -331,6 +401,7 @@ def main():
         sandbox_probes()
         desktop_probe()
         stop_probe()
+        oom_probe()
     except Exception as exc:
         (OUT / "exception.txt").write_text(repr(exc))
         PROBES.append(Probe("P0-12", "probe-harness", "fail", str(exc), ("exception.txt",)))
