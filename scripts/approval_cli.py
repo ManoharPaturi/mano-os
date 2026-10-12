@@ -26,7 +26,7 @@ def main():
     if not os.isatty(0) or os.ttyname(0) != "/dev/ttyS0":
         raise RuntimeError("Real CI human serial TTY required")
     views = rpc({"action": "view"})["requests"]
-    good, expired = views
+    good, expired, _rearm = views
     print("Broker approval: " + json.dumps(good, sort_keys=True), flush=True)
 
     def body(view, password="unused"):

@@ -74,6 +74,7 @@ def main():
         )
         return
     if operation == "cleanup":
+        run(["python3", "/opt/mano-lab/scripts/stop_fixture.py", "cleanup"])
         for command in (
             ["systemctl", "kill", "--signal=KILL", "--kill-whom=all", UNIT],
             ["systemctl", "stop", UNIT],
@@ -93,6 +94,10 @@ def main():
             "/var/lib/mano-broker/approval-journal.jsonl",
             "/var/lib/mano-broker/approval-fixture",
             "/run/mano-approval-fixture/human.sock",
+            "/var/lib/mano-broker/grant-epoch",
+            "/var/lib/mano-broker/stop-latched",
+            "/var/lib/mano-broker/live-grant.json",
+            "/var/lib/mano-broker/grant-use-count",
         ):
             Path(name).unlink(missing_ok=True)
         run(["/usr/sbin/usermod", "-L", "mano-human"])

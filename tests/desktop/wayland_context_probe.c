@@ -86,6 +86,23 @@ int main(int argc, char **argv) {
         zwp_virtual_keyboard_v1_destroy(keyboard);
         wl_display_roundtrip(display); wl_display_disconnect(display); return 0;
     }
+    if (!strcmp(argv[1], "pointer-pulse") && argc == 2) {
+        if (!pointer_manager) return 2;
+        struct zwlr_virtual_pointer_v1 *pointer =
+            zwlr_virtual_pointer_manager_v1_create_virtual_pointer(pointer_manager, NULL);
+        if (wl_display_roundtrip(display) < 0) return 2;
+        unsigned int count = 0;
+        for (;;) {
+            struct timespec now;
+            if (clock_gettime(CLOCK_MONOTONIC, &now)) return 2;
+            uint32_t millis = (uint32_t)(now.tv_sec * 1000 + now.tv_nsec / 1000000);
+            uint32_t coordinate = (count % 2) ? 100 : 200;
+            zwlr_virtual_pointer_v1_motion_absolute(pointer, millis, coordinate, coordinate, 1280, 720);
+            zwlr_virtual_pointer_v1_frame(pointer);
+            if (wl_display_roundtrip(display) < 0) return 2;
+            printf("pointer pulse %u\n", ++count); fflush(stdout); usleep(50000);
+        }
+    }
     if (!strcmp(argv[1], "pointer-click") && argc == 6) {
         if (!pointer_manager) { fputs("virtual pointer authority unavailable\n", stderr); return 2; }
         unsigned long coordinates[4];

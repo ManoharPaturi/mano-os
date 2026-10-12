@@ -6,26 +6,23 @@ User authorized implementation, PRs and mostly carrying them through to merge.
 Merge only after every current-head CI passes; main protection is enforced for admins.
 User explicitly chose CI VM development for now. No agents have been delegated.
 
-Verified merged work: PRs #1-14. Main e2f64e0fe0f1fe23a6af88567ac64f79e18fec62.
-PR14 accepted CI 38319743416; post-merge main 38320287725 passed all jobs.
-Recovered report 32 pass, 0 fail, 2 pending (P0-09/10), architecture NO-GO.
-All real root/recovery, sandbox, GUI/scale, concurrent focus, native prompt and
-PAM-authenticated real ttyS0 rescue contracts remain passing. Full goal is active.
+Verified merged work PRs #1-15. Main 9523f9430f6aacce604fc7ed5cb86d93781dad47.
+PR15 accepted CI 38322815062, post-merge main 38323225953 all passed.
+Recovered report 33 pass, 0 fail, 1 pending P0-10; architecture NO-GO.
+Original full spec/goal remains active; no model execution or arbitrary root API.
 
-Current branch feat/phase0-authenticated-approval. Fixed CI root authority spike:
-human-only SOCK_SEQPACKET endpoint with kernel SO_PEERCRED, immutable task/op/target/
-risk/expiry/nonce digest, per-request Linux PAM through fixed C helper, single-use
-approval, root-only marker and journal. No arbitrary root executor or model API.
-Trusted ttyS0 client displays only broker operation and tests modified digest,
-wrong nonce, extra target, expiry, wrong password, valid approval and replay.
-Three actor principals must hit EACCES on approval IPC, journal write and uinput.
-If cloud kernel lacks uinput driver, a character-node permission test explicitly
-records driver_available=false; no physical/device-behavior claim is made. Strong
-OS-auth fallback follows original spec; Candidate security run 38321824070 verified both boots (33 pass, 0 fail, 1 pending
-on recovered root). Final head must rerun all CI before merge. PAM allocation failures
-fail closed. Actual uinput driver unavailable, permission-node scope explicit.
-Temporary credentials remain off argv/env/logs/artifacts, each flow fails closed,
-cleanup stops authority and locks account. Both normal/recovered roots required.
+Current branch feat/phase0-independent-stop. Native C stopd with systemd watchdog,
+human-only kernel-credential socket, fixed cgroup.kill path, durable latch/epoch,
+root-lock of raw agent input runtime. Root C restart fails closed after watchdog hang.
+Real bounded fork storms in two task units plus live Wayland pointer-pulse service.
+Core and approval authority frozen throughout each stop. First force native stopd
+hang -> systemd watchdog restart -> auto stop. Resume authority; old grant denied.
+Fresh request-bound PAM rearm restores input and new scoped grant. Then real ttyS0
+STOP trigger independently kills/revokes again; grant denied and TTY still usable.
+Live grants are real checks/counter effects bound to approved fixture-session scope,
+not production general execution. Root cgroup/epoch/input and actor denial evidence
+must pass both boots. Full Phase0 audit is explicitly pending before any promotion.
+Candidate unverified until final-head CI; merge only all-success current head.
 
 Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
 No production broker, core/model execution, coding delegate, .deb or ISO exists yet.

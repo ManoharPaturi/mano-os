@@ -67,6 +67,18 @@ def main():
             raise RuntimeError(f"Serial fixture {action} failed: {result.stderr[-3000:]}")
         return json.loads(result.stdout) if result.stdout.strip() else None
 
+    def stop_fixture(action):
+        result = subprocess.run(
+            [*ssh, f"sudo python3 /opt/mano-lab/scripts/stop_fixture.py {action}"],
+            text=True,
+            capture_output=True,
+            timeout=45,
+            check=False,
+        )
+        if result.returncode:
+            raise RuntimeError(f"Stop fixture {action} failed: {result.stderr[-3000:]}")
+        return json.loads(result.stdout) if result.stdout.strip() else None
+
     credentials = None
     report = {
         "passed": False,
@@ -153,6 +165,58 @@ def main():
         report["approval_client"] = approvals[0]
         report["approval_evidence"] = fixture("approval-status")
         report["approval_service_verified"] = True
+
+        def read_key(data, key):
+            result = []
+            for line in data.decode(errors="replace").splitlines():
+                try:
+                    value = json.loads(line)
+                    if isinstance(value, dict) and key in value:
+                        result.append(value)
+                except json.JSONDecodeError:
+                    continue
+            return result
+
+        def grant(mode):
+            command = (
+                f"PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/grant_cli.py {mode}\r"
+            )
+            client.sendall(command.encode())
+            if mode == "rearm":
+                receive_until(lambda value: b"Rearm approval password:" in value)
+                client.sendall(credentials["password"].encode() + b"\r")
+            result = receive_until(lambda value: bool(read_key(value, "grant_mode")), timeout=30)
+            values = read_key(result, "grant_mode")
+            assert len(values) == 1 and values[0]["grant_mode"] == mode
+            return values[0]
+
+        grants = [grant("before")]
+        stop_fixture("prepare")
+        watchdog = stop_fixture("watchdog")
+        stop_fixture("watchdog-status")
+        grants.append(grant("revoked"))
+        grants.append(grant("rearm"))
+        stop_fixture("manual")
+        client.sendall(b"python3 /opt/mano-lab/scripts/stop_cli.py\r")
+        result = receive_until(lambda value: bool(read_key(value, "trusted_stop_reply")))
+        trigger = read_key(result, "trusted_stop_reply")[0]
+        assert trigger["uid"] == credentials["human_uid"] and trigger["tty"] == "/dev/ttyS0"
+        manual = stop_fixture("manual-status")
+        grants.append(grant("final"))
+        client.sendall(("python3 -c " + shlex.quote(source) + "\r").encode())
+        result = receive_until(
+            lambda value: bool(challenge_values(value, credentials["challenge"]))
+        )
+        recovered = challenge_values(result, credentials["challenge"])[0]
+        assert recovered["uid"] == credentials["human_uid"] and recovered["tty"] == "/dev/ttyS0"
+        report["independent_stop"] = {
+            "watchdog": watchdog,
+            "manual": manual,
+            "tty_trigger": trigger,
+            "grant_checks": grants,
+            "recovery_tty_usable": True,
+            "physical_input_provenance": None,
+        }
         client.sendall(b"exit\r")
     except Exception as error:
         report["passed"] = False
@@ -207,6 +271,28 @@ def main():
                 "pass",
                 "Human-only IPC/PAM, request binding, root effect/journal and nine actor denials",
                 ("authenticated-approval.json",),
+            )
+        )
+    if report["passed"] and "independent_stop" in report:
+        probes = [p for p in probes if p.name != "trusted-physical-stop-path"]
+        (args.out / "independent-stop.json").write_text(
+            json.dumps(report["independent_stop"], indent=2) + "\n"
+        )
+        probes.append(
+            Probe(
+                "P0-10",
+                "native-independent-stop-and-revocation",
+                "pass",
+                "Native stop kills tasks, revokes grants/input and preserves recovery",
+                ("independent-stop.json",),
+            )
+        )
+        probes.append(
+            Probe(
+                "P0-12",
+                "full-phase0-architecture-audit",
+                "pending",
+                "All backlog checks require original-spec audit before production execution",
             )
         )
     write_report(args.out, probes, prior["environment"])
