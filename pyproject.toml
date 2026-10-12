@@ -11,6 +11,7 @@ dependencies = []
 
 [project.scripts]
 mano-lab = "mano_lab.cli:main"
+mano-prompt = "mano_prompt.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

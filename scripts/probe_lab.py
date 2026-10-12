@@ -606,7 +606,7 @@ def main():
                 "P0-03",
                 "physical-prompt-rescue",
                 "pending",
-                "Native prompt and physical recovery TTY pending",
+                "Native prompt and authenticated serial recovery probe not yet combined",
             ),
             Probe(
                 "P0-11",
@@ -628,6 +628,13 @@ def main():
     )
     try:
         sandbox_probes()
+        native = call(["python3", str(ROOT / "scripts/probe_human_prompt.py")], timeout=120)
+        if native.returncode != 0:
+            record("P0-03", "native-prompt", native)
+        elif (OUT / "human-prompt.json").is_file():
+            RESOURCE_OBSERVATIONS["human_compositor_memory_bytes"] = json.loads(
+                (OUT / "human-prompt.json").read_text()
+            )["human_compositor_memory_bytes"]
         desktop_probe()
         stop_probe()
         oom_probe()
@@ -638,9 +645,11 @@ def main():
         {
             "post_probe_guest_memory_bytes": system_memory(),
             "probe_suite_elapsed_seconds": time.monotonic() - started,
-            "measurement_scope": "VM primitives; production core/broker and human UI absent",
+            "measurement_scope": "VM primitives and native UI; production core/broker absent",
             "physical_hardware": False,
-            "human_compositor_memory_bytes": None,
+            "human_compositor_memory_bytes": RESOURCE_OBSERVATIONS.get(
+                "human_compositor_memory_bytes"
+            ),
             "verified_product_task_success_rate": None,
             "model_cost": None,
             "ci_cost": None,

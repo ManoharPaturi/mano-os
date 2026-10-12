@@ -58,7 +58,8 @@ start_vm() {
     test -r /dev/kvm && test -w /dev/kvm
   fi
   qemu-system-x86_64 -accel "$accel" -m 4096 -smp 2 -display none \
-    -serial "file:$repo_root/evidence/serial-$stage.log" \
+    -chardev "socket,id=console,path=$lab_dir/serial-$stage.sock,server=on,wait=off,logfile=$repo_root/evidence/serial-$stage.log" \
+    -serial chardev:console \
     -drive "file=$lab_dir/$image,format=qcow2,if=virtio$bootstrap_readonly" \
     -drive "file=$lab_dir/data.qcow2,format=qcow2,if=virtio" \
     -drive "file=$lab_dir/root.qcow2,format=qcow2,if=virtio" \
@@ -130,6 +131,9 @@ set -e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
 if [ "$result" != 0 ]; then exit "$result"; fi
+PYTHONPATH="$repo_root/src" python3 "$repo_root/scripts/serial_rescue.py" \
+  --socket "$lab_dir/serial-btrfs.sock" --key "$lab_dir/key" \
+  --known-hosts "$lab_dir/known_hosts" --out "$repo_root/evidence"
 # Preserve first-root report separately; recovered-root observations are a new run.
 python3 - "$repo_root/evidence" <<'PY_COPY'
 import shutil,sys
@@ -154,6 +158,14 @@ result=${PIPESTATUS[0]}
 set -e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+if [ "$result" = 0 ]; then
+  set +e
+  PYTHONPATH="$repo_root/src" python3 "$repo_root/scripts/serial_rescue.py" \
+    --socket "$lab_dir/serial-recovery.sock" --key "$lab_dir/key" \
+    --known-hosts "$lab_dir/known_hosts" --out "$repo_root/evidence"
+  result=$?
+  set -e
+fi
 sha256sum "$lab_dir/$image" > "$repo_root/evidence/bootstrap-preserved-after.sha256"
 cmp "$repo_root/evidence/bootstrap-preserved-before.sha256" \
   "$repo_root/evidence/bootstrap-preserved-after.sha256"

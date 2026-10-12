@@ -6,23 +6,26 @@ User authorized implementation, PRs and mostly carrying them through to merge.
 Merge only after every current-head CI passes; main protection is enforced for admins.
 User explicitly chose CI VM development for now. No agents have been delegated.
 
-Verified merged work: PRs #1-10, latest main cf5b1dedc47aab42aba50d398d1683b59eb4a959.
-PR #10 accepted CI 38308966866; post-merge main CI 38309367729 passed all checks.
-Recovered report: 29 pass, 0 fail, 5 pending. Architecture remains NO-GO.
-Includes real root/recovery boots, preserved original disk, cgroup OOM/stop,
-restricted Wayland forged-bind denials, private authenticated XWayland namespace,
-headed Chromium and Writer named accessible Save with verified ODT/PDF text.
+Verified merged work: PRs #1-11. Latest main 63b4ea0cfac3edf80c2668c7681572ae7b832071.
+PR #11 accepted CI 38311211301; post-merge main 38311680967 passed all checks.
+Recovered report: 30 pass, 0 fail, 4 pending; architecture remains NO-GO.
+Includes actual root/recovery boots, original disk preservation, privileged Wayland
+bind denials, private XWayland, Chromium, Writer semantic and coordinate saves at
+scales 1 and 2. Worker virtual-pointer creation denied. Full goal remains active.
 
-Current branch: feat/phase0-accessibility-scale. Test visible Writer toolbar Save
-using WINDOW_COORDS (visible/showing/enabled), controller-observed xdg-shell client
-origin, logical-to-pixel transform, and actual pointer Save at scales 1 and 2.
-The original hidden menu's desktop sentinel -2147483648 remains unusable.
-Task worker never receives Sway command IPC or virtual-pointer authority. Initial
-Sway seat cursor fixture did not save (headless seat had no real pointer capability).
-The trusted controller now creates a virtual pointer via pinned protocol XML; a
-restricted worker invoking that pointer fixture must be denied. Actual ODT changes must
-prove both clicks; no semantic Save fallback is allowed for the geometry test.
-Candidate is unverified until the final PR head passes the complete CI VM suite.
+Current branch: feat/phase0-native-prompt-rescue. Adds minimal native GTK4 prompt
+under the separate human principal, actual accessible editable/Send contract and
+request-data receipt. No execution or approval authority is wired to this UI.
+Human Sway starts only the native prompt by default; recovery foot is explicit.
+CI console changes from write-only logfile to logged Unix socket-backed serial.
+Trusted runner authenticates the temporary human fixture via agetty/login/PAM on
+real ttyS0, checks a secret challenge response/actual UID/TTY while mock core remains
+SIGSTOP'ed. No PTY substitute, physical-input or full approval-service claim.
+Fixture credentials are captured privately, never passed on argv/env or retained in
+artifacts; serial output is redacted, fixture is cleaned and human password locked.
+Runner combines the serial/native evidence into the report after guest export.
+Both normal and recovered roots must run this flow. Candidate remains unverified
+until final-head CI succeeds; merge only via merge_checked.py.
 
 Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
 No production broker, core/model execution, coding delegate, .deb or ISO exists yet.
