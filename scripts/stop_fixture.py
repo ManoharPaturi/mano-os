@@ -178,6 +178,15 @@ def main():
     assert run(["systemd-detect-virt", "--vm"]).stdout.strip() in {"kvm", "qemu"}
     action = sys.argv[1]
     if action == "cleanup":
+        config = BASE / "cgroup-path"
+        if config.is_file():
+            kill = Path(config.read_text().strip()) / "cgroup.kill"
+            if kill.is_file():
+                kill.write_text("1")
+        run(
+            ["systemctl", "kill", "--signal=KILL", "--kill-whom=all", "mano-stopd-spike.service"],
+            check=False,
+        )
         for unit in ("mano-stopd-spike.service", SLICE, "mano-stop-display.service"):
             run(["systemctl", "stop", unit], check=False)
         for file in (
@@ -223,6 +232,7 @@ def main():
             [
                 "systemd-run",
                 "--unit=mano-stopd-spike",
+                "--no-block",
                 "--property=Type=notify",
                 "--property=WatchdogSec=1",
                 "--property=Restart=on-failure",
@@ -233,6 +243,16 @@ def main():
                 "/usr/local/lib/mano-lab/stopd-probe",
             ]
         )
+        deadline = time.monotonic() + 12
+        while prop("mano-stopd-spike.service", "ActiveState") != "active":
+            if time.monotonic() > deadline:
+                diagnostic = run(
+                    ["journalctl", "-u", "mano-stopd-spike.service", "--no-pager", "-n", "30"],
+                    check=False,
+                ).stdout
+                (OUT / "stopd-startup.txt").write_text(diagnostic)
+                raise RuntimeError("Native stopd startup failed: " + diagnostic)
+            time.sleep(0.1)
         run(
             [
                 "systemctl",

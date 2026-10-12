@@ -203,6 +203,8 @@ def main():
         assert trigger["uid"] == credentials["human_uid"] and trigger["tty"] == "/dev/ttyS0"
         manual = stop_fixture("manual-status")
         grants.append(grant("final"))
+        assert grants[0]["result"]["use_count"] == grants[1]["result"]["use_count"]
+        assert grants[2]["result"]["use_count"] == grants[3]["result"]["use_count"]
         client.sendall(("python3 -c " + shlex.quote(source) + "\r").encode())
         result = receive_until(
             lambda value: bool(challenge_values(value, credentials["challenge"]))
