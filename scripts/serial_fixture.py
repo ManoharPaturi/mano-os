@@ -55,11 +55,26 @@ def main():
         for command in (
             ["systemctl", "kill", "--signal=KILL", "--kill-whom=all", UNIT],
             ["systemctl", "stop", UNIT],
-            ["usermod", "-L", "mano-human"],
         ):
             subprocess.run(command, text=True, capture_output=True, timeout=20, check=False)
+        run(["/usr/sbin/usermod", "-L", "mano-human"])
+        shadow = next(
+            line.split(":")[1]
+            for line in Path("/etc/shadow").read_text().splitlines()
+            if line.startswith("mano-human:")
+        )
+        assert shadow.startswith("!"), "Fixture human account did not lock"
+        remaining = subprocess.run(
+            ["systemctl", "show", UNIT, "-p", "MainPID", "--value"],
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+        assert remaining.stdout.strip() in {"", "0"}, "Fixture core still alive after cleanup"
         for name in ("state.json", "challenge"):
             (ROOT / name).unlink(missing_ok=True)
+        print(json.dumps({"account_locked": True, "core_removed": True}))
         return
     if operation == "status":
         print(json.dumps(status()))

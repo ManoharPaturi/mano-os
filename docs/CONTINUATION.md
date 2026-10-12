@@ -24,7 +24,9 @@ SIGSTOP'ed. No PTY substitute, physical-input or full approval-service claim.
 Fixture credentials are captured privately, never passed on argv/env or retained in
 artifacts; serial output is redacted, fixture is cleaned and human password locked.
 Runner combines the serial/native evidence into the report after guest export.
-Both normal and recovered roots must run this flow. Candidate remains unverified
+Both normal and recovered roots must run this flow. Use Type=exec so STOP targets
+the credential-switched core, not the pre-exec root launcher. Require complete
+UART JSON frames; token substrings alone are insufficient. Verify cleanup lock/PID. Candidate remains unverified
 until final-head CI succeeds; merge only via merge_checked.py.
 
 Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.

@@ -13,6 +13,20 @@ from pathlib import Path
 from mano_lab.evidence import Probe, write_report
 
 
+def challenge_values(data, challenge):
+    # UART/socket reads may stop midway through a JSON response. A matching
+    # token alone is insufficient; require a complete parseable response.
+    values = []
+    for line in data.decode(errors="replace").splitlines():
+        try:
+            item = json.loads(line)
+            if isinstance(item, dict) and item.get("challenge") == challenge:
+                values.append(item)
+        except json.JSONDecodeError:
+            continue
+    return values
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--socket", type=Path, required=True)
@@ -95,15 +109,10 @@ def main():
             "'uid':os.getuid(),'tty':os.ttyname(0),'pid':os.getpid()}))"
         )
         client.sendall(("python3 -c " + shlex.quote(source) + "\r").encode())
-        result = receive_until(lambda value: credentials["challenge"].encode() in value)
-        values = []
-        for line in result.decode(errors="replace").splitlines():
-            try:
-                item = json.loads(line)
-                if isinstance(item, dict) and item.get("challenge") == credentials["challenge"]:
-                    values.append(item)
-            except json.JSONDecodeError:
-                continue
+        result = receive_until(
+            lambda value: bool(challenge_values(value, credentials["challenge"]))
+        )
+        values = challenge_values(result, credentials["challenge"])
         assert len(values) == 1, "No actual challenge response from the rescue shell"
         assert values[0]["uid"] == credentials["human_uid"]
         assert values[0]["tty"] == "/dev/ttyS0"
@@ -125,7 +134,7 @@ def main():
     finally:
         client.close()
         try:
-            fixture("cleanup")
+            report["fixture_cleanup"] = fixture("cleanup")
         except Exception as cleanup_error:
             report.update(passed=False, cleanup_error=str(cleanup_error))
         # Credentials/challenges are never retained in console artifacts.
