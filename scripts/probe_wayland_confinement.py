@@ -210,6 +210,13 @@ def main():
         if trusted.returncode or "bind succeeded" not in trusted.stdout:
             raise RuntimeError("Trusted controller positive bind failed")
         observations["trusted_bind_control"] = trusted.stdout.strip()
+        pointer_denied = sandbox([BINARY, "pointer-click", "114", "45", "1280", "720"])
+        if (
+            pointer_denied.returncode != 2
+            or "virtual pointer authority unavailable" not in pointer_denied.stderr
+        ):
+            raise RuntimeError("Restricted worker acquired virtual pointer authority")
+        observations["worker_virtual_pointer_denied"] = pointer_denied.stderr.strip()
         # Socket namespace exposes neither Sway command IPC nor raw X11/human input.
         isolation = sandbox(
             [
@@ -447,12 +454,29 @@ def main():
                     round((logical[0] - output["rect"]["x"]) * scale),
                     round((logical[1] - output["rect"]["y"]) * scale),
                 ]
-                # In this lab-only route, Sway IPC stays with the controller. The
-                # task receives no raw socket or general compositor command API.
-                sway_query([f"seat seat0 cursor set {logical[0]} {logical[1]}"])
-                time.sleep(0.1)
-                sway_query(["seat seat0 cursor press button1"])
-                sway_query(["seat seat0 cursor release button1"])
+                # Fixed CI fixture only: privileged virtual-pointer authority remains
+                # on the controller's raw display route, never on the worker listener.
+                assert output["rect"]["x"] == 0 and output["rect"]["y"] == 0
+                assert sum(item["active"] for item in outputs) == 1
+                pointer_click = run(
+                    role(
+                        "mano-agent",
+                        raw_display,
+                        [
+                            BINARY,
+                            "pointer-click",
+                            str(logical[0]),
+                            str(logical[1]),
+                            str(output["rect"]["width"]),
+                            str(output["rect"]["height"]),
+                        ],
+                    )
+                )
+                if (
+                    pointer_click.returncode
+                    or "pointer click dispatched" not in pointer_click.stdout
+                ):
+                    raise RuntimeError(f"Controller pointer failed: {pointer_click.stderr}")
                 shot_path = f"/run/mano-agent/office-scale-{scale}.png"
                 shot = run(role("mano-agent", raw_display, ["grim", "-o", "HEADLESS-1", shot_path]))
                 if shot.returncode:
@@ -468,7 +492,8 @@ def main():
                     "logical_click": logical,
                     "pixel_click": pixels,
                     "screenshot_size": size,
-                    "input_route": "trusted lab Sway IPC only",
+                    "input_route": "trusted virtual-pointer fixture; worker protocol bind denied",
+                    "pointer_stdout": pointer_click.stdout.strip(),
                 }
                 (workspace / f"geometry-click-{scale}.json").write_text(
                     json.dumps(click, indent=2) + "\n"

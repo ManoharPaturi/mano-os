@@ -17,9 +17,10 @@ Current branch: feat/phase0-accessibility-scale. Test visible Writer toolbar Sav
 using WINDOW_COORDS (visible/showing/enabled), controller-observed xdg-shell client
 origin, logical-to-pixel transform, and actual pointer Save at scales 1 and 2.
 The original hidden menu's desktop sentinel -2147483648 remains unusable.
-Task worker never receives Sway command IPC. Controller's existing Sway seat cursor
-commands are a deprecated lab-only fixture, not a production input service; eventual
-production input uses its scoped virtual-pointer adapter. Actual ODT changes must
+Task worker never receives Sway command IPC or virtual-pointer authority. Initial
+Sway seat cursor fixture did not save (headless seat had no real pointer capability).
+The trusted controller now creates a virtual pointer via pinned protocol XML; a
+restricted worker invoking that pointer fixture must be denied. Actual ODT changes must
 prove both clicks; no semantic Save fallback is allowed for the geometry test.
 Candidate is unverified until the final PR head passes the complete CI VM suite.
 
