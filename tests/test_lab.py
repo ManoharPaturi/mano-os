@@ -1,4 +1,5 @@
 import importlib.util
+import socket
 import tempfile
 import unittest
 from pathlib import Path
@@ -58,6 +59,19 @@ class SandboxTests(unittest.TestCase):
             self.assertNotIn("--share-net", args)
             self.assertNotIn("/run/user", args)
             self.assertEqual(args[-3:], ["python3", "-c", "print(1)"])
+
+    def test_raw_or_unknown_gui_sockets_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            raw = root / "raw-wayland"
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+                server.bind(str(raw))
+                with self.assertRaises(ValueError):
+                    command(root, ["true"], gui_socket=raw)
+                link = root / "alias"
+                link.symlink_to(raw)
+                with self.assertRaises(ValueError):
+                    command(root, ["true"], gui_socket=link)
 
     def test_rejections(self):
         with tempfile.TemporaryDirectory() as d:

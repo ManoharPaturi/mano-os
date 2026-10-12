@@ -1,0 +1,100 @@
+/* Disposable lab fixture. No production approval or input capability. */
+#define _GNU_SOURCE
+#include <errno.h>
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+#include <wayland-client.h>
+#include "security-context-v1-client-protocol.h"
+
+static struct wp_security_context_manager_v1 *manager;
+static struct wl_compositor *compositor;
+static volatile sig_atomic_t stopped;
+
+static void advertised(void *data, struct wl_registry *registry, uint32_t name,
+                       const char *interface, uint32_t version) {
+    int list = *(int *)data;
+    if (list) printf("%u %s %u\n", name, interface, version);
+    if (!strcmp(interface, "wp_security_context_manager_v1"))
+        manager = wl_registry_bind(registry, name, &wp_security_context_manager_v1_interface, 1);
+    if (!strcmp(interface, "wl_compositor"))
+        compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 1);
+}
+static void removed(void *data, struct wl_registry *registry, uint32_t name) {
+    (void)data; (void)registry; (void)name;
+}
+static const struct wl_registry_listener registry_listener = {advertised, removed};
+static void stop(int sig) { (void)sig; stopped = 1; }
+
+int main(int argc, char **argv) {
+    if (argc < 2) return 2;
+    struct wl_display *display = wl_display_connect(NULL);
+    if (!display) { perror("display connect"); return 2; }
+    int list = !strcmp(argv[1], "list");
+    struct wl_registry *registry = wl_display_get_registry(display);
+    wl_registry_add_listener(registry, &registry_listener, &list);
+    if (wl_display_roundtrip(display) < 0) return 2;
+    if (list) { wl_display_disconnect(display); return 0; }
+    if (!strcmp(argv[1], "surface")) {
+        if (!compositor) return 2;
+        struct wl_surface *surface = wl_compositor_create_surface(compositor);
+        wl_surface_commit(surface);
+        int result = wl_display_roundtrip(display);
+        wl_surface_destroy(surface);
+        wl_display_disconnect(display);
+        if (result < 0) return 2;
+        puts("ordinary surface works"); return 0;
+    }
+    if (!strcmp(argv[1], "bind") && argc == 5) {
+        char *end = NULL;
+        unsigned long id = strtoul(argv[2], &end, 10);
+        if (!end || *end || !id || id > UINT32_MAX) return 2;
+        unsigned long version = strtoul(argv[4], &end, 10);
+        if (!end || *end || !version || version > INT32_MAX) return 2;
+        /* No requests/events needed: bind itself must be rejected by the server. */
+        const struct wl_interface interface = {argv[3], (int)version, 0, NULL, 0, NULL};
+        struct wl_proxy *bound = wl_registry_bind(registry, (uint32_t)id, &interface, 1);
+        if (!bound) return 2;
+        int result = wl_display_roundtrip(display);
+        if (result < 0 && wl_display_get_error(display) == EPROTO) {
+            const struct wl_interface *offender = NULL; uint32_t object_id = 0;
+            uint32_t error = wl_display_get_protocol_error(display, &offender, &object_id);
+            printf("server denied bind: interface=%s error=%u object=%u\n", argv[3], error, object_id);
+            wl_display_disconnect(display); return 3;
+        }
+        wl_proxy_destroy(bound); wl_display_disconnect(display);
+        if (result < 0) return 2;
+        puts("bind succeeded"); return 0;
+    }
+    if (!strcmp(argv[1], "listener") && argc == 3) {
+        if (!manager || strlen(argv[2]) >= sizeof(((struct sockaddr_un *)0)->sun_path)) return 2;
+        int listener = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0), pair[2];
+        struct sockaddr_un address = {.sun_family = AF_UNIX};
+        strcpy(address.sun_path, argv[2]);
+        /* Refuse pre-existing paths; no unlink/reset of another caller's socket. */
+        if (listener < 0 || bind(listener, (struct sockaddr *)&address, sizeof(address)) < 0 ||
+            listen(listener, 16) < 0 || socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, pair) < 0) {
+            perror("listener setup"); return 2;
+        }
+        struct wp_security_context_v1 *context =
+            wp_security_context_manager_v1_create_listener(manager, listener, pair[1]);
+        wp_security_context_v1_set_sandbox_engine(context, "org.mano.lab");
+        wp_security_context_v1_set_app_id(context, "mano-phase0-client");
+        wp_security_context_v1_set_instance_id(context, "p0-one-task");
+        wp_security_context_v1_commit(context);
+        if (wl_display_roundtrip(display) < 0) return 2;
+        close(listener); close(pair[1]);
+        puts("READY"); fflush(stdout);
+        signal(SIGTERM, stop); signal(SIGINT, stop);
+        /* Compositor owns its listener FD; this protected end controls its lifetime. */
+        while (!stopped) pause();
+        close(pair[0]); wp_security_context_v1_destroy(context);
+        wl_display_flush(display); wl_display_disconnect(display); return 0;
+    }
+    wl_display_disconnect(display); return 2;
+}
