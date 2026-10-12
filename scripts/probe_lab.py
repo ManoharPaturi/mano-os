@@ -7,6 +7,7 @@ The source is a lab tool, not a production approval service. No LLM is connected
 import json
 import os
 import pwd
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -105,18 +106,28 @@ def sandbox_probes():
 def desktop_probe():
     launch_started = time.monotonic()
     log = (OUT / "sway.txt").open("w")
+    display_user = pwd.getpwnam("mano-agent")
+    cookie_path = Path("/run/mano-agent/x11-cookie")
+    cookie_path.write_text(secrets.token_hex(16))
+    os.chown(cookie_path, display_user.pw_uid, display_user.pw_gid)
+    os.chmod(cookie_path, 0o600)
     compositor = subprocess.Popen(
-        agent(
-            [
-                "XDG_RUNTIME_DIR=/run/mano-agent",
-                "WLR_BACKENDS=headless",
-                "WLR_RENDERER=pixman",
-                "WLR_HEADLESS_OUTPUTS=1",
-                "sway",
-                "-c",
-                str(ROOT / "packaging/sway/agent.conf"),
-            ]
-        ),
+        [
+            "/usr/bin/unshare",
+            "--net",
+            *agent(
+                [
+                    "XDG_RUNTIME_DIR=/run/mano-agent",
+                    "WLR_BACKENDS=headless",
+                    "WLR_RENDERER=pixman",
+                    "WLR_HEADLESS_OUTPUTS=1",
+                    "WLR_XWAYLAND=/opt/mano-lab/scripts/xwayland_lab_wrapper.sh",
+                    "sway",
+                    "-c",
+                    str(ROOT / "packaging/sway/agent.conf"),
+                ]
+            ),
+        ],
         stdout=log,
         stderr=log,
     )
@@ -232,14 +243,25 @@ def desktop_probe():
                     ("wayland-confinement.json", "security-context-protocol.sha256"),
                 )
             )
-        PROBES.append(
-            Probe(
-                "P0-07",
-                "xwayland-client-confinement",
-                "pending",
-                "Worker has no X11 socket; authorized XWayland-client contract pending",
-            )
+        x11 = call(
+            [
+                "python3",
+                str(ROOT / "scripts/probe_xwayland_confinement.py"),
+                socket_path,
+            ],
+            timeout=120,
         )
+        record("P0-07", "xwayland-client-enforcement", x11)
+        if x11.returncode == 0:
+            PROBES.append(
+                Probe(
+                    "P0-07",
+                    "xwayland-private-domain",
+                    "pass",
+                    "X11 window maps; raw Wayland, other roles and abstract socket denied",
+                    ("xwayland-confinement.json",),
+                )
+            )
         PROBES.append(
             Probe(
                 "P0-05",

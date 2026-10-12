@@ -35,7 +35,13 @@ def require_patched() -> str:
     return version
 
 
-def command(workspace: Path, argv: list[str], gui_socket: Path | None = None) -> list[str]:
+def command(
+    workspace: Path,
+    argv: list[str],
+    gui_socket: Path | None = None,
+    x11_socket: Path | None = None,
+    x11_authority: Path | None = None,
+) -> list[str]:
     if not argv or any(not isinstance(a, str) or "\x00" in a for a in argv):
         raise ValueError("Expected nonempty argv")
     # Reject symlinks in every component. Owner may still race; disposable lab
@@ -122,6 +128,42 @@ def command(workspace: Path, argv: list[str], gui_socket: Path | None = None) ->
             "--setenv",
             "WAYLAND_DISPLAY",
             "wayland-0",
+        ]
+    if x11_socket is not None or x11_authority is not None:
+        if gui_socket is not None or x11_socket is None or x11_authority is None:
+            raise ValueError("Expected one complete task display route")
+        if (
+            x11_socket.parent != Path("/run/mano-x11")
+            or not x11_socket.name.startswith("X")
+            or not x11_socket.name[1:].isdigit()
+            or x11_socket.is_symlink()
+            or not x11_socket.is_socket()
+        ):
+            raise ValueError("Raw or unknown X11 socket forbidden")
+        if (
+            x11_authority != Path("/run/mano-x11/task-xauthority")
+            or x11_authority.is_symlink()
+            or not x11_authority.is_file()
+        ):
+            raise ValueError("Expected task-only Xauthority")
+        end = args.index("--")
+        args[end:end] = [
+            "--dir",
+            "/tmp/.X11-unix",
+            "--ro-bind",
+            str(x11_socket),
+            "/tmp/.X11-unix/" + x11_socket.name,
+            "--dir",
+            "/run/task",
+            "--ro-bind",
+            str(x11_authority),
+            "/run/task/Xauthority",
+            "--setenv",
+            "DISPLAY",
+            ":" + x11_socket.name[1:],
+            "--setenv",
+            "XAUTHORITY",
+            "/run/task/Xauthority",
         ]
     return args
 
