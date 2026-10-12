@@ -1,0 +1,101 @@
+"""Real prompt class with a private native-GTK observer for the CI fixture."""
+
+import json
+import os
+import subprocess
+import time
+from pathlib import Path
+
+from gi.repository import GLib
+
+from mano_prompt.app import Prompt
+
+ROOT = Path("/run/mano-human")
+CANARY = "Human canary: agent input must leave this unchanged"
+
+
+def main():
+    app = Prompt()
+    report = {
+        "passed": False,
+        "uid": os.getuid(),
+        "canary": CANARY,
+        "violations": [],
+        "samples": 0,
+        "events": 0,
+        "monitor_interval_ms": 50,
+        "observation_api": "native GTK widget getters/signals",
+        "physical_input_provenance": None,
+    }
+    armed = False
+    installed = False
+    before = None
+    deadline = time.monotonic() + 600
+
+    def snapshot():
+        focus = app.window.get_focus()
+        focused = focus is not None and (focus == app.entry or focus.is_ancestor(app.entry))
+        receipt = Path.home() / ".local/state/mano/requests.jsonl"
+        return {
+            "text": app.entry.get_text(),
+            "focused": focused,
+            "active": app.window.is_active(),
+            "receipt_count": len(receipt.read_text().splitlines()),
+        }
+
+    def check(reason):
+        current = snapshot()
+        report["samples"] += 1
+        if current != before:
+            report["violations"].append({"reason": reason, "snapshot": current})
+        report["after"] = current
+
+    def event(_obj, *_args):
+        if armed:
+            report["events"] += 1
+            check("native GTK signal")
+
+    def poll():
+        nonlocal armed, before
+        try:
+            if not armed and (ROOT / "focus-arm").exists():
+                app.entry.set_text(CANARY)
+                assert app.entry.grab_focus()
+                before = snapshot()
+                print(json.dumps({"initial_state": before}), flush=True)
+                assert before["text"] == CANARY and before["focused"] and before["active"]
+                report["before"] = before
+                subprocess.run(["grim", str(ROOT / "focus-before.png")], check=True, timeout=20)
+                armed = True
+                (ROOT / "focus-ready.json").write_text(json.dumps(before) + "\n")
+            if armed:
+                check("periodic snapshot")
+                if (ROOT / "focus-stop").exists():
+                    report["passed"] = not report["violations"] and report["samples"] > 1
+                    subprocess.run(["grim", str(ROOT / "focus-after.png")], check=True, timeout=20)
+                    (ROOT / "focus-report.json").write_text(json.dumps(report, indent=2) + "\n")
+                    return False
+            if time.monotonic() > deadline:
+                raise RuntimeError("Native witness timeout")
+        except Exception as error:
+            report["violations"].append({"reason": str(error)})
+            (ROOT / "focus-report.json").write_text(json.dumps(report, indent=2) + "\n")
+            return False
+        return True
+
+    def install(_app):
+        nonlocal installed
+        if installed:
+            return
+        installed = True
+        app.entry.connect("changed", event)
+        app.window.connect("notify::focus-widget", event)
+        app.window.connect("notify::is-active", event)
+        GLib.timeout_add(50, poll)
+
+    app.connect("activate", install)
+    return app.run(None)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

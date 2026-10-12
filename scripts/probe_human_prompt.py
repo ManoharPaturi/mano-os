@@ -4,6 +4,7 @@
 import json
 import os
 import pwd
+import select
 import shutil
 import subprocess
 import time
@@ -55,10 +56,7 @@ class HumanWitness:
 
     def start_monitor(self):
         self.checkpoint("before-agent")
-        self.sway(
-            "exec /usr/bin/python3 /opt/mano-lab/tests/desktop/focus_contract.py "
-            "> /run/mano-human/focus-driver.txt 2>&1"
-        )
+        (RUNTIME / "focus-arm").touch()
         deadline = time.monotonic() + 30
         while not (RUNTIME / "focus-ready.json").is_file():
             if time.monotonic() > deadline:
@@ -94,6 +92,16 @@ def human_session():
         raise RuntimeError("QEMU guest required")
     if list(RUNTIME.glob("sway-ipc.*.sock")):
         raise RuntimeError("Refusing an existing human session")
+    config = RUNTIME / "human-test.conf"
+    config.write_text(
+        (ROOT / "packaging/sway/human.conf")
+        .read_text()
+        .replace(
+            "/usr/bin/python3 -m mano_prompt",
+            "/usr/bin/python3 /opt/mano-lab/tests/desktop/prompt_witness.py "
+            "> /run/mano-human/focus-driver.txt 2>&1",
+        )
+    )
     started = time.monotonic()
     log = (OUT / "human-sway.txt").open("w")
     proc = subprocess.Popen(
@@ -112,7 +120,7 @@ def human_session():
                     "--",
                     "sway",
                     "-c",
-                    str(ROOT / "packaging/sway/human.conf"),
+                    str(config),
                 ]
             ),
         ],
@@ -120,6 +128,7 @@ def human_session():
         stderr=log,
     )
     ipc = None
+    keyboard = None
     try:
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
@@ -143,6 +152,18 @@ def human_session():
             )
             return json.loads(result.stdout)
 
+        keyboard = subprocess.Popen(
+            human(
+                ["WAYLAND_DISPLAY=wayland-1", "/usr/local/bin/mano-wayland-probe", "keyboard-hold"]
+            ),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=log,
+        )
+        ready = select.poll()
+        ready.register(keyboard.stdout, select.POLLIN | select.POLLHUP)
+        if not ready.poll(10000) or keyboard.stdout.readline().strip() != "READY":
+            raise RuntimeError("Human fixture keyboard did not become ready")
         while time.monotonic() < deadline:
             tree = sway("-t", "get_tree")
             windows = [n for n in walk(tree) if n.get("app_id")]
@@ -191,6 +212,13 @@ def human_session():
         (OUT / "human-prompt.json").write_text(json.dumps(report, indent=2) + "\n")
         yield HumanWitness(report, sway, ipc, prompt, sway_pid)
     finally:
+        if keyboard is not None:
+            keyboard.terminate()
+            try:
+                keyboard.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                keyboard.kill()
+                keyboard.wait()
         for name in ("focus-driver.txt", "focus-report.json"):
             if (RUNTIME / name).is_file():
                 shutil.copyfile(RUNTIME / name, OUT / name)

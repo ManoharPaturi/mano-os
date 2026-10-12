@@ -14,8 +14,10 @@ Prior geometry/Wayland/XWayland/browser/root recovery contracts remain passing.
 
 Current branch: feat/phase0-cross-session-focus. Keep the real human prompt alive
 while the separate agent compositor runs its actual browser, Writer pointer saves,
-and XWayland app contracts. Monitor an unsent human canary through AT-SPI focus/text
-events and 50 ms snapshots, unchanged receipt count, and protected compositor focus
+and XWayland app contracts. GTK4 AT-SPI text/focus getters returned empty/unfocused despite functional editable
+input. Observe the actual native GTK widgets/signals in a CI wrapper of the same
+Prompt class instead. A trusted virtual keyboard gives the headless human seat an
+actual keyboard-focus path. Monitor an unsent canary and 50 ms snapshots, unchanged receipt count, and protected compositor focus
 checkpoints. Verify distinct net namespaces and actual human Wayland/command IPC
 connection denial for agent, core and worker principals. No physical-input claim.
 This is one P0-05 issue; no approval/runtime/model/stop authority is enabled.

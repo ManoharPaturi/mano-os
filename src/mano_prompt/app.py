@@ -53,6 +53,7 @@ class Prompt(Gtk.Application):
         row.append(send)
         for widget in (title, subtitle, row, status):
             outer.append(widget)
+        self.entry, self.window = entry, window
         window.set_child(outer)
         css = Gtk.CssProvider()
         css.load_from_string("""
