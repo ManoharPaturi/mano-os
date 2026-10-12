@@ -41,6 +41,7 @@ def command(
     gui_socket: Path | None = None,
     x11_socket: Path | None = None,
     x11_authority: Path | None = None,
+    browser: bool = False,
 ) -> list[str]:
     if not argv or any(not isinstance(a, str) or "\x00" in a for a in argv):
         raise ValueError("Expected nonempty argv")
@@ -128,6 +129,17 @@ def command(
             "--setenv",
             "WAYLAND_DISPLAY",
             "wayland-0",
+        ]
+    if browser:
+        if gui_socket is None:
+            raise ValueError("Browser lab profile requires the restricted Wayland route")
+        end = args.index("--")
+        args[end:end] = [
+            "--dir",
+            "/etc/chromium.d",
+            "--ro-bind",
+            "/usr/local/lib/mano-browser/launcher-config",
+            "/etc/chromium.d/00-mano-task",
         ]
     if x11_socket is not None or x11_authority is not None:
         if gui_socket is not None or x11_socket is None or x11_authority is None:

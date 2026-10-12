@@ -139,12 +139,12 @@ def main():
         workspace = Path(tempfile.mkdtemp(prefix="gui-probe-", dir="/home/mano-worker"))
         os.chown(workspace, worker.pw_uid, worker.pw_gid)
 
-        def sandbox_args(argv):
+        def sandbox_args(argv, browser=False):
             # Construct as the worker so the ownership guard observes real credentials.
             source = (
                 "from pathlib import Path; import os; from mano_lab.sandbox import command; "
-                "import sys; a=command(Path(sys.argv[1]),sys.argv[2:],"
-                'Path("/run/mano-worker/restricted-wayland")); '
+                "import sys; a=command(Path(sys.argv[1]),sys.argv[3:],"
+                'Path("/run/mano-worker/restricted-wayland"),browser=bool(int(sys.argv[2]))); '
                 'os.execve(a[0],a,{"PATH":"/usr/bin:/bin","LANG":"C.UTF-8"})'
             )
             return [
@@ -160,6 +160,7 @@ def main():
                 "-c",
                 source,
                 str(workspace),
+                "1" if browser else "0",
                 *argv,
             ]
 
@@ -235,7 +236,8 @@ def main():
                 [
                     "/usr/local/lib/mano-browser/bin/python",
                     "/workspace/browser_contract.py",
-                ]
+                ],
+                browser=True,
             ),
             env=ENV,
             stdout=browser_log,

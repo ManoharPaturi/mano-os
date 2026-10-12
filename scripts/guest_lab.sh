@@ -18,6 +18,9 @@ apt-get clean
 python3 -m venv /usr/local/lib/mano-browser
 /usr/local/lib/mano-browser/bin/pip install playwright==1.63.0
 /usr/local/lib/mano-browser/bin/pip freeze > evidence/browser-python-packages.txt
+printf '# Task-local launcher configuration; no host policy or credential data.\n' \
+  > /usr/local/lib/mano-browser/launcher-config
+chmod 0444 /usr/local/lib/mano-browser/launcher-config
 # Every installed package is recorded; no security floor downgrade.
 dpkg-query -W > evidence/packages.tsv
 uname -a > evidence/kernel.txt
