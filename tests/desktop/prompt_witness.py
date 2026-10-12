@@ -2,7 +2,6 @@
 
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -72,14 +71,12 @@ def main():
                 print(json.dumps({"initial_state": before}), flush=True)
                 assert before["text"] == CANARY and before["focused"] and before["active"]
                 report["before"] = before
-                subprocess.run(["grim", str(ROOT / "focus-before.png")], check=True, timeout=20)
                 armed = True
                 (ROOT / "focus-ready.json").write_text(json.dumps(before) + "\n")
             if armed:
                 check("periodic snapshot")
                 if (ROOT / "focus-stop").exists():
                     report["passed"] = not report["violations"] and report["samples"] > 1
-                    subprocess.run(["grim", str(ROOT / "focus-after.png")], check=True, timeout=20)
                     (ROOT / "focus-report.json").write_text(json.dumps(report, indent=2) + "\n")
                     return False
             if time.monotonic() > deadline:

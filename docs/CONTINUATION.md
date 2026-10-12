@@ -6,22 +6,21 @@ User authorized implementation, PRs and mostly carrying them through to merge.
 Merge only after every current-head CI passes; main protection is enforced for admins.
 User explicitly chose CI VM development for now. No agents have been delegated.
 
-Verified merged work: PRs #1-12. Main 47947b1898990b214ec14c37525ef10018df65d0.
-PR #12 accepted CI 38314745160; post-merge main 38315316185 passed all checks.
-Recovered report: 31 pass, 0 fail, 3 pending (P0-05/09/10); architecture NO-GO.
-Native GTK4 prompt and real authenticated ttyS0 recovery with frozen core verified.
-Prior geometry/Wayland/XWayland/browser/root recovery contracts remain passing.
+Verified merged work: PRs #1-13. Main c4ce63ab216d3ffdd659a886bb01489bcba2c5b9.
+PR #13 accepted CI 38318953207. Recovered report: 32 pass, 0 fail, 2 pending
+(P0-09/10); architecture remains NO-GO. Human/agent sessions simultaneously run
+real Chromium/Writer/XWayland tasks. Human native widget canary/focus/active state
+and request count unchanged across 335/362 snapshots, setup native signals verified,
+five compositor checkpoints, and six cross-socket denials per boot (IPC EACCES).
+GTK4 AT-SPI text/focus getters incomplete; native GTK observer uses the same actual
+Prompt class, direct getters/signals, and trusted virtual keyboard in human CI seat.
+No physical provenance, production model/broker/approval/stop authority is claimed.
 
-Current branch: feat/phase0-cross-session-focus. Keep the real human prompt alive
-while the separate agent compositor runs its actual browser, Writer pointer saves,
-and XWayland app contracts. GTK4 AT-SPI text/focus getters returned empty/unfocused despite functional editable
-input. Observe the actual native GTK widgets/signals in a CI wrapper of the same
-Prompt class instead. A trusted virtual keyboard gives the headless human seat an
-actual keyboard-focus path. Monitor an unsent canary and 50 ms snapshots, unchanged receipt count, and protected compositor focus
-checkpoints. Verify distinct net namespaces and actual human Wayland/command IPC
-connection denial for agent, core and worker principals. No physical-input claim.
-This is one P0-05 issue; no approval/runtime/model/stop authority is enabled.
-Candidate remains unverified until final-head CI passes normal/recovered roots.
+Current follow-up: fix/phase0-focus-capture-timing. Before screenshot captured inside
+GTK callback showed the prior frame although direct widget state was correct.
+Move both captures to trusted supervisor outside GTK event loop after paint settles.
+Keep all real isolation assertions; verify final screenshots and all final-head CI
+before merging. Finish this evidence repair before P0-09 auth/approval work.
 
 Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
 No production broker, core/model execution, coding delegate, .deb or ISO exists yet.
