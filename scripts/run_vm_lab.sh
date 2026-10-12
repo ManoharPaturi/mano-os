@@ -50,6 +50,13 @@ printf 'QEMU accelerator: %s\n' "$accel" | tee "$repo_root/evidence/accelerator.
 start_vm() {
   local stage=$1
   shift
+  if [ "$accel" = kvm ]; then
+    # Hosted runner device ACLs may be reset between separate QEMU lifetimes.
+    getfacl /dev/kvm > "$repo_root/evidence/kvm-$stage-before.acl"
+    sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+    getfacl /dev/kvm > "$repo_root/evidence/kvm-$stage-after.acl"
+    test -r /dev/kvm && test -w /dev/kvm
+  fi
   qemu-system-x86_64 -accel "$accel" -m 4096 -smp 2 -display none \
     -serial "file:$repo_root/evidence/serial-$stage.log" \
     -drive "file=$lab_dir/$image,format=qcow2,if=virtio$bootstrap_readonly" \
