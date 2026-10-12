@@ -54,6 +54,18 @@ class HumanWitness:
         assert windows[0]["app_id"] == "org.mano.Prompt"
         self.checkpoints.append({"label": label, "window": windows[0]})
 
+    def capture(self, name):
+        # Capture outside the GTK main loop, after the client can paint/commit.
+        result = subprocess.run(
+            human(["WAYLAND_DISPLAY=wayland-1", "grim", str(RUNTIME / name)]),
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=True,
+        )
+        assert result.returncode == 0
+        shutil.copyfile(RUNTIME / name, OUT / name)
+
     def start_monitor(self):
         self.checkpoint("before-agent")
         (RUNTIME / "focus-arm").touch()
@@ -62,6 +74,8 @@ class HumanWitness:
             if time.monotonic() > deadline:
                 raise RuntimeError("Human focus monitor not ready")
             time.sleep(0.1)
+        time.sleep(0.2)
+        self.capture("focus-before.png")
 
     def finish_monitor(self):
         self.checkpoint("after-agent")
@@ -71,6 +85,7 @@ class HumanWitness:
             if time.monotonic() > deadline:
                 raise RuntimeError("Human focus monitor did not finish")
             time.sleep(0.1)
+        self.capture("focus-after.png")
         report = json.loads((RUNTIME / "focus-report.json").read_text())
         report["compositor_checkpoints"] = self.checkpoints
         (OUT / "cross-session-focus.json").write_text(json.dumps(report, indent=2) + "\n")
