@@ -14,7 +14,7 @@ mount inventory, Sway screenshot and independent-stop outputs.
 
 | Issue | Current implementation and evidence boundary |
 |---|---|
-| P0-01 | Debian 13 QEMU guest at 4 GiB; root is ext4, btrfs root installation pending |
+| P0-01 | Debian 13 QEMU guest at 4 GiB; real btrfs-root second boot implemented for CI acceptance |
 | P0-02 | Security updates and minimum patched bubblewrap/proxy checks implemented |
 | P0-03 | Human Sway design template only; real native prompt and rescue TTY pending |
 | P0-04 | Separate agent identity/runtime, headless output and capture probes |
