@@ -12,7 +12,7 @@ apt-get -y upgrade
 apt-get install -y --no-install-recommends python3 python3-venv bubblewrap \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
-  libreoffice-calc libreoffice-gtk3 python3-uno poppler-utils gir1.2-gtk-4.0 fonts-dejavu-core jq procps rsync gcc libc6-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols xauth x11-utils xfonts-base
+  libreoffice-calc libreoffice-gtk3 python3-uno poppler-utils gir1.2-gtk-4.0 fonts-dejavu-core jq procps rsync gcc libc6-dev libpam0g-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols xauth x11-utils xfonts-base
 apt-get clean
 # Use system Chromium; never run playwright install/download a separate browser.
 python3 -m venv /usr/local/lib/mano-browser
@@ -23,6 +23,10 @@ printf '# Task-local launcher configuration; no host policy or credential data.\
 chmod 0444 /usr/local/lib/mano-browser/launcher-config
 mkdir -p /usr/local/lib/mano-lab
 install -m 0444 packaging/dbus/task-session.conf /usr/local/lib/mano-lab/task-session.conf
+install -m 0444 packaging/pam/mano-lab-approve /etc/pam.d/mano-lab-approve
+cc -std=c11 -Wall -Wextra -Werror tests/desktop/pam_approve_probe.c -lpam \
+  -o /usr/local/lib/mano-lab/pam-approve-probe
+chmod 0755 /usr/local/lib/mano-lab/pam-approve-probe
 # Every installed package is recorded; no security floor downgrade.
 dpkg-query -W > evidence/packages.tsv
 uname -a > evidence/kernel.txt

@@ -24,8 +24,9 @@ Writer hidden-menu coordinates remain unavailable. A visible-control scale probe
 checks actual coordinate saves at scales 1 and 2; CI artifacts determine acceptance.
 Native GTK4 prompt input is tested in the separate CI human session. Real serial
 rescue authentication is verified on the VM serial console with a stopped mock core.
-A concurrent human/agent focus and input witness is under CI acceptance. Authentic
-approval and the trusted stop route remain pending.
+Concurrent human/agent focus and input isolation is verified in the CI VM. A fixed
+request-bound OS-auth/PAM approval spike is under final CI acceptance. The trusted
+stop/grant-revocation route remains pending; the architecture stays NO-GO.
 
 ## Development
 
