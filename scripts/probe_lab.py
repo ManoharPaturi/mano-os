@@ -283,8 +283,34 @@ def stop_probe():
             "--value",
         ]
     ).stdout.strip()
-    if not task_group.startswith("/mano-lab-tasks.slice/"):
-        raise RuntimeError("Task not placed in the expected slice")
+    slice_group = call(
+        [
+            "systemctl",
+            "show",
+            "mano-lab-tasks.slice",
+            "-p",
+            "ControlGroup",
+            "--value",
+        ]
+    ).stdout.strip()
+    if (
+        not slice_group
+        or slice_group == "/"
+        or task_group == slice_group
+        or not Path(task_group).is_relative_to(Path(slice_group))
+    ):
+        call(["systemctl", "stop", "mano-lab-core.service", "mano-lab-tasks.slice"])
+        raise RuntimeError("Task not placed beneath the broker-selected task slice")
+    (OUT / "stop-cgroup-layout.txt").write_text(
+        json.dumps(
+            {
+                "task_cgroup": task_group,
+                "slice_cgroup": slice_group,
+                "core_main_pid": core_pid,
+            },
+            indent=2,
+        )
+    )
     try:
         os.kill(core_pid, 19)  # SIGSTOP the actual service process, not a wrapper.
         time.sleep(0.1)
