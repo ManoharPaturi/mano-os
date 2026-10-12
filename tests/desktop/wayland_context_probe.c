@@ -9,11 +9,15 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <time.h>
+#include <linux/input-event-codes.h>
 #include <wayland-client.h>
 #include "security-context-v1-client-protocol.h"
+#include "wlr-virtual-pointer-unstable-v1-client-protocol.h"
 
 static struct wp_security_context_manager_v1 *manager;
 static struct wl_compositor *compositor;
+static struct zwlr_virtual_pointer_manager_v1 *pointer_manager;
 static volatile sig_atomic_t stopped;
 
 static void advertised(void *data, struct wl_registry *registry, uint32_t name,
@@ -24,6 +28,8 @@ static void advertised(void *data, struct wl_registry *registry, uint32_t name,
         manager = wl_registry_bind(registry, name, &wp_security_context_manager_v1_interface, 1);
     if (!strcmp(interface, "wl_compositor"))
         compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 1);
+    if (!strcmp(interface, "zwlr_virtual_pointer_manager_v1"))
+        pointer_manager = wl_registry_bind(registry, name, &zwlr_virtual_pointer_manager_v1_interface, 1);
 }
 static void removed(void *data, struct wl_registry *registry, uint32_t name) {
     (void)data; (void)registry; (void)name;
@@ -40,6 +46,42 @@ int main(int argc, char **argv) {
     wl_registry_add_listener(registry, &registry_listener, &list);
     if (wl_display_roundtrip(display) < 0) return 2;
     if (list) { wl_display_disconnect(display); return 0; }
+    if (!strcmp(argv[1], "pointer-click") && argc == 6) {
+        if (!pointer_manager) { fputs("virtual pointer authority unavailable\n", stderr); return 2; }
+        unsigned long coordinates[4];
+        for (int i = 0; i < 4; i++) {
+            char *end = NULL;
+            coordinates[i] = strtoul(argv[i + 2], &end, 10);
+            if (!end || *end || coordinates[i] > 10000) return 2;
+        }
+        if (!coordinates[2] || !coordinates[3] ||
+            coordinates[0] >= coordinates[2] || coordinates[1] >= coordinates[3]) return 2;
+        struct zwlr_virtual_pointer_v1 *pointer =
+            zwlr_virtual_pointer_manager_v1_create_virtual_pointer(pointer_manager, NULL);
+        if (wl_display_roundtrip(display) < 0) return 2;
+        /* Let the real GTK client bind the newly advertised seat pointer capability. */
+        usleep(200000);
+        struct timespec now;
+        if (clock_gettime(CLOCK_MONOTONIC, &now)) return 2;
+        uint32_t millis = (uint32_t)(now.tv_sec * 1000 + now.tv_nsec / 1000000);
+        zwlr_virtual_pointer_v1_motion_absolute(pointer, millis, (uint32_t)coordinates[0],
+            (uint32_t)coordinates[1], (uint32_t)coordinates[2], (uint32_t)coordinates[3]);
+        zwlr_virtual_pointer_v1_frame(pointer);
+        if (wl_display_roundtrip(display) < 0) return 2;
+        usleep(100000);
+        zwlr_virtual_pointer_v1_button(pointer, millis + 100, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+        zwlr_virtual_pointer_v1_frame(pointer);
+        if (wl_display_roundtrip(display) < 0) return 2;
+        usleep(50000);
+        zwlr_virtual_pointer_v1_button(pointer, millis + 150, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+        zwlr_virtual_pointer_v1_frame(pointer);
+        if (wl_display_roundtrip(display) < 0) return 2;
+        usleep(200000);
+        zwlr_virtual_pointer_v1_destroy(pointer);
+        if (wl_display_roundtrip(display) < 0) return 2;
+        wl_display_disconnect(display);
+        puts("pointer click dispatched"); return 0;
+    }
     if (!strcmp(argv[1], "surface")) {
         if (!compositor) return 2;
         struct wl_surface *surface = wl_compositor_create_surface(compositor);

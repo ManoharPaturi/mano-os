@@ -6,19 +6,24 @@ User authorized implementation, PRs and mostly carrying them through to merge.
 Merge only after every current-head CI passes; main protection is enforced for admins.
 User explicitly chose CI VM development for now. No agents have been delegated.
 
-Verified merged work: PRs #1-9, latest main 85eb00c. Last accepted run 38306024397;
-post-merge main run 38306499487 passed all three checks. 27 passing primitives,
-zero failures, five pending requirements; architecture remains NO-GO.
-Includes real btrfs root/recovery boots, original disk preserved, cgroup OOM/stop,
+Verified merged work: PRs #1-10, latest main cf5b1dedc47aab42aba50d398d1683b59eb4a959.
+PR #10 accepted CI 38308966866; post-merge main CI 38309367729 passed all checks.
+Recovered report: 29 pass, 0 fail, 5 pending. Architecture remains NO-GO.
+Includes real root/recovery boots, preserved original disk, cgroup OOM/stop,
 restricted Wayland forged-bind denials, private authenticated XWayland namespace,
-and headed Chromium locator contract with actual kernel renderer seccomp proof.
+headed Chromium and Writer named accessible Save with verified ODT/PDF text.
 
-Current branch: feat/phase0-libreoffice-contract. Add Writer on restricted Wayland
-with a private task D-Bus/accessibility bus, real named Save action and independently
-observed mapped window plus exact ODT/PDF content. Acceptance candidate run
-38308357005 passed (29 pass, 0 fail, 5 pending on recovered root). Final head must
-pass again before merging PR #10. Known geometry sentinel -2147483648 is recorded
-as unusable; semantic Save works, coordinate/scale mapping remains pending.
+Current branch: feat/phase0-accessibility-scale. Test visible Writer toolbar Save
+using WINDOW_COORDS (visible/showing/enabled), controller-observed xdg-shell client
+origin, logical-to-pixel transform, and actual pointer Save at scales 1 and 2.
+The original hidden menu's desktop sentinel -2147483648 remains unusable.
+Task worker never receives Sway command IPC or virtual-pointer authority. Initial
+Sway seat cursor fixture did not save (headless seat had no real pointer capability).
+The trusted controller now creates a virtual pointer via pinned protocol XML; a
+restricted worker invoking that pointer fixture must be denied. Actual ODT changes must
+prove both clicks; no semantic Save fallback is allowed for the geometry test.
+Candidate is unverified until the final PR head passes the complete CI VM suite.
+
 Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
 No production broker, core/model execution, coding delegate, .deb or ISO exists yet.
 

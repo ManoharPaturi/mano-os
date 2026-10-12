@@ -27,7 +27,7 @@ mount inventory, Sway screenshot and independent-stop outputs.
 | P0-03 | Human Sway design template only; real native prompt and rescue TTY pending |
 | P0-04 | Separate agent identity/runtime, headless output and capture probes |
 | P0-05 | Real sandboxed Chromium locator and Writer named Save/ODT/PDF contracts; cross-session input proof pending |
-| P0-06 | Real task-private accessible Save action; menu coordinates unavailable and scale proof pending |
+| P0-06 | Real task-private accessible Save; visible-control window-coordinate/scale probe added for CI acceptance |
 | P0-07 | Restricted Wayland forged privileged binds denied; authenticated private XWayland domain verified |
 | P0-08 | Positive artifact plus kernel filesystem/IPC/device/network denial probes |
 | P0-09 | Agent denied human runtime; authentic approval and physical spoof proof pending |
@@ -49,3 +49,8 @@ named Save action and exact ODT/PDF text verified. Recovered suite: 29 pass, 0 f
 AT-SPI reports the off-screen menu position sentinel -2147483648; semantic action
 works, but this is no coordinate/scale proof. The final PR head must independently
 pass all CI before merge. No architecture promotion follows from this contract.
+
+Visible-control follow-up tests scales 1 and 2 using independently observed Sway
+client/output geometry, actual controller clicks and exact saved ODT content.
+The worker never receives compositor IPC. Read the final CI artifact for acceptance;
+these probe additions do not promote the architecture or prove physical input.

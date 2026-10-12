@@ -230,7 +230,7 @@ def desktop_probe():
                 str(ROOT / "scripts/probe_wayland_confinement.py"),
                 "/run/mano-agent/wayland-1",
             ],
-            timeout=120,
+            timeout=240,
         )
         record("P0-07", "wayland-context-enforcement", confinement)
         if confinement.returncode == 0:
@@ -314,8 +314,15 @@ def desktop_probe():
             Probe(
                 "P0-06",
                 "atspi-coordinate-action",
-                "pending",
-                "Accessibility tree plus named action/scale mapping not yet validated",
+                "pass"
+                if confinement.returncode == 0 and (OUT / "office-geometry.json").is_file()
+                else "pending",
+                "Visible Writer Save clicked using window-relative geometry at scales 1 and 2"
+                if confinement.returncode == 0
+                else "Coordinate/scale probe incomplete",
+                ("office-geometry.json", "office-scale-1.png", "office-scale-2.png", "geometry.odt")
+                if confinement.returncode == 0
+                else (),
             )
         )
     finally:

@@ -36,6 +36,98 @@ def descendants(node, depth=0):
             continue
 
 
+def wait_file(name, timeout=20):
+    deadline = time.monotonic() + timeout
+    while not (ROOT / name).is_file():
+        if time.monotonic() > deadline:
+            raise RuntimeError(f"Timed out waiting for {name}")
+        time.sleep(0.1)
+    return json.loads((ROOT / name).read_text())
+
+
+def geometry_contract(document, pyatspi):
+    # Keep the original contract.odt/PDF unchanged for the semantic-action evidence.
+    document.storeAsURL("file:///workspace/geometry.odt", properties(FilterName="writer8"))
+    results = []
+    for scale in (1, 2):
+        config = wait_file(f"geometry-config-{scale}.json")
+        assert config["scale"] == scale
+        expected = f"mano coordinate save at scale {scale}"
+        document.Text.String = expected
+        assert document.isModified()
+        deadline = time.monotonic() + 15
+        target = None
+        while time.monotonic() < deadline:
+            inventory = []
+            for node in descendants(pyatspi.Registry.getDesktop(0)):
+                try:
+                    name, role = node.name or "", node.getRoleName()
+                    states = node.getState()
+                    entry = {"name": name, "role": role}
+                    inventory.append(entry)
+                    if (
+                        role not in {"button", "push button"}
+                        or name.split("(")[0].strip() != "Save"
+                    ):
+                        continue
+                    if not all(
+                        states.contains(flag)
+                        for flag in (
+                            pyatspi.STATE_SHOWING,
+                            pyatspi.STATE_VISIBLE,
+                            pyatspi.STATE_ENABLED,
+                        )
+                    ):
+                        continue
+                    bounds = node.queryComponent().getExtents(pyatspi.WINDOW_COORDS)
+                    rect = [bounds.x, bounds.y, bounds.width, bounds.height]
+                    entry["window_bounds"] = rect
+                    if min(rect[:2]) < 0 or min(rect[2:]) < 5:
+                        continue
+                    if (
+                        bounds.x + bounds.width > config["client_size"][0]
+                        or bounds.y + bounds.height > config["client_size"][1]
+                    ):
+                        continue
+                    target = dict(entry, visible=True, showing=True, enabled=True)
+                    break
+                except (NotImplementedError, LookupError):
+                    continue
+            (ROOT / f"geometry-tree-{scale}.json").write_text(
+                json.dumps(inventory, indent=2) + "\n"
+            )
+            if target:
+                break
+            time.sleep(0.1)
+        assert target, "No visible Save button with usable window-relative geometry"
+        # No semantic Save is invoked below: only the protected controller clicks.
+        (ROOT / f"geometry-target-{scale}.json").write_text(json.dumps(target, indent=2) + "\n")
+        click = wait_file(f"geometry-click-{scale}.json")
+        deadline = time.monotonic() + 10
+        while document.isModified() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert not document.isModified(), "Coordinate click did not save Writer document"
+        with zipfile.ZipFile(ROOT / "geometry.odt") as archive:
+            assert expected in archive.read("content.xml").decode()
+        result = {
+            "scale": scale,
+            "target": target,
+            "controller": click,
+            "saved_text": expected,
+            "saved_by_coordinate_click": True,
+        }
+        results.append(result)
+        (ROOT / f"geometry-result-{scale}.json").write_text(json.dumps(result, indent=2) + "\n")
+    report = {
+        "scales": results,
+        "coordinate_space": "window logical -> compositor logical -> output pixels",
+        "physical_input_provenance": None,
+        "production_executor": False,
+    }
+    (ROOT / "office-geometry.json").write_text(json.dumps(report, indent=2) + "\n")
+    return report
+
+
 def main():
     # D-Bus was created inside this sandbox, not imported from either host session.
     assert os.environ["DBUS_SESSION_BUS_ADDRESS"].startswith("unix:")
@@ -163,6 +255,7 @@ def main():
             if time.monotonic() > deadline:
                 raise RuntimeError("Independent office observer timed out")
             time.sleep(0.1)
+        report["scale_validation"] = geometry_contract(document, pyatspi)
         (ROOT / "office-contract.json").write_text(json.dumps(report, indent=2) + "\n")
     finally:
         if document is not None:
