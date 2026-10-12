@@ -47,7 +47,7 @@ def main():
     display = display_file.read_text().strip()
     if display != ":" + original.name[1:]:
         raise RuntimeError("Display/socket identity mismatch")
-    folder = Path("/run/mano-x11")
+    folder = Path("/tmp/mano-x11")
     folder.mkdir(mode=0o711, exist_ok=True)
     os.chown(folder, 0, 0)
     os.chmod(folder, 0o711)

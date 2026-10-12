@@ -133,7 +133,7 @@ def command(
         if gui_socket is not None or x11_socket is None or x11_authority is None:
             raise ValueError("Expected one complete task display route")
         if (
-            x11_socket.parent != Path("/run/mano-x11")
+            x11_socket.parent != Path("/tmp/mano-x11")
             or not x11_socket.name.startswith("X")
             or not x11_socket.name[1:].isdigit()
             or x11_socket.is_symlink()
@@ -141,7 +141,7 @@ def command(
         ):
             raise ValueError("Raw or unknown X11 socket forbidden")
         if (
-            x11_authority != Path("/run/mano-x11/task-xauthority")
+            x11_authority != Path("/tmp/mano-x11/task-xauthority")
             or x11_authority.is_symlink()
             or not x11_authority.is_file()
         ):
