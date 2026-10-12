@@ -37,3 +37,8 @@ passed. Last report: 19 pass, 0 fail, 9 pending. Working branch
 feat/phase0-btrfs-root implements a real second boot on a separately prepared
 btrfs root. Root snapshot/restore is still pending. Guest setup must never be
 rerun on a prepared filesystem; scripts now require explicit disposable guards.
+
+PR #4 merged: 1f34a5e, all CI passed in run 38293373666. Actual root is btrfs
+on /dev/vdc[/@]; original disk read-only and SHA256 unchanged. 20 pass, 0 fail,
+8 pending. Current work: feat/phase0-root-recovery, Snapper root snapshot plus
+third boot from @recovery and full security rerun with fresh workspaces.

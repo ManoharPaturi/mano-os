@@ -1,9 +1,10 @@
 import os
+import sys
 from pathlib import Path
 
 from mano_lab.sandbox import run_probe
 
-w = Path("/home/mano-agent/workspace")
+w = Path(sys.argv[1])
 os.environ.update(
     {
         k: "/run/mano-human/poison"

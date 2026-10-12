@@ -102,13 +102,16 @@ ssh "${ssh_opts[@]}" lab@127.0.0.1 \
 # Preserve preparation diagnostics before shutdown, even if the next boot fails.
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
-ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo sync; sudo systemctl poweroff' || true
-for _ in $(seq 1 30); do
-  if ! kill -0 "$vm_pid" 2>/dev/null; then break; fi
-  sleep 1
-done
-if kill -0 "$vm_pid" 2>/dev/null; then echo 'Guest did not shut down cleanly' >&2; exit 1; fi
-wait "$vm_pid"
+stop_vm() {
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo sync; sudo systemctl poweroff' || true
+  for _ in $(seq 1 30); do
+    if ! kill -0 "$vm_pid" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  if kill -0 "$vm_pid" 2>/dev/null; then echo 'Guest did not shut down cleanly' >&2; exit 1; fi
+  wait "$vm_pid"
+}
+stop_vm
 sha256sum "$lab_dir/$image" > "$repo_root/evidence/bootstrap-preserved-before.sha256"
 root_uuid=$(cat "$lab_dir/root-uuid")
 if [[ ! "$root_uuid" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
@@ -122,6 +125,31 @@ set +e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo bash /opt/mano-lab/scripts/verify_btrfs_root.sh' \
   2>&1 | tee "$repo_root/evidence/guest-verify.log"
+result=${PIPESTATUS[0]}
+set -e
+ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+  'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+if [ "$result" != 0 ]; then exit "$result"; fi
+# Preserve first-root report separately; recovered-root observations are a new run.
+python3 - "$repo_root/evidence" <<'PY_COPY'
+import shutil,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+shutil.copytree(root,root/'first-root',ignore=shutil.ignore_patterns('first-root'))
+PY_COPY
+ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+  'sudo bash /opt/mano-lab/scripts/prepare_root_recovery.sh' \
+  2>&1 | tee "$repo_root/evidence/guest-snapshot.log"
+ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+  'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+stop_vm
+start_vm recovery -kernel "$lab_dir/vmlinuz" -initrd "$lab_dir/initrd.img" \
+  -append "root=UUID=$root_uuid rootfstype=btrfs rootflags=subvol=@recovery rw console=ttyS0"
+wait_ssh
+set +e
+ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+  'sudo bash /opt/mano-lab/scripts/verify_btrfs_root.sh @recovery' \
+  2>&1 | tee "$repo_root/evidence/guest-recovery.log"
 result=${PIPESTATUS[0]}
 set -e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
