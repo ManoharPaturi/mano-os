@@ -33,7 +33,8 @@ def status():
         if time.monotonic() > deadline:
             raise RuntimeError(f"Core freeze not observed: pid={pid}")
         time.sleep(0.05)
-    assert int(fields["Uid"].split()[0]) == pwd.getpwnam("mano-core").pw_uid
+    actual_uid = int(fields["Uid"].split()[0])
+    assert actual_uid == pwd.getpwnam("mano-core").pw_uid, f"Unexpected frozen UID {actual_uid}"
     return {
         "core_pid": pid,
         "core_state": fields["State"].strip(),
@@ -101,6 +102,7 @@ def main():
             "systemd-run",
             "--unit=mano-rescue-core",
             "--uid=mano-core",
+            "--property=Type=exec",
             "--property=TimeoutStopSec=5",
             "/bin/sleep",
             "600",
