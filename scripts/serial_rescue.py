@@ -45,8 +45,12 @@ def main():
             text=True,
             capture_output=True,
             timeout=45,
-            check=True,
+            check=False,
         )
+        if result.returncode != 0:
+            # The fixed fixture sends secrets only in successful stdout. Errors
+            # contain command/state diagnostics; never retain the stdout payload.
+            raise RuntimeError(f"Serial fixture {action} failed: {result.stderr[-3000:]}")
         return json.loads(result.stdout) if result.stdout.strip() else None
 
     credentials = None

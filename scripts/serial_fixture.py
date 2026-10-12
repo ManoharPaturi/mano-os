@@ -7,6 +7,7 @@ import pwd
 import secrets
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path("/run/mano-rescue-fixture")
@@ -18,13 +19,20 @@ def run(argv, **kwargs):
 
 
 def status():
-    pid = int(run(["systemctl", "show", UNIT, "-p", "MainPID", "--value"]).stdout.strip())
-    fields = dict(
-        line.split(":", 1)
-        for line in Path(f"/proc/{pid}/status").read_text().splitlines()
-        if ":" in line
-    )
-    assert fields["State"].strip().startswith("T")
+    deadline = time.monotonic() + 5
+    while True:
+        pid = int(run(["systemctl", "show", UNIT, "-p", "MainPID", "--value"]).stdout.strip())
+        if pid > 0:
+            fields = dict(
+                line.split(":", 1)
+                for line in Path(f"/proc/{pid}/status").read_text().splitlines()
+                if ":" in line
+            )
+            if fields["State"].strip().startswith("T"):
+                break
+        if time.monotonic() > deadline:
+            raise RuntimeError(f"Core freeze not observed: pid={pid}")
+        time.sleep(0.05)
     assert int(fields["Uid"].split()[0]) == pwd.getpwnam("mano-core").pw_uid
     return {
         "core_pid": pid,

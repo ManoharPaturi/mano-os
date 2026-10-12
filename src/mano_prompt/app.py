@@ -3,6 +3,7 @@
 import gi
 
 gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
 from mano_prompt.requests import store_request  # noqa: E402
