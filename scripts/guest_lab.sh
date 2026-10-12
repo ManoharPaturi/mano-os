@@ -12,7 +12,7 @@ apt-get -y upgrade
 apt-get install -y --no-install-recommends python3 python3-venv bubblewrap \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
-  libreoffice-calc fonts-dejavu-core jq procps rsync gcc libc6-dev pkg-config libwayland-dev wayland-protocols
+  libreoffice-calc fonts-dejavu-core jq procps rsync gcc libc6-dev pkg-config libwayland-dev wayland-protocols xauth x11-utils xfonts-base
 apt-get clean
 # Every installed package is recorded; no security floor downgrade.
 dpkg-query -W > evidence/packages.tsv
@@ -60,5 +60,6 @@ test "$(cat /lab-btrfs/work/sentinel)" = before
 snapper --no-dbus -c mano-lab list > evidence/snapper.txt
 findmnt --json > evidence/mounts.json
 free -b > evidence/memory-before.txt
+chmod 0755 scripts/xwayland_lab_wrapper.sh
 bash scripts/build_wayland_probe.sh
 touch /etc/mano-lab-prepared
