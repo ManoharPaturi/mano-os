@@ -137,6 +137,12 @@ def command(
         end = args.index("--")
         args[end:end] = [
             "--ro-bind",
+            "/usr/local/lib/mano-lab/task-passwd",
+            "/etc/passwd",
+            "--ro-bind",
+            "/usr/local/lib/mano-lab/task-group",
+            "/etc/group",
+            "--ro-bind",
             "/etc/fonts",
             "/etc/fonts",
             "--setenv",

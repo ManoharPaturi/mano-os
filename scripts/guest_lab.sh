@@ -33,6 +33,12 @@ useradd -m -s /bin/bash mano-agent
 useradd -m -s /bin/bash mano-human
 useradd -m -s /bin/bash mano-core
 useradd -m -s /bin/bash mano-worker
+# D-Bus EXTERNAL authentication needs a resolvable UID. Synthetic task accounts
+# contain no host names, password hashes, supplementary groups or login authority.
+printf 'task:x:%s:%s:mano task:/home/task:/usr/sbin/nologin\n' \
+  "$(id -u mano-worker)" "$(id -g mano-worker)" > /usr/local/lib/mano-lab/task-passwd
+printf 'task:x:%s:\n' "$(id -g mano-worker)" > /usr/local/lib/mano-lab/task-group
+chmod 0444 /usr/local/lib/mano-lab/task-passwd /usr/local/lib/mano-lab/task-group
 cat > /etc/tmpfiles.d/mano-lab.conf <<'TMPFILES'
 d /run/mano-agent 0700 mano-agent mano-agent -
 d /run/mano-human 0700 mano-human mano-human -
