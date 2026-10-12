@@ -243,6 +243,21 @@ def desktop_probe():
                     ("wayland-confinement.json", "security-context-protocol.sha256"),
                 )
             )
+        if confinement.returncode == 0 and (OUT / "browser-contract.json").is_file():
+            PROBES.append(
+                Probe(
+                    "P0-05",
+                    "system-chromium-sandboxed-contract",
+                    "pass",
+                    "Chromium locator, mapped window, screenshot, sandbox and pipe transport",
+                    (
+                        "browser-contract.json",
+                        "browser-window.json",
+                        "browser-page.png",
+                        "browser-trace.zip",
+                    ),
+                )
+            )
         x11 = call(
             [
                 "python3",

@@ -5,9 +5,11 @@ import json
 import os
 import pwd
 import select
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from mano_lab.sandbox import ENV, require_patched
@@ -137,31 +139,33 @@ def main():
         workspace = Path(tempfile.mkdtemp(prefix="gui-probe-", dir="/home/mano-worker"))
         os.chown(workspace, worker.pw_uid, worker.pw_gid)
 
-        def sandbox(argv):
+        def sandbox_args(argv, browser=False):
             # Construct as the worker so the ownership guard observes real credentials.
             source = (
                 "from pathlib import Path; import os; from mano_lab.sandbox import command; "
-                "import sys; a=command(Path(sys.argv[1]),sys.argv[2:],"
-                'Path("/run/mano-worker/restricted-wayland")); '
+                "import sys; a=command(Path(sys.argv[1]),sys.argv[3:],"
+                'Path("/run/mano-worker/restricted-wayland"),browser=bool(int(sys.argv[2]))); '
                 'os.execve(a[0],a,{"PATH":"/usr/bin:/bin","LANG":"C.UTF-8"})'
             )
-            return run(
-                [
-                    "/usr/sbin/runuser",
-                    "-u",
-                    "mano-worker",
-                    "--",
-                    "env",
-                    "-i",
-                    "PATH=/usr/bin:/bin",
-                    "PYTHONPATH=/opt/mano-lab/src",
-                    "python3",
-                    "-c",
-                    source,
-                    str(workspace),
-                    *argv,
-                ]
-            )
+            return [
+                "/usr/sbin/runuser",
+                "-u",
+                "mano-worker",
+                "--",
+                "env",
+                "-i",
+                "PATH=/usr/bin:/bin",
+                "PYTHONPATH=/opt/mano-lab/src",
+                "python3",
+                "-c",
+                source,
+                str(workspace),
+                "1" if browser else "0",
+                *argv,
+            ]
+
+        def sandbox(argv):
+            return run(sandbox_args(argv))
 
         restricted = sandbox([BINARY, "list"])
         if restricted.returncode:
@@ -220,6 +224,88 @@ def main():
             raise RuntimeError(isolation.stderr)
         observations["ipc_isolation"] = isolation.stdout.strip()
         observations["xwayland_client_contract"] = "pending; no X11 socket granted to this worker"
+        # Preserve the independent confinement outcome even if a later app contract fails.
+        (out / "wayland-confinement.json").write_text(json.dumps(observations, indent=2) + "\n")
+        # Headed system Chromium remains open until a trusted observer confirms its window.
+        shutil.copyfile(
+            "/opt/mano-lab/tests/desktop/browser_contract.py", workspace / "browser_contract.py"
+        )
+        browser_log = (out / "browser-worker.txt").open("w")
+        browser_worker = subprocess.Popen(
+            sandbox_args(
+                [
+                    "/usr/local/lib/mano-browser/bin/python",
+                    "/workspace/browser_contract.py",
+                ],
+                browser=True,
+            ),
+            env=ENV,
+            stdout=browser_log,
+            stderr=browser_log,
+        )
+        try:
+            deadline = time.monotonic() + 50
+            while not (workspace / "browser-ready.json").is_file():
+                if browser_worker.poll() is not None:
+                    raise RuntimeError("Browser worker exited before verified page readiness")
+                if time.monotonic() > deadline:
+                    raise RuntimeError("Browser readiness timed out")
+                time.sleep(0.1)
+            observed = False
+            for _ in range(50):
+                trees = run(
+                    role(
+                        "mano-agent",
+                        raw_display,
+                        [
+                            "env",
+                            "SWAYSOCK="
+                            + str(next(Path("/run/mano-agent").glob("sway-ipc.*.sock"))),
+                            "swaymsg",
+                            "-t",
+                            "get_tree",
+                            "-r",
+                        ],
+                    )
+                )
+
+                def nodes(node):
+                    yield node
+                    for child in node.get("nodes", []) + node.get("floating_nodes", []):
+                        yield from nodes(child)
+
+                matches = [
+                    node
+                    for node in nodes(json.loads(trees.stdout))
+                    if (node.get("name") or "").startswith("mano-browser-contract")
+                    and "chromium" in (node.get("app_id") or "").lower()
+                ]
+                if matches:
+                    observed = True
+                    (out / "browser-window.json").write_text(
+                        json.dumps(matches[0], indent=2) + "\n"
+                    )
+                    break
+                time.sleep(0.1)
+            if not observed:
+                raise RuntimeError("Headed Chromium window not observed by compositor")
+            (workspace / "observer-done").touch()
+            if browser_worker.wait(timeout=20) != 0:
+                raise RuntimeError("Browser contract failed after observation")
+            for name in ("browser-contract.json", "browser-page.png", "browser-trace.zip"):
+                shutil.copyfile(workspace / name, out / name)
+            observations["system_browser_contract"] = (
+                "passed with independent mapped-window observation"
+            )
+        finally:
+            if browser_worker.poll() is None:
+                browser_worker.terminate()
+                try:
+                    browser_worker.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    browser_worker.kill()
+                    browser_worker.wait()
+            browser_log.close()
         (out / "wayland-confinement.json").write_text(json.dumps(observations, indent=2) + "\n")
         print(json.dumps(observations, indent=2))
         return 0
