@@ -54,9 +54,9 @@ int main(void) {
     FILE *config = fopen(BASE "/cgroup-path", "r");
     if (!config || !fgets(group, sizeof(group), config)) return 2;
     fclose(config); group[strcspn(group, "\n")] = 0;
-    if (strncmp(group, "/sys/fs/cgroup/", 15) || strstr(group, "..") || !strstr(group, "mano-stop-tasks.slice")) return 2;
+    if (strncmp(group, "/sys/fs/cgroup/", 15) || strstr(group, "..") || !strstr(group, "mano-stop-tasks.slice")) { fprintf(stderr, "Invalid cgroup config: %s\n", group); return 2; }
     int first = open(BASE "/ever-started", O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
-    if (first < 0) { if (errno != EEXIST || stop_all()) return 2; }
+    if (first < 0) { if (errno != EEXIST || stop_all()) { perror("restart fail-closed stop"); return 2; } }
     else close(first);
     struct passwd *human = getpwnam("mano-human");
     if (!human) return 2;
@@ -64,8 +64,9 @@ int main(void) {
     struct sockaddr_un address = {.sun_family = AF_UNIX}; strcpy(address.sun_path, SOCKET);
     unlink(SOCKET); /* root-owned fixed fixture directory only, including restart. */
     if (listener < 0 || bind(listener, (struct sockaddr *)&address, sizeof(address)) ||
-        chown(SOCKET, human->pw_uid, human->pw_gid) || chmod(SOCKET, 0600) || listen(listener, 8)) return 2;
-    sd_notify(0, "READY=1");
+        chown(SOCKET, human->pw_uid, human->pw_gid) || chmod(SOCKET, 0600) || listen(listener, 8)) { perror("stop socket setup"); return 2; }
+    int notified = sd_notify(0, "READY=1");
+    fprintf(stderr, "Stopd ready pid=%ld notify=%d group=%s\n", (long)getpid(), notified, group);
     for (;;) {
         sd_notify(0, "WATCHDOG=1");
         struct pollfd pending = {.fd = listener, .events = POLLIN};
