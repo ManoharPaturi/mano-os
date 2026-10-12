@@ -26,9 +26,9 @@ mount inventory, Sway screenshot and independent-stop outputs.
 | P0-02 | Security updates and minimum patched bubblewrap/proxy checks implemented |
 | P0-03 | Human Sway design template only; real native prompt and rescue TTY pending |
 | P0-04 | Separate agent identity/runtime, headless output and capture probes |
-| P0-05 | Foot diagnostic; Chromium/LibreOffice sandbox/input contracts pending |
-| P0-06 | Accessibility packages installed; named action/coordinate proof pending |
-| P0-07 | Protocol inventory; malicious privileged-protocol binding tests pending |
+| P0-05 | Real sandboxed Chromium locator and Writer named Save/ODT/PDF contracts; cross-session input proof pending |
+| P0-06 | Real task-private accessible Save action; menu coordinates unavailable and scale proof pending |
+| P0-07 | Restricted Wayland forged privileged binds denied; authenticated private XWayland domain verified |
 | P0-08 | Positive artifact plus kernel filesystem/IPC/device/network denial probes |
 | P0-09 | Agent denied human runtime; authentic approval and physical spoof proof pending |
 | P0-10 | Systemd stop with frozen mock core; stopd/grant/physical trigger pending |
@@ -41,3 +41,11 @@ mandatory pending proofs block architecture promotion. These are separate gates.
 
 Physical 8 GB performance remains a separate Phase 6 requirement; installer and
 firmware boot remain Phase 7 requirements. VM observations cannot fulfill these.
+
+Writer acceptance candidate: CI 38308357005 passed normal and recovered-root runs.
+Actual LibreOffice 25.2.3.2 GTK3/Wayland window, private task accessibility bus,
+named Save action and exact ODT/PDF text verified. Recovered suite: 29 pass, 0 fail,
+5 pending; first-root suite: 28 pass, 0 fail, 6 pending before recovery validation.
+AT-SPI reports the off-screen menu position sentinel -2147483648; semantic action
+works, but this is no coordinate/scale proof. The final PR head must independently
+pass all CI before merge. No architecture promotion follows from this contract.

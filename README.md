@@ -8,7 +8,7 @@ coding-agent integration, .deb or ISO yet.**
 The complete original [v2.1 specification](docs/spec-v2.1.md) is preserved verbatim.
 Its architecture and acceptance gates remain the product contract.
 
-## Implemented in the first PR
+## Implemented and verified in CI
 
 - Dependency-free Python evidence and disk tools, with explicit incomplete gates.
 - Patched bubblewrap lab profile: synthetic home, no host IPC or network.
@@ -16,6 +16,12 @@ Its architecture and acceptance gates remain the product contract.
   headless Sway output/capture and filesystem/IPC/device/network denial probes.
 - btrfs data-volume/Snapper restore and independent systemd cgroup-stop probes.
 - Hashed evidence artifacts, protected main and an all-success merge helper.
+- Real btrfs-root and Snapper recovery boots with original disk hash preserved.
+- Restricted Wayland globals and authenticated private XWayland namespace.
+- Headed system Chromium locator and real Writer accessible Save/ODT/PDF contracts.
+
+Writer menu coordinates remain unavailable; scale mapping, cross-session input,
+native prompt/rescue, authentic approval and the trusted stop route remain pending.
 
 ## Development
 

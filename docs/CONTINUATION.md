@@ -15,7 +15,10 @@ and headed Chromium locator contract with actual kernel renderer seccomp proof.
 
 Current branch: feat/phase0-libreoffice-contract. Add Writer on restricted Wayland
 with a private task D-Bus/accessibility bus, real named Save action and independently
-observed mapped window plus exact ODT/PDF content. Scale mapping remains pending.
+observed mapped window plus exact ODT/PDF content. Acceptance candidate run
+38308357005 passed (29 pass, 0 fail, 5 pending on recovered root). Final head must
+pass again before merging PR #10. Known geometry sentinel -2147483648 is recorded
+as unusable; semantic Save works, coordinate/scale mapping remains pending.
 Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
 No production broker, core/model execution, coding delegate, .deb or ISO exists yet.
 

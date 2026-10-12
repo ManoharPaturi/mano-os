@@ -48,9 +48,7 @@ def main():
     )
     import pyatspi
 
-    env = dict(
-        os.environ, SAL_USE_VCLPLUGIN="gtk3", SAL_ACCESSIBILITY_ENABLED="1", WAYLAND_DEBUG="client"
-    )
+    env = dict(os.environ, SAL_USE_VCLPLUGIN="gtk3", SAL_ACCESSIBILITY_ENABLED="1")
     log = (ROOT / "office-process.txt").open("w")
     proc = subprocess.Popen(
         [
@@ -112,10 +110,16 @@ def main():
                         and node.getState().contains(pyatspi.STATE_ENABLED)
                     ):
                         bounds = node.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
-                        assert bounds.width > 0 and bounds.height > 0
                         assert action.doAction(0), "Named Save action rejected"
                         saved_action = dict(
-                            entry, bounds=[bounds.x, bounds.y, bounds.width, bounds.height]
+                            entry,
+                            bounds=[bounds.x, bounds.y, bounds.width, bounds.height],
+                            bounds_usable=(
+                                bounds.x != -(2**31)
+                                and bounds.y != -(2**31)
+                                and bounds.width > 0
+                                and bounds.height > 0
+                            ),
                         )
                         break
                 except (NotImplementedError, LookupError):

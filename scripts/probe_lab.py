@@ -279,7 +279,7 @@ def desktop_probe():
                     "P0-06",
                     "atspi-named-save",
                     "pass",
-                    "Private task accessibility tree exposes enabled Save with nonempty bounds",
+                    "Task-private accessibility invokes enabled Save; geometry remains pending",
                     ("office-contract.json", "office-accessibility-tree.json"),
                 )
             )
