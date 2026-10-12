@@ -23,7 +23,7 @@ jobs:
       - run: PYTHONPATH=src python -m unittest discover -s tests -v
       - run: python -m compileall -q src scripts
       - run: git diff --check
-      - run: bash -n scripts/run_vm_lab.sh scripts/guest_lab.sh
+      - run: bash -n scripts/*.sh
   security-lab:
     runs-on: ubuntu-24.04
     timeout-minutes: 45

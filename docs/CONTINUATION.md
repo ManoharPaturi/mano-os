@@ -31,3 +31,9 @@ Latest result is live disk output; initial measurements may drift.
 Use automatic context compaction/concise notes; /compact is a user command, no
 assistant tool is exposed to directly invoke it. Goal remains active until actual
 requested completion, or a repeatedly observed external blocker meets tool rules.
+
+Current turn: PR #3 merged; run 38290844187 and post-merge main run 38291109711
+passed. Last report: 19 pass, 0 fail, 9 pending. Working branch
+feat/phase0-btrfs-root implements a real second boot on a separately prepared
+btrfs root. Root snapshot/restore is still pending. Guest setup must never be
+rerun on a prepared filesystem; scripts now require explicit disposable guards.

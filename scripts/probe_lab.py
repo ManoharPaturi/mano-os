@@ -450,7 +450,11 @@ def main():
                 ("kernel.txt", "memory-before.txt"),
             ),
             Probe(
-                "P0-01", "btrfs-root-install", "pending", "Cloud root is ext4; secondary btrfs only"
+                "P0-01",
+                "btrfs-root-boot",
+                "pass",
+                "Root filesystem verified as btrfs after an actual second boot",
+                ("root-boot.json",),
             ),
             Probe(
                 "P0-02",

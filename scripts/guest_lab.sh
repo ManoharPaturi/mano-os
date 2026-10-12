@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Root setup is scoped to the throwaway guest. No installed mano runtime yet.
 set -euo pipefail
+source "$(dirname "$0")/guest_guard.sh"
+require_disposable_guest
+test ! -f /etc/mano-lab-prepared
 cd /opt/mano-lab
 mkdir -p evidence
 export DEBIAN_FRONTEND=noninteractive
@@ -9,7 +12,8 @@ apt-get -y upgrade
 apt-get install -y --no-install-recommends python3 python3-venv bubblewrap \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
-  libreoffice-calc fonts-dejavu-core jq procps
+  libreoffice-calc fonts-dejavu-core jq procps rsync
+apt-get clean
 # Every installed package is recorded; no security floor downgrade.
 dpkg-query -W > evidence/packages.tsv
 uname -a > evidence/kernel.txt
@@ -19,6 +23,10 @@ dpkg --compare-versions "$proxy_version" ge '0.1.6-1+deb13u3'
 useradd -m -s /bin/bash mano-agent
 useradd -m -s /bin/bash mano-human
 useradd -m -s /bin/bash mano-core
+cat > /etc/tmpfiles.d/mano-lab.conf <<'TMPFILES'
+d /run/mano-agent 0700 mano-agent mano-agent -
+d /run/mano-human 0700 mano-human mano-human -
+TMPFILES
 mkdir -p /run/mano-agent /run/mano-human /var/lib/mano-broker /etc/mano
 chown mano-agent:mano-agent /run/mano-agent
 chown mano-human:mano-human /run/mano-human
@@ -30,6 +38,10 @@ printf 'protected-journal
 chmod 600 /etc/mano/sentinel /var/lib/mano-broker/sentinel
 # Only the second virtio disk is formatted, and only in this guest.
 test "$(lsblk -dn -o SIZE /dev/vdb | tr -d ' ')" = 2G
+if blkid /dev/vdb >/dev/null 2>&1 || findmnt -rn -S /dev/vdb >/dev/null; then
+  echo 'Data target already has a filesystem or mount; refusing format.' >&2
+  exit 2
+fi
 mkfs.btrfs /dev/vdb
 mkdir -p /lab-btrfs
 mount /dev/vdb /lab-btrfs
@@ -46,5 +58,4 @@ test "$(cat /lab-btrfs/work/sentinel)" = before
 snapper --no-dbus -c mano-lab list > evidence/snapper.txt
 findmnt --json > evidence/mounts.json
 free -b > evidence/memory-before.txt
-PYTHONPATH=src python3 scripts/probe_lab.py
-free -b > evidence/memory-after.txt
+touch /etc/mano-lab-prepared
