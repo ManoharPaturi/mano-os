@@ -7,6 +7,7 @@ import pwd
 import shutil
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from mano_lab.resources import process_memory
@@ -39,7 +40,51 @@ def walk(node):
         yield from walk(child)
 
 
-def main():
+class HumanWitness:
+    def __init__(self, report, sway, ipc, prompt, sway_pid):
+        self.report, self.sway, self.ipc = report, sway, ipc
+        self.prompt, self.sway_pid = prompt, sway_pid
+        self.checkpoints = []
+
+    def checkpoint(self, label):
+        windows = [node for node in walk(self.sway("-t", "get_tree")) if node.get("app_id")]
+        assert len(windows) == 1 and windows[0]["id"] == self.prompt["id"]
+        assert windows[0]["pid"] == self.prompt["pid"] and windows[0]["focused"]
+        assert windows[0]["app_id"] == "org.mano.Prompt"
+        self.checkpoints.append({"label": label, "window": windows[0]})
+
+    def start_monitor(self):
+        self.checkpoint("before-agent")
+        self.sway(
+            "exec /usr/bin/python3 /opt/mano-lab/tests/desktop/focus_contract.py "
+            "> /run/mano-human/focus-driver.txt 2>&1"
+        )
+        deadline = time.monotonic() + 30
+        while not (RUNTIME / "focus-ready.json").is_file():
+            if time.monotonic() > deadline:
+                raise RuntimeError("Human focus monitor not ready")
+            time.sleep(0.1)
+
+    def finish_monitor(self):
+        self.checkpoint("after-agent")
+        (RUNTIME / "focus-stop").touch()
+        deadline = time.monotonic() + 15
+        while not (RUNTIME / "focus-report.json").is_file():
+            if time.monotonic() > deadline:
+                raise RuntimeError("Human focus monitor did not finish")
+            time.sleep(0.1)
+        report = json.loads((RUNTIME / "focus-report.json").read_text())
+        report["compositor_checkpoints"] = self.checkpoints
+        (OUT / "cross-session-focus.json").write_text(json.dumps(report, indent=2) + "\n")
+        for name in ("focus-driver.txt", "focus-before.png", "focus-after.png"):
+            if (RUNTIME / name).is_file():
+                shutil.copyfile(RUNTIME / name, OUT / name)
+        assert report["passed"], report
+        return report
+
+
+@contextmanager
+def human_session():
     if os.getuid() != 0 or Path("/etc/mano-lab-disposable").read_text().strip() != "mano-phase0-ci":
         raise RuntimeError("Disposable guest root required")
     if subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip() not in {
@@ -144,8 +189,11 @@ def main():
             "approval_service_verified": False,
         }
         (OUT / "human-prompt.json").write_text(json.dumps(report, indent=2) + "\n")
-        print(json.dumps(report, indent=2))
+        yield HumanWitness(report, sway, ipc, prompt, sway_pid)
     finally:
+        for name in ("focus-driver.txt", "focus-report.json"):
+            if (RUNTIME / name).is_file():
+                shutil.copyfile(RUNTIME / name, OUT / name)
         if (RUNTIME / "prompt-driver.txt").is_file():
             shutil.copyfile(RUNTIME / "prompt-driver.txt", OUT / "prompt-driver.txt")
         if ipc and proc.poll() is None:
@@ -166,4 +214,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with human_session() as witness:
+        print(json.dumps(witness.report, indent=2))

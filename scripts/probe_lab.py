@@ -14,6 +14,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from probe_human_prompt import human_session
+
 from mano_lab.evidence import Probe, write_report
 from mano_lab.resources import process_memory, system_memory
 
@@ -103,7 +105,7 @@ def sandbox_probes():
     )
 
 
-def desktop_probe():
+def desktop_probe(human_witness):
     launch_started = time.monotonic()
     log = (OUT / "sway.txt").open("w")
     display_user = pwd.getpwnam("mano-agent")
@@ -144,6 +146,60 @@ def desktop_probe():
         if socket_path is None:
             PROBES.append(Probe("P0-04", "headless-sway", "fail", "No IPC socket", ("sway.txt",)))
             return
+        human_pid = human_witness.sway_pid
+        agent_pid = int(call(["pgrep", "-u", "mano-agent", "-x", "sway"]).stdout.strip())
+        namespaces = {
+            "human": os.readlink(f"/proc/{human_pid}/ns/net"),
+            "agent": os.readlink(f"/proc/{agent_pid}/ns/net"),
+        }
+        assert namespaces["human"] != namespaces["agent"]
+        attacks = []
+        for actor in ("mano-agent", "mano-core", "mano-worker"):
+            for route, argv in (
+                (
+                    "human-wayland-pointer",
+                    [
+                        "/usr/local/bin/mano-wayland-probe",
+                        "pointer-click",
+                        "114",
+                        "45",
+                        "1280",
+                        "720",
+                    ],
+                ),
+                ("human-command-ipc", ["swaymsg", "-t", "get_tree", "-r"]),
+            ):
+                result = call(
+                    [
+                        "/usr/sbin/runuser",
+                        "-u",
+                        actor,
+                        "--",
+                        "env",
+                        "-i",
+                        "PATH=/usr/bin:/bin",
+                        "XDG_RUNTIME_DIR=/run/mano-human",
+                        "WAYLAND_DISPLAY=wayland-1",
+                        f"SWAYSOCK={human_witness.ipc}",
+                        *argv,
+                    ]
+                )
+                denied = result.returncode != 0 and (
+                    "Permission denied" in result.stderr or "display connect" in result.stderr
+                )
+                assert denied, f"Human {route} not denied to {actor}: {result.stderr}"
+                attacks.append(
+                    {
+                        "actor": actor,
+                        "route": route,
+                        "exit": result.returncode,
+                        "stderr": result.stderr,
+                    }
+                )
+        (OUT / "human-socket-denials.json").write_text(
+            json.dumps({"attacks": attacks, "network_namespaces": namespaces}, indent=2) + "\n"
+        )
+        human_witness.checkpoint("agent-compositor-and-denied-cross-session-attacks")
         env = [
             "XDG_RUNTIME_DIR=/run/mano-agent",
             f"SWAYSOCK={socket_path}",
@@ -233,6 +289,7 @@ def desktop_probe():
             timeout=240,
         )
         record("P0-07", "wayland-context-enforcement", confinement)
+        human_witness.checkpoint("after-chromium-writer-and-agent-pointer-actions")
         if confinement.returncode == 0:
             PROBES.append(
                 Probe(
@@ -292,6 +349,7 @@ def desktop_probe():
             timeout=120,
         )
         record("P0-07", "xwayland-client-enforcement", x11)
+        human_witness.checkpoint("after-task-xwayland-actions")
         if x11.returncode == 0:
             PROBES.append(
                 Probe(
@@ -306,8 +364,14 @@ def desktop_probe():
             Probe(
                 "P0-05",
                 "chromium-libreoffice-isolated-input",
-                "pending",
-                "Controlled GUI input, cross-session focus, and sandboxed app contracts pending",
+                "pass" if confinement.returncode == 0 and x11.returncode == 0 else "fail",
+                "Concurrent human canary/focus preserved during actual agent app actions",
+                (
+                    "cross-session-focus.json",
+                    "human-socket-denials.json",
+                    "focus-before.png",
+                    "focus-after.png",
+                ),
             )
         )
         PROBES.append(
@@ -628,14 +692,13 @@ def main():
     )
     try:
         sandbox_probes()
-        native = call(["python3", str(ROOT / "scripts/probe_human_prompt.py")], timeout=120)
-        if native.returncode != 0:
-            record("P0-03", "native-prompt", native)
-        elif (OUT / "human-prompt.json").is_file():
-            RESOURCE_OBSERVATIONS["human_compositor_memory_bytes"] = json.loads(
-                (OUT / "human-prompt.json").read_text()
-            )["human_compositor_memory_bytes"]
-        desktop_probe()
+        with human_session() as human_witness:
+            RESOURCE_OBSERVATIONS["human_compositor_memory_bytes"] = human_witness.report[
+                "human_compositor_memory_bytes"
+            ]
+            human_witness.start_monitor()
+            desktop_probe(human_witness)
+            human_witness.finish_monitor()
         stop_probe()
         oom_probe()
     except Exception as exc:
