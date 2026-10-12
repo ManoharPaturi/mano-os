@@ -41,7 +41,7 @@ def run(argv):
 
 def role(user, display, argv):
     return [
-        "runuser",
+        "/usr/sbin/runuser",
         "-u",
         user,
         "--",
@@ -116,7 +116,7 @@ def main():
         os.chmod(runtime, 0o711)
         parent_write = run(
             [
-                "runuser",
+                "/usr/sbin/runuser",
                 "-u",
                 "mano-worker",
                 "--",
@@ -147,7 +147,7 @@ def main():
             )
             return run(
                 [
-                    "runuser",
+                    "/usr/sbin/runuser",
                     "-u",
                     "mano-worker",
                     "--",
