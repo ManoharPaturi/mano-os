@@ -35,7 +35,7 @@ def require_patched() -> str:
     return version
 
 
-def command(workspace: Path, argv: list[str]) -> list[str]:
+def command(workspace: Path, argv: list[str], gui_socket: Path | None = None) -> list[str]:
     if not argv or any(not isinstance(a, str) or "\x00" in a for a in argv):
         raise ValueError("Expected nonempty argv")
     # Reject symlinks in every component. Owner may still race; disposable lab
@@ -102,6 +102,27 @@ def command(workspace: Path, argv: list[str]) -> list[str]:
         "--",
         *argv,
     ]
+    if gui_socket is not None:
+        # Lab-only restricted context socket, never a directory or raw compositor socket.
+        gui_socket = gui_socket.absolute()
+        if gui_socket.is_symlink() or not gui_socket.is_socket():
+            raise ValueError("Expected a real restricted Wayland socket")
+        if gui_socket != Path("/run/mano-worker/restricted-wayland"):
+            raise ValueError("Raw or unknown display socket forbidden")
+        end = args.index("--")
+        args[end:end] = [
+            "--dir",
+            "/run/task",
+            "--ro-bind",
+            str(gui_socket),
+            "/run/task/wayland-0",
+            "--setenv",
+            "XDG_RUNTIME_DIR",
+            "/run/task",
+            "--setenv",
+            "WAYLAND_DISPLAY",
+            "wayland-0",
+        ]
     return args
 
 

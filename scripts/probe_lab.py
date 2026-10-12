@@ -213,12 +213,31 @@ def desktop_probe():
                 )
             ),
         )
+        confinement = call(
+            [
+                "python3",
+                str(ROOT / "scripts/probe_wayland_confinement.py"),
+                "/run/mano-agent/wayland-1",
+            ],
+            timeout=120,
+        )
+        record("P0-07", "wayland-context-enforcement", confinement)
+        if confinement.returncode == 0:
+            PROBES.append(
+                Probe(
+                    "P0-07",
+                    "privileged-wayland-bind-denial",
+                    "pass",
+                    "Worker surface succeeds; forged privileged binds and raw socket access fail",
+                    ("wayland-confinement.json", "security-context-protocol.sha256"),
+                )
+            )
         PROBES.append(
             Probe(
                 "P0-07",
-                "privileged-protocol-denial",
+                "xwayland-client-confinement",
                 "pending",
-                "Inventory is not proof that malicious clients cannot bind privileged globals",
+                "Worker has no X11 socket; authorized XWayland-client contract pending",
             )
         )
         PROBES.append(

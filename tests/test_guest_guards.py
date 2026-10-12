@@ -11,6 +11,7 @@ class GuestGuardTests(unittest.TestCase):
             "migrate_btrfs_root.sh",
             "verify_btrfs_root.sh",
             "prepare_root_recovery.sh",
+            "build_wayland_probe.sh",
         ):
             with self.subTest(script=name):
                 result = subprocess.run(

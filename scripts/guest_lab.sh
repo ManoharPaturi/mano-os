@@ -12,7 +12,7 @@ apt-get -y upgrade
 apt-get install -y --no-install-recommends python3 python3-venv bubblewrap \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
-  libreoffice-calc fonts-dejavu-core jq procps rsync
+  libreoffice-calc fonts-dejavu-core jq procps rsync gcc pkg-config libwayland-dev wayland-protocols
 apt-get clean
 # Every installed package is recorded; no security floor downgrade.
 dpkg-query -W > evidence/packages.tsv
@@ -23,9 +23,11 @@ dpkg --compare-versions "$proxy_version" ge '0.1.6-1+deb13u3'
 useradd -m -s /bin/bash mano-agent
 useradd -m -s /bin/bash mano-human
 useradd -m -s /bin/bash mano-core
+useradd -m -s /bin/bash mano-worker
 cat > /etc/tmpfiles.d/mano-lab.conf <<'TMPFILES'
 d /run/mano-agent 0700 mano-agent mano-agent -
 d /run/mano-human 0700 mano-human mano-human -
+d /run/mano-worker 0700 mano-worker mano-worker -
 TMPFILES
 mkdir -p /run/mano-agent /run/mano-human /var/lib/mano-broker /etc/mano
 chown mano-agent:mano-agent /run/mano-agent
@@ -58,4 +60,5 @@ test "$(cat /lab-btrfs/work/sentinel)" = before
 snapper --no-dbus -c mano-lab list > evidence/snapper.txt
 findmnt --json > evidence/mounts.json
 free -b > evidence/memory-before.txt
+bash scripts/build_wayland_probe.sh
 touch /etc/mano-lab-prepared
