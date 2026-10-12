@@ -184,8 +184,27 @@ def desktop_probe(human_witness):
                         *argv,
                     ]
                 )
+                kernel_denial = None
+                if route == "human-command-ipc":
+                    kernel_denial = call(
+                        [
+                            "/usr/sbin/runuser",
+                            "-u",
+                            actor,
+                            "--",
+                            "python3",
+                            "-c",
+                            "import socket,sys,errno; s=socket.socket(socket.AF_UNIX); "
+                            "\ntry: s.connect(sys.argv[1])"
+                            "\nexcept PermissionError as e: "
+                            "assert e.errno==errno.EACCES; sys.exit(0)"
+                            "\nsys.exit(1)",
+                            human_witness.ipc,
+                        ]
+                    )
                 denied = result.returncode != 0 and (
-                    "Permission denied" in result.stderr or "display connect" in result.stderr
+                    (kernel_denial is not None and kernel_denial.returncode == 0)
+                    or (route == "human-wayland-pointer" and "display connect" in result.stderr)
                 )
                 assert denied, f"Human {route} not denied to {actor}: {result.stderr}"
                 attacks.append(
@@ -194,6 +213,9 @@ def desktop_probe(human_witness):
                         "route": route,
                         "exit": result.returncode,
                         "stderr": result.stderr,
+                        "kernel_errno": "EACCES"
+                        if kernel_denial is not None and kernel_denial.returncode == 0
+                        else None,
                     }
                 )
         (OUT / "human-socket-denials.json").write_text(

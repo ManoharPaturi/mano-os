@@ -23,6 +23,7 @@ def main():
         "violations": [],
         "samples": 0,
         "events": 0,
+        "setup_signal_events": 0,
         "monitor_interval_ms": 50,
         "observation_api": "native GTK widget getters/signals",
         "physical_input_provenance": None,
@@ -54,13 +55,19 @@ def main():
         if armed:
             report["events"] += 1
             check("native GTK signal")
+        else:
+            report["setup_signal_events"] += 1
 
     def poll():
         nonlocal armed, before
         try:
             if not armed and (ROOT / "focus-arm").exists():
+                setup_before = report["setup_signal_events"]
                 app.entry.set_text(CANARY)
                 assert app.entry.grab_focus()
+                assert report["setup_signal_events"] > setup_before, (
+                    "No native text signal observed"
+                )
                 before = snapshot()
                 print(json.dumps({"initial_state": before}), flush=True)
                 assert before["text"] == CANARY and before["focused"] and before["active"]
