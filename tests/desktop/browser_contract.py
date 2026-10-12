@@ -76,7 +76,33 @@ Verify action</button><p id="result">waiting</p></body></html>""")
                 assert "--no-sandbox" not in proc["args"], proc
                 assert not any(a.startswith("--remote-debugging-port") for a in proc["args"]), proc
             assert any("--remote-debugging-pipe" in proc["args"] for proc in processes), processes
-            renderers = [proc for proc in processes if "--type=renderer" in proc["args"]]
+            session = await browser.new_browser_cdp_session()
+            reported = (await session.send("SystemInfo.getProcessInfo"))["processInfo"]
+            renderers = []
+            for proc in reported:
+                if proc["type"] != "renderer":
+                    continue
+                pid = int(proc["id"])
+                status = Path(f"/proc/{pid}/status").read_text()
+                fields = dict(line.split(":", 1) for line in status.splitlines() if ":" in line)
+                renderers.append(
+                    {
+                        "pid": pid,
+                        "name": fields.get("Name", "").strip(),
+                        "seccomp": fields.get("Seccomp", "").strip(),
+                        "no_new_privs": fields.get("NoNewPrivs", "").strip(),
+                    }
+                )
+            (ROOT / "renderer-observations.json").write_text(
+                json.dumps(
+                    {
+                        "reported": reported,
+                        "kernel_status": renderers,
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
             assert renderers and all(proc["seccomp"] == "2" for proc in renderers), renderers
             assert not listeners(), "Unexpected TCP listener, including exposed CDP"
             await page.screenshot(path=str(ROOT / "browser-page.png"))
@@ -91,6 +117,7 @@ Verify action</button><p id="result">waiting</p></body></html>""")
                 "processes": processes,
                 "tcp_listeners": listeners(),
                 "renderer_seccomp_enforced": True,
+                "renderer_kernel_status": renderers,
                 "human_display_access": False,
             }
             (ROOT / "browser-ready.json").write_text(json.dumps(report, indent=2) + "\n")
