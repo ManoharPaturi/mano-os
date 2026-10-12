@@ -9,8 +9,10 @@ Local checkout: work/mano-os under this chat workspace.
 Specification: docs/spec-v2.1.md preserved verbatim from supplied Downloads README.
 
 PR #1 merged after all three CI checks passed. CI run 38289411969 produced
-13 passing probes, zero failures and nine pending checks. Current follow-up:
-feat/phase0-oom-containment, kernel OOM isolation and stronger GUI postconditions. Read CI and phase status before
+13 passing probes, zero failures and nine pending checks. PR #2 merged after all CI checks passed, run 38289976575: 16 passing probes,
+zero failures, nine pending checks. Current follow-up: test/phase0-stop-proof,
+actual mock-core process freeze and task descendant termination.
+Next substantive Phase 0 work: btrfs-root boot/restore and GUI/security contracts. Read CI and phase status before
 changing anything. Core/delegates are not wired to host execution. Preserve NO-GO
 until mandatory proof exists. Root is ext4, btrfs data only; physical gates pending. User explicitly chose CI VM development for now.
 

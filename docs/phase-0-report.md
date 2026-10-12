@@ -4,6 +4,10 @@ Verified first lab run: [CI 38289411969](https://github.com/ManoharPaturi/mano-o
 PR #1 merged, 13 passing probes, zero failures, nine pending checks.
 The run used KVM and Debian 13 with a 4 GiB RAM ceiling.
 
+OOM and GUI follow-up: [CI 38289976575](https://github.com/ManoharPaturi/mano-os/actions/runs/38289976575),
+PR #2 merged, 16 passing probes, zero failures, nine pending checks.
+Kernel reports `oom-kill`; the human-observer service remains active.
+
 Current architecture decision: **NO-GO for production execution**.
 CI emits `report.json`, hashed logs, a package manifest, memory observations,
 mount inventory, Sway screenshot and independent-stop outputs.

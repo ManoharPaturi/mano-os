@@ -9,7 +9,13 @@ class ProbeProgramTests(unittest.TestCase):
         tree = ast.parse(Path("scripts/probe_lab.py").read_text())
         found = 0
         for node in ast.walk(tree):
-            if not isinstance(node, ast.List):
+            if not isinstance(node, ast.List) or not node.elts:
+                continue
+            executable = node.elts[0]
+            if not isinstance(executable, ast.Constant) or executable.value not in {
+                "python3",
+                "/usr/bin/python3",
+            }:
                 continue
             for index, element in enumerate(node.elts[:-1]):
                 if not isinstance(element, ast.Constant) or element.value != "-c":
