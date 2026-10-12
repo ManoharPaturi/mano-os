@@ -139,12 +139,13 @@ def main():
         workspace = Path(tempfile.mkdtemp(prefix="gui-probe-", dir="/home/mano-worker"))
         os.chown(workspace, worker.pw_uid, worker.pw_gid)
 
-        def sandbox_args(argv, browser=False):
+        def sandbox_args(argv, browser=False, office=False):
             # Construct as the worker so the ownership guard observes real credentials.
             source = (
                 "from pathlib import Path; import os; from mano_lab.sandbox import command; "
-                "import sys; a=command(Path(sys.argv[1]),sys.argv[3:],"
-                'Path("/run/mano-worker/restricted-wayland"),browser=bool(int(sys.argv[2]))); '
+                "import sys; a=command(Path(sys.argv[1]),sys.argv[4:],"
+                'Path("/run/mano-worker/restricted-wayland"),browser=bool(int(sys.argv[2])),'
+                "office=bool(int(sys.argv[3]))); "
                 'os.execve(a[0],a,{"PATH":"/usr/bin:/bin","LANG":"C.UTF-8"})'
             )
             return [
@@ -161,6 +162,7 @@ def main():
                 source,
                 str(workspace),
                 "1" if browser else "0",
+                "1" if office else "0",
                 *argv,
             ]
 
@@ -306,6 +308,89 @@ def main():
                     browser_worker.kill()
                     browser_worker.wait()
             browser_log.close()
+        shutil.copyfile(
+            "/opt/mano-lab/tests/desktop/office_contract.py", workspace / "office_contract.py"
+        )
+        office_log = (out / "office-worker.txt").open("w")
+        office_worker = subprocess.Popen(
+            sandbox_args(
+                [
+                    "/usr/bin/dbus-run-session",
+                    "--config-file=/usr/local/lib/mano-lab/task-session.conf",
+                    "--",
+                    "/usr/bin/python3",
+                    "/workspace/office_contract.py",
+                ],
+                office=True,
+            ),
+            env=ENV,
+            stdout=office_log,
+            stderr=office_log,
+        )
+        try:
+            deadline = time.monotonic() + 90
+            while not (workspace / "office-ready.json").is_file():
+                if office_worker.poll() is not None:
+                    raise RuntimeError("Office worker exited before verified document readiness")
+                if time.monotonic() > deadline:
+                    raise RuntimeError("Office readiness timed out")
+                time.sleep(0.1)
+            tree = run(
+                role(
+                    "mano-agent",
+                    raw_display,
+                    [
+                        "env",
+                        "SWAYSOCK=" + str(next(Path("/run/mano-agent").glob("sway-ipc.*.sock"))),
+                        "swaymsg",
+                        "-t",
+                        "get_tree",
+                        "-r",
+                    ],
+                )
+            )
+            matches = [
+                node
+                for node in nodes(json.loads(tree.stdout))
+                if "contract.odt" in (node.get("name") or "")
+                and "libreoffice" in (node.get("app_id") or "").lower()
+            ]
+            if not matches:
+                raise RuntimeError("Writer window not independently observed on task compositor")
+            (out / "office-window.json").write_text(json.dumps(matches[0], indent=2) + "\n")
+            screenshot = run(
+                role("mano-agent", raw_display, ["grim", "/run/mano-agent/office-page.png"])
+            )
+            if screenshot.returncode:
+                raise RuntimeError(screenshot.stderr)
+            shutil.copyfile("/run/mano-agent/office-page.png", out / "office-page.png")
+            (workspace / "office-observer-done").touch()
+            if office_worker.wait(timeout=20) != 0:
+                raise RuntimeError("Office contract failed after observation")
+            for name in (
+                "office-contract.json",
+                "office-accessibility-tree.json",
+                "contract.odt",
+                "contract.pdf",
+                "office-process.txt",
+            ):
+                shutil.copyfile(workspace / name, out / name)
+            observations["office_contract"] = (
+                "passed named Save action and verified ODT/PDF content"
+            )
+        finally:
+            if office_worker.poll() is None:
+                office_worker.terminate()
+                try:
+                    office_worker.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    office_worker.kill()
+                    office_worker.wait()
+            # Keep worker diagnostics on failure, including the real accessibility inventory.
+            for name in ("office-accessibility-tree.json", "office-process.txt"):
+                if (workspace / name).is_file():
+                    shutil.copyfile(workspace / name, out / name)
+            office_log.close()
         (out / "wayland-confinement.json").write_text(json.dumps(observations, indent=2) + "\n")
         print(json.dumps(observations, indent=2))
         return 0

@@ -12,7 +12,7 @@ apt-get -y upgrade
 apt-get install -y --no-install-recommends python3 python3-venv bubblewrap \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
-  libreoffice-calc fonts-dejavu-core jq procps rsync gcc libc6-dev pkg-config libwayland-dev wayland-protocols xauth x11-utils xfonts-base
+  libreoffice-calc libreoffice-gtk3 python3-uno poppler-utils fonts-dejavu-core jq procps rsync gcc libc6-dev pkg-config libwayland-dev wayland-protocols xauth x11-utils xfonts-base
 apt-get clean
 # Use system Chromium; never run playwright install/download a separate browser.
 python3 -m venv /usr/local/lib/mano-browser
@@ -21,6 +21,8 @@ python3 -m venv /usr/local/lib/mano-browser
 printf '# Task-local launcher configuration; no host policy or credential data.\n' \
   > /usr/local/lib/mano-browser/launcher-config
 chmod 0444 /usr/local/lib/mano-browser/launcher-config
+mkdir -p /usr/local/lib/mano-lab
+install -m 0444 packaging/dbus/task-session.conf /usr/local/lib/mano-lab/task-session.conf
 # Every installed package is recorded; no security floor downgrade.
 dpkg-query -W > evidence/packages.tsv
 uname -a > evidence/kernel.txt

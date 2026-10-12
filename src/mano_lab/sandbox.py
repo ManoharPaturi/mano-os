@@ -42,6 +42,7 @@ def command(
     x11_socket: Path | None = None,
     x11_authority: Path | None = None,
     browser: bool = False,
+    office: bool = False,
 ) -> list[str]:
     if not argv or any(not isinstance(a, str) or "\x00" in a for a in argv):
         raise ValueError("Expected nonempty argv")
@@ -129,6 +130,18 @@ def command(
             "--setenv",
             "WAYLAND_DISPLAY",
             "wayland-0",
+        ]
+    if office:
+        if gui_socket is None:
+            raise ValueError("Office lab profile requires the restricted Wayland route")
+        end = args.index("--")
+        args[end:end] = [
+            "--ro-bind",
+            "/etc/fonts",
+            "/etc/fonts",
+            "--setenv",
+            "GDK_BACKEND",
+            "wayland",
         ]
     if browser:
         if gui_socket is None:
