@@ -22,6 +22,11 @@ static int converse(int count, const struct pam_message **messages,
             for (int j = 0; j < i; j++) free(responses[j].resp);
             free(responses); return PAM_CONV_ERR;
         }
+        if ((messages[i]->msg_style == PAM_PROMPT_ECHO_OFF ||
+             messages[i]->msg_style == PAM_PROMPT_ECHO_ON) && !responses[i].resp) {
+            for (int j = 0; j <= i; j++) free(responses[j].resp);
+            free(responses); return PAM_BUF_ERR;
+        }
     }
     *reply = responses; return PAM_SUCCESS;
 }

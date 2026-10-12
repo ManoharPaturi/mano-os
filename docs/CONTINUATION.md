@@ -21,7 +21,9 @@ wrong nonce, extra target, expiry, wrong password, valid approval and replay.
 Three actor principals must hit EACCES on approval IPC, journal write and uinput.
 If cloud kernel lacks uinput driver, a character-node permission test explicitly
 records driver_available=false; no physical/device-behavior claim is made. Strong
-OS-auth fallback follows original spec; authentication is still unverified until CI.
+OS-auth fallback follows original spec; Candidate security run 38321824070 verified both boots (33 pass, 0 fail, 1 pending
+on recovered root). Final head must rerun all CI before merge. PAM allocation failures
+fail closed. Actual uinput driver unavailable, permission-node scope explicit.
 Temporary credentials remain off argv/env/logs/artifacts, each flow fails closed,
 cleanup stops authority and locks account. Both normal/recovered roots required.
 

@@ -30,7 +30,7 @@ mount inventory, Sway screenshot and independent-stop outputs.
 | P0-06 | Real task-private accessible Save; visible-control window-coordinate/scale probe added for CI acceptance |
 | P0-07 | Restricted Wayland forged privileged binds denied; authenticated private XWayland domain verified |
 | P0-08 | Positive artifact plus kernel filesystem/IPC/device/network denial probes |
-| P0-09 | Agent denied human runtime; authentic approval and physical spoof proof pending |
+| P0-09 | Request-bound OS-auth fallback/PAM spike added; human-only IPC and actor uinput/journal denials tested |
 | P0-10 | Systemd stop with frozen mock core; stopd/grant/physical trigger pending |
 | P0-11 | Snapper exact data restore verified; root snapshot clone/third boot implemented for CI |
 | P0-12 | Live VM memory/Sway/cgroup metrics implemented for CI; final architecture remains NO-GO |
@@ -67,3 +67,11 @@ Writer and XWayland actions execute. It requires focused unsent text and unchang
 request count, records focus/text events and 50 ms snapshots, and checks compositor
 focus checkpoints plus denied human-socket access from agent-side principals. Final
 CI artifacts determine acceptance; physical input provenance remains unverified.
+
+Authenticated approval candidate: CI 38321824070 security lab passed both boot
+stages. Real per-request PAM on ttyS0 accepted one bound approval and rejected wrong
+password, modified digest/nonce/target, expiry and replay. Root-owned 0600 journal
+and nine kernel EACCES actor probes verified. Cloud uinput driver unavailable;
+character-node permissions tested, physical/device behavior not claimed. This is
+a fixed CI authority spike; production broker and full grant lifecycle remain later
+work. Final PR head must pass CI before merge; architecture remains NO-GO for P0-10.
