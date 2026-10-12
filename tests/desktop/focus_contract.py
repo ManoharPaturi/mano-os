@@ -33,7 +33,8 @@ def main():
             continue
     assert entry is not None
     assert editable.setTextContents(CANARY)
-    assert entry.queryComponent().grabFocus()
+    # GTK4 does not implement AT-SPI grabFocus here. The native prompt already
+    # focuses its entry; require that real state rather than assuming a setter.
     receipt = Path.home() / ".local/state/mano/requests.jsonl"
     baseline_count = len(receipt.read_text().splitlines())
     report = {

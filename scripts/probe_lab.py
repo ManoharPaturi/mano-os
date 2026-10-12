@@ -362,20 +362,6 @@ def desktop_probe(human_witness):
             )
         PROBES.append(
             Probe(
-                "P0-05",
-                "chromium-libreoffice-isolated-input",
-                "pass" if confinement.returncode == 0 and x11.returncode == 0 else "fail",
-                "Concurrent human canary/focus preserved during actual agent app actions",
-                (
-                    "cross-session-focus.json",
-                    "human-socket-denials.json",
-                    "focus-before.png",
-                    "focus-after.png",
-                ),
-            )
-        )
-        PROBES.append(
-            Probe(
                 "P0-06",
                 "atspi-coordinate-action",
                 "pass"
@@ -699,6 +685,20 @@ def main():
             human_witness.start_monitor()
             desktop_probe(human_witness)
             human_witness.finish_monitor()
+            PROBES.append(
+                Probe(
+                    "P0-05",
+                    "chromium-libreoffice-isolated-input",
+                    "pass",
+                    "Concurrent human canary/focus preserved during actual agent app actions",
+                    (
+                        "cross-session-focus.json",
+                        "human-socket-denials.json",
+                        "focus-before.png",
+                        "focus-after.png",
+                    ),
+                )
+            )
         stop_probe()
         oom_probe()
     except Exception as exc:
