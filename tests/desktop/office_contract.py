@@ -65,7 +65,10 @@ def geometry_contract(document, pyatspi):
                     states = node.getState()
                     entry = {"name": name, "role": role}
                     inventory.append(entry)
-                    if role != "push button" or name.split("(")[0].strip() != "Save":
+                    if (
+                        role not in {"button", "push button"}
+                        or name.split("(")[0].strip() != "Save"
+                    ):
                         continue
                     if not all(
                         states.contains(flag)

@@ -502,6 +502,8 @@ def main():
             for name in (
                 "office-accessibility-tree.json",
                 "office-process.txt",
+                "geometry-config-1.json",
+                "geometry-config-2.json",
                 "geometry-tree-1.json",
                 "geometry-tree-2.json",
                 "geometry-target-1.json",

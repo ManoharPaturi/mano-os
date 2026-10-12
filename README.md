@@ -20,8 +20,10 @@ Its architecture and acceptance gates remain the product contract.
 - Restricted Wayland globals and authenticated private XWayland namespace.
 - Headed system Chromium locator and real Writer accessible Save/ODT/PDF contracts.
 
-Writer menu coordinates remain unavailable; scale mapping, cross-session input,
-native prompt/rescue, authentic approval and the trusted stop route remain pending.
+Writer hidden-menu coordinates remain unavailable. A visible-control scale probe
+checks actual coordinate saves at scales 1 and 2; CI artifacts determine acceptance.
+Cross-session input, native prompt/rescue, authentic approval and the trusted stop
+route remain pending.
 
 ## Development
 
