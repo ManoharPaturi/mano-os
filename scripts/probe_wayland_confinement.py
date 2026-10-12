@@ -223,6 +223,8 @@ def main():
             raise RuntimeError(isolation.stderr)
         observations["ipc_isolation"] = isolation.stdout.strip()
         observations["xwayland_client_contract"] = "pending; no X11 socket granted to this worker"
+        # Preserve the independent confinement outcome even if a later app contract fails.
+        (out / "wayland-confinement.json").write_text(json.dumps(observations, indent=2) + "\n")
         # Headed system Chromium remains open until a trusted observer confirms its window.
         shutil.copyfile(
             "/opt/mano-lab/tests/desktop/browser_contract.py", workspace / "browser_contract.py"
@@ -273,7 +275,8 @@ def main():
                 matches = [
                     node
                     for node in nodes(json.loads(trees.stdout))
-                    if node.get("name") == "mano-browser-contract"
+                    if (node.get("name") or "").startswith("mano-browser-contract")
+                    and "chromium" in (node.get("app_id") or "").lower()
                 ]
                 if matches:
                     observed = True
