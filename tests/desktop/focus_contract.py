@@ -35,8 +35,35 @@ def main():
             continue
     assert entry is not None
     assert editable.setTextContents(CANARY)
-    # GTK4 does not implement AT-SPI grabFocus here. The native prompt already
-    # focuses its entry; require that real state rather than assuming a setter.
+    # GtkEntry delegates to GtkText. Observe the focused text object containing
+    # the canary, after pending accessibility/cache updates have settled.
+    deadline = time.monotonic() + 5
+    candidates = []
+    while time.monotonic() < deadline:
+        while GLib.MainContext.default().pending():
+            GLib.MainContext.default().iteration(False)
+        candidates = []
+        matching = []
+        for node in nodes(pyatspi.Registry.getDesktop(0)):
+            if node.getRoleName() not in {"text", "entry", "text entry"}:
+                continue
+            try:
+                if hasattr(node, "clear_cache"):
+                    node.clear_cache()
+                value = node.queryText().getText(0, -1)
+                focused = node.getState().contains(pyatspi.STATE_FOCUSED)
+                candidates.append({"name": node.name, "text": value, "focused": focused})
+                if value == CANARY and focused:
+                    matching.append(node)
+            except NotImplementedError:
+                continue
+        if len(matching) == 1:
+            entry = matching[0]
+            break
+        time.sleep(0.05)
+    else:
+        print(json.dumps({"candidate_text_objects": candidates}), flush=True)
+        raise RuntimeError("No actual focused text object contains the human canary")
     receipt = Path.home() / ".local/state/mano/requests.jsonl"
     baseline_count = len(receipt.read_text().splitlines())
     report = {
