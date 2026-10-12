@@ -67,6 +67,14 @@ def main():
     require_patched()
     if os.getuid() != 0 or len(sys.argv) != 2:
         raise RuntimeError("Disposable guest supervisor and raw display required")
+    marker = Path("/etc/mano-lab-disposable")
+    if not marker.is_file() or marker.read_text().strip() != "mano-phase0-ci":
+        raise RuntimeError("CI guest marker absent")
+    if subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip() not in {
+        "kvm",
+        "qemu",
+    }:
+        raise RuntimeError("Disposable QEMU guest required")
     agent = pwd.getpwnam("mano-agent")
     worker = pwd.getpwnam("mano-worker")
     out = Path("/opt/mano-lab/evidence")
@@ -103,7 +111,24 @@ def main():
             raise RuntimeError("Restricted listener failed to become ready")
         os.chown(SOCKET, worker.pw_uid, worker.pw_gid)
         os.chmod(SOCKET, 0o600)
-        os.chown(runtime, worker.pw_uid, worker.pw_gid)
+        # Worker can traverse to its socket but cannot replace the trusted endpoint.
+        os.chown(runtime, 0, 0)
+        os.chmod(runtime, 0o711)
+        parent_write = run(
+            [
+                "runuser",
+                "-u",
+                "mano-worker",
+                "--",
+                "python3",
+                "-c",
+                "import os; assert not os.access('/run/mano-worker',os.W_OK); "
+                "print('listener parent is not worker-writable')",
+            ]
+        )
+        if parent_write.returncode:
+            raise RuntimeError("Worker can replace its trusted endpoint")
+        observations["listener_parent_write_denied"] = True
         # The worker cannot use the raw compositor path even outside its mount sandbox.
         attack_raw = run(role("mano-worker", raw_display, [BINARY, "surface"]))
         observations["raw_socket_worker_exit"] = attack_raw.returncode
