@@ -149,3 +149,13 @@ restriction. PR29 post-main38352940988 passed all three checks.
 Next branch feat/phase1-task-identities adds a bounded root-only allocator and
 two real allocated identity workspace tests. Local71 tests pass/10Linux skips;
 real Linux identity tests pending. Do not claim executor or fullPhase1 complete.
+# Descriptor sandbox continuation
+
+PR31 merged c0e3aebabc37ba2bcd327fa5ac2f9ec122296935 after accepted run38353924283
+all3success. Post-main38354466056 now all3success. Latest workspaces.json actual
+distinct locked task accounts, correct groups, contention denial, five kernel
+cross-task denials plus prior ACL checks. No runtime account reuse/retirement.
+Current feat/phase1-fd-sandbox adds trusted unprivileged command compiler and
+operator-driven real VM descriptor/cgroup/mount/network/environment tests.
+Local72 tests pass/10LinuxMacskips; real sandbox CI pending. Seccomp/Landlock and
+broker executor integration remain unimplemented; never claim fullPhase1 done.
