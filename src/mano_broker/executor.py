@@ -7,6 +7,7 @@ remain separate gates. A lost response is never automatically retried.
 import json
 import time
 
+from .limits import Limits
 from .protocol import ActionRequest, Capability, canonical, identifier
 from .state import Denied
 
@@ -33,12 +34,7 @@ class Executor:
             or canonical(json.loads(request.args_json)) != row["approved_args_json"]
         ):
             raise Denied("Terminal authority no longer live")
-        # The current delegated launcher uses these fixed ceilings. Do not run
-        # a smaller approved budget under a larger kernel limit.
-        budget = json.loads(row["budget_json"])
-        if (budget["memory_bytes"] < 128 * 1024**2 or budget["pids"] < 24
-                or budget["cpu_percent"] < 20):
-            raise Denied("Approved budget below current launcher ceilings")
+        Limits.approved(json.loads(row["budget_json"]))
         return row, request
 
     def control(self, operation, handle):
@@ -75,7 +71,8 @@ class Executor:
                 raise Denied("Live terminal descriptor lease required")
             response = self.client.exchange("prepare", dict(
                 schema_version="1.0", operation="launch_task", body=dict(
-                    action_id=action_id, caller_uid=row["caller_uid"], request=request.body()
+                    action_id=action_id, caller_uid=row["caller_uid"], request=request.body(),
+                    limits=Limits.approved(json.loads(row["budget_json"])).body()
                 )
             ), (resource.workspace.fd, prepared.descriptors["cwd"].fd))
             if (response.get("ok") is not True or response.get("action_id") != action_id
