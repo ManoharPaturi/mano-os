@@ -172,3 +172,14 @@ and real enforcement NOT verified yet. GitHub DNS unavailable on this Mac at las
 check; preserve local commit and push/create PR when access returns. Main postmerge
 cannot currently be queried. No root endpoint/model/broker executor connected.
 Disk16GiB92percent; no local VM/models. Full original goal remains active.
+# Bounded runner continuation
+
+PR33 merged5e2fb8e7ee63cfaa3925100623c79de783e80fe9 after all3currenthead checks
+SUCCESS in38359708133. ConnectedGitHub GET verifiedexacthead7097e5a/allchecks,
+no commitstatuses, cleanmergebase thenmatch-head merge, no bypass. Actualguard
+report accepted: seccomp2/no-changeEPERM, Landlock writable/etcEACCES, normal
+subprocess andchildinheritance pluspriorFD/network/IPC/env/cgroupchecks.
+Current feat/phase1-bounded-runner adds unprivileged bounded-output/deadline/
+revocation ProcessResult runner and actualcgroupcleanup VMcases. Local75tests
+pass10MacLinuxskips; real runnerVMtests pending. No brokerexecutor/modelendpoint.
+Use connected GitHub tools while CLI API DNS fails; gittransport still works.
