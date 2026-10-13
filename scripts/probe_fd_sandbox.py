@@ -10,9 +10,11 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from mano_broker.identities import LOCK, allocate_identity
+from mano_broker.runner import OUTPUT_LIMIT, run
 from mano_broker.sandbox import GUARD, command
 from mano_broker.workspaces import BASE, create_workspace
 
@@ -191,7 +193,66 @@ print(json.dumps({'workspace_fd_identity':True,'cwd_fd_identity':True,
                 timeout=20,
             )
             assert result.returncode == 0, result.stderr
-            os.write(writer, result.stdout.encode())
+            proof = json.loads(result.stdout)
+            cgroup = (
+                Path("/sys/fs/cgroup")
+                / Path("/proc/self/cgroup").read_text().strip().split("::", 1)[1].lstrip("/")
+                / "cgroup.procs"
+            )
+            baseline = set(cgroup.read_text().split())
+
+            def reaped():
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if set(cgroup.read_text().split()) == baseline:
+                        return
+                    time.sleep(0.05)
+                raise AssertionError("Sandbox descendants remain in cgroup")
+
+            def execute(source, timeout=5, observer=lambda: False):
+                started = time.monotonic()
+                outcome = run(
+                    fd, cwd, ["/usr/bin/python3", "-c", source], timeout=timeout, revoked=observer
+                )
+                assert time.monotonic() - started < 8
+                reaped()
+                return outcome
+
+            normal = execute("print('bounded-ok')")
+            assert normal.reason == "completed" and normal.return_code == 0
+            assert normal.stdout.strip() == b"bounded-ok"
+            for stream in (1, 2):
+                noisy = execute(f"import os;os.write({stream},b'x'*200000)")
+                assert noisy.reason == "output-limit"
+                assert len(noisy.stdout if stream == 1 else noisy.stderr) == OUTPUT_LIMIT
+                assert len(noisy.stdout) <= OUTPUT_LIMIT and len(noisy.stderr) <= OUTPUT_LIMIT
+            timed = execute("import os,time;os.fork();time.sleep(60)", timeout=1)
+            assert timed.reason == "timed-out"
+            eof = execute("import os,time;os.close(1);os.close(2);time.sleep(60)", timeout=1)
+            assert eof.reason == "timed-out"
+            revoked = execute(
+                "import time;from pathlib import Path;"
+                "Path('/workspace/revocation-started').write_text('started');time.sleep(60)",
+                observer=lambda: (moved / "revocation-started").exists(),
+            )
+            assert revoked.reason == "revoked" and revoked.return_code is not None
+            before_start = execute(
+                "from pathlib import Path;Path('/workspace/must-not-start').write_text('bad')",
+                observer=lambda: True,
+            )
+            assert before_start.reason == "revoked" and before_start.return_code is None
+            assert not (moved / "must-not-start").exists()
+            proof["bounded_runner"] = dict(
+                normal_command=True,
+                stdout_limit=OUTPUT_LIMIT,
+                stderr_limit=OUTPUT_LIMIT,
+                fork_timeout_reaped=True,
+                closed_pipes_deadline=True,
+                active_revocation_reaped=True,
+                revoked_before_start_no_effect=True,
+                baseline_cgroup_restored=True,
+            )
+            os.write(writer, json.dumps(proof).encode())
             os._exit(0)
         except BaseException:
             import traceback
