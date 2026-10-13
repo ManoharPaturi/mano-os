@@ -26,3 +26,22 @@ service or a complete autonomous coding agent.
 Primary API references:
 - https://docs.langchain.com/oss/python/langgraph/graph-api
 - https://docs.langchain.com/oss/python/langgraph/persistence
+
+## Actual public transport and VM golden project (acceptance pending)
+
+BrokerClient uses only the fixed root-activated request socket. It validates the
+actual broker service UID/GID in each kernel message, truncation/rights/envelope
+checks, and holds a pidfd so replacement requires explicit client reconstruction.
+Private capture/authentication/verification operations are unavailable. No effect
+request is automatically retried on socket failure.
+
+The disposable guest installs the pinned LangGraph stack in a separate root-owned
+venv. The installed-code probe runs AgentRuntime under an actual allocated task UID,
+requests approval, authenticates the human through native PAM, and asks the broker
+to create calc.py/test_calc.py and run a real unittest inside its restricted runner.
+No file should appear before approval. A result marker is independently observed;
+status remains verifying. Replaying a lost action-ID checkpoint returns the same
+journal action and preserves a deliberately changed marker, proving no rerun.
+This is a deterministic mock-model golden case; actual VM enforcement and all
+previous security probes must pass CI. No real model, durable graph restart or
+semantic task-completion claim follows from this one case.

@@ -16,7 +16,7 @@ from .protocol import MAX_PACKET, canonical, unique_object
 from .state import Denied
 
 
-def reply(connection):
+def reply(connection, *, expected_uid=0, expected_gid=0):
     packet, ancillary, flags, _ = connection.recvmsg(
         MAX_PACKET,
         socket.CMSG_SPACE(CREDENTIALS.size) + socket.CMSG_SPACE(253 * 4),
@@ -42,8 +42,8 @@ def reply(connection):
         unexpected
         or flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)
         or len(peers) != 1
-        or peers[0].uid != 0
-        or peers[0].gid != 0
+        or peers[0].uid != expected_uid
+        or peers[0].gid != expected_gid
         or peers[0].pid <= 0
         or not packet
     ):
