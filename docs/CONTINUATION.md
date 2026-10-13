@@ -65,3 +65,15 @@ rollback/expiry-status passed; guestservicepending/selfapprovaldeny/restart adde
 No PAM/rootcontrol transport yet; ADR0013. NeednewPR/allCIbeforemerge. Fullgoalactive.
 
 Disknow9.3GiB free96%: NO newlarge localdownloads below10GiB, no data deletion.
+
+Latest PR23 merged205a70a6551323cc83bd31a7986e091302e1abfe after accepted
+CI38338470385 all3success; actualpending/selfapprovaldenial/restart verified,
+15IPCattacks denied and57Linux tests. Post-main38339110162 running lastchecked.
+Currentfeat/phase1-approval-control: root0600 separate control listener, activation
+2namedFDs/selectors/controlpriority/separatebudgets, view/confirm onlykernelUID0,
+strictfields/replay/binding tests. Actualguest4controlDACdenials + rootconfirmation
+exactonegrant added.58localtests1MacLinuxskip pass. NO PAMadapter yet; fixture
+explicitcontrol_pam_authenticated=false. ADR0014. NeednewPR/allCI beforemerge.
+Disk7.4GiBfree97%: no newlarge localdownloads, no userdata deletion.
+Earlier optionalGitindexwrite timedout; read-only status succeeded, no stale lock
+remained; source/controlfiles preserved, no lock deletion was necessary.
