@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mano_broker.artifacts import MAX_BYTES, Store
+from mano_broker.artifacts import MAX_BYTES, Store, durable_chunk
 from mano_broker.protocol import ActionRequest, Capability, Mode, canonical
 from mano_broker.registry import Registry
 from mano_broker.state import Denied, State
@@ -92,3 +92,24 @@ class SealedArtifactTests(unittest.TestCase):
             self.capture()
         self.assertEqual(before, len(os.listdir('/proc/self/fd')))
         self.assertFalse(self.store.items)
+
+    def test_durable_bytes_survive_restart_and_reject_wrong_caller_and_corruption(self):
+        self.done()
+        metadata = self.capture()
+        self.store.persist(self.state, metadata['artifact_id'])
+        self.store.persist(self.state, metadata['artifact_id'])
+        self.store.close()
+        self.state.close()
+        self.state = State(self.base / 'state')
+        kwargs = dict(task_id=self.task, caller_uid=1004, boot_id='boot', offset=0, length=4096)
+        result = durable_chunk(self.state, metadata['artifact_id'], **kwargs)
+        self.assertEqual(result['data'], b'original')
+        self.assertTrue(result['eof'])
+        self.assertFalse(result['metadata']['effect_verified'])
+        for update in (dict(caller_uid=1002), dict(boot_id='other'), dict(offset=True),
+                       dict(length=4097), dict(offset=999)):
+            with self.assertRaises(Denied):
+                durable_chunk(self.state, metadata['artifact_id'], **(kwargs | update))
+        self.state.db.execute('UPDATE artifacts SET data=?', (b'corrupt!',))
+        with self.assertRaises(Denied):
+            durable_chunk(self.state, metadata['artifact_id'], **kwargs)
