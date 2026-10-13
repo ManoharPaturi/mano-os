@@ -319,3 +319,9 @@ changedargsdeny/exactproposalintent/runtimeexec/doneknownfile/verified0/replay/
 wrongcallerstatusdenied. No directgrantinjection; physicalinputnull/fixturepassword
 inmemory only. Cleanupstopsallunits beforeownworkspace/identity/nativecleanup.
 ActualVMproofpending, fullversiongatesstillactive. No physical/verifiedartifactclaims.
+PR44 fresh38409320590 failedinstalledclient; subprocesscapture hidinnerstderr,
+exactinitialfailureunknown. Added bounded error-type/errno journalevents andstderr
+exposure. Sourceinspectionalsofoundobserverrace: Rootstatus couldfinishafter
+Runtime.tick poll but beforesecondcontrolRPC, so testbroke beforeSQLitebecamedone.
+Fixture nowawaits BOTHRootfinishedANDjournal(done,0) withinSAME5seconddeadline,
+thenassertsboth. No productionexit/grantchecksweakened. NewCIrequired.

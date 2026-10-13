@@ -756,7 +756,10 @@ RemoveOnStop=yes
     subprocess.run(["systemctl", "start", *(p.name for p in SOCKET_UNITS.values()),
                     "mano-launcher.service"], check=True)
     daemon = subprocess.run(["/usr/bin/python3", "/opt/mano-lab/scripts/probe_launcher_service.py"],
-                            check=True, capture_output=True, text=True, timeout=20)
+                            check=False, capture_output=True, text=True, timeout=20)
+    if daemon.returncode != 0:
+        print(daemon.stderr, file=sys.stderr)
+        raise AssertionError("Installed launcher client failed: " + str(daemon.returncode))
     report = json.loads((STATE / "report.json").read_text())
     report["production_daemon"] = json.loads(daemon.stdout)
     print(json.dumps(report, indent=2))

@@ -60,17 +60,26 @@ try:
 
     action = prepare("print('production-daemon-ok')", "daemon-once")
     runtime.tick()
+    if action not in executor.jobs:
+        events = state.db.execute(
+            "SELECT event,details_json FROM events WHERE action_id=?", (action,)
+        ).fetchall()
+        raise AssertionError("Dispatch did not retain job: " + repr([tuple(e) for e in events]))
     handle = executor.jobs[action].copy()
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         runtime.tick()
         response = client.exchange("control", dict(schema_version="1.0", operation="status",
                                                    body=handle))
-        if response["state"] == "finished":
+        row = state.db.execute(
+            "SELECT state,verified FROM actions WHERE id=?", (action,)
+        ).fetchone()
+        if response["state"] == "finished" and tuple(row) == ("done", 0):
             break
         time.sleep(0.01)
     row = state.db.execute("SELECT state,verified FROM actions WHERE id=?", (action,)).fetchone()
     assert tuple(row) == ("done", 0)
+    assert response["state"] == "finished"
     output = client.exchange("control", dict(schema_version="1.0", operation="read_output",
         body=handle | dict(stream="stdout", offset=0, length=64)))
     assert base64.b64decode(output["data"]).strip() == b"production-daemon-ok"
