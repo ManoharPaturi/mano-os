@@ -593,6 +593,16 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     assert attached_status["prompt"]["task_id"] == terminal_task["task_id"]
     assert human_receipt["prompt"]["id"] not in {
         item["id"] for item in rpc("control", discovery, actor="root")["prompts"]}
+    queue_cycle = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+        "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.lifecycle", "--mock"],
+        input=json.dumps(dict(next_prompt=True, plan=dict(args=dict(
+            argv=["/usr/bin/true"], cwd=".", timeout_seconds=1), reason="Queue cycle witness"))),
+        capture_output=True, text=True, timeout=35, check=False)
+    assert queue_cycle.returncode == 0, queue_cycle.stderr
+    queue_task = json.loads(queue_cycle.stdout)["task"]
+    assert queue_task["status"] == "awaiting_grant"
+    assert queue_task["task_id"] != terminal_task["task_id"]
+    assert rpc("control", discovery, actor="root")["prompts"] == []
     duplicate_creation = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
@@ -797,6 +807,7 @@ finally:client.close()
         authenticated_native_human_prompt_queue=True,
         default_prompt_handler_actual_native_transport=True,
         protected_pending_prompt_discovery=True,
+        installed_bounded_queue_cycle=True,
         human_prompt_claim_to_actual_task=True,
         prompt_creation_replay_denied=True,
         prompt_duplicate_and_malformed_cases_verified=True,
