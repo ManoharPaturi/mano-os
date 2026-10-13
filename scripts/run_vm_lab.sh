@@ -194,5 +194,8 @@ if [ "$result" = 0 ]; then
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_resource_pins.py' \
     > "$repo_root/evidence/resource-pins.json"
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_provision.py' \
+    > "$repo_root/evidence/provisioning.json"
 fi
 exit "$result"

@@ -108,3 +108,12 @@ fix, one start metadata, replaynofreshFD, release/lostregistry/quota boundaries.
 NO provisioningwire/executor yet; publicpropose metadata mustrouteRegistry.prepare
 beforeState.authorize oncewired, notpretendpre-reserved intentsacquiredFDs.
 READMEstalePAMclaim fixed. ADR0017. NeednewPR/allCIbeforemerge. Fullgoalactive.
+
+Latest PR27 mainfb0b3add89c1df196bf22ce33d21e966f7fbaba3 accepted
+CI38346608528 all3success; postmain38347435709 stillpendinglastcheck.
+Currentfeat/phase1-provision-receiver rootkernelpeer+message1directoryFD
+O_PATH/CLOEXEC/schema/owner==broker/gid==caller/mode0770or2770 validation,
+registryTaskcreation andcleanup. NewDebianprobe realnonrootreceiver/rootFD
+plus11denials/per-requestFDdeltas. No daemon/publicprepare wiring yet.
+ADR0018 boundaries; local67tests8MacLinuxskips pendingrerun. NeedallCIbeforemerge.
+Full original goalactive. Disk14GiB93%last, no localimages oruserdata deletion.
