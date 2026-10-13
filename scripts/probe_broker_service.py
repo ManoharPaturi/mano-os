@@ -609,6 +609,22 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
         capture_output=True, text=True, timeout=5, check=False)
     assert duplicate_creation.returncode == 1
     assert json.loads(duplicate_creation.stdout)["ok"] is False
+    cloud_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
+        resource_id=terminal_task["resource_id"], capability="model.plan",
+        args=dict(provider="openai", model="explicit-snapshot",
+                  prompt=managed["context"]["prompt"], max_output_tokens=100),
+        idempotency_key="cloud-disclosure-once", reason="Exact model disclosure witness")
+    cloud_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=cloud_proposal), actor=identity.name)["approval"]
+    cloud_view = human(dict(mode="view", id=cloud_pending["approval_id"]))["view"]
+    assert cloud_view["capability"] == "model.plan"
+    assert cloud_view["args"] == cloud_proposal["args"]
+    assert human(dict(mode="confirm", view=cloud_view, password="wrong-ci-password")) == {
+        "ok": False}
+    cloud_grant = human(dict(mode="confirm", view=cloud_view, password=password))
+    assert cloud_grant["ok"]
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=cloud_proposal | {"grant_id": cloud_grant["grant_id"]}), actor=identity.name) == denied
     terminal_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
         resource_id=terminal_task["resource_id"], capability="terminal.run",
         args=dict(argv=["/usr/bin/python3", "-c",
@@ -808,6 +824,8 @@ finally:client.close()
         default_prompt_handler_actual_native_transport=True,
         protected_pending_prompt_discovery=True,
         installed_bounded_queue_cycle=True,
+        native_pam_model_disclosure_grant=True,
+        model_executor_unavailable_denied=True,
         human_prompt_claim_to_actual_task=True,
         prompt_creation_replay_denied=True,
         prompt_duplicate_and_malformed_cases_verified=True,

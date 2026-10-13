@@ -1,17 +1,23 @@
 """Responses wire contract, no credentials, network or execution authority."""
 
 import json
-import re
 
-from mano_protocol.actions import MAX_PACKET, ActionRequest, canonical, text, unique_object
+from mano_protocol.actions import (
+    MAX_PACKET,
+    ActionRequest,
+    canonical,
+    model_identifier,
+    text,
+    unique_object,
+)
 
 MAX_RESPONSE = 262144
 FUNCTION = 'propose_terminal'
 
 
 def configuration(model, max_output_tokens):
-    if (not isinstance(model, str) or not re.fullmatch(r'[A-Za-z0-9._/-]{1,128}', model)
-            or type(max_output_tokens) is not int or not 16 <= max_output_tokens <= 8192):
+    model_identifier(model)
+    if type(max_output_tokens) is not int or not 16 <= max_output_tokens <= 8192:
         raise ValueError('Invalid explicit provider configuration')
 
 
