@@ -37,28 +37,13 @@ class LaunchAdmission:
                 setattr(self, name, -1)
 
 
-def admit(packet, descriptors, *, peer):
+def task_account(caller_uid):
     if os.geteuid() != 0:
-        raise Denied("Root launch admission context required")
+        raise Denied("Root task identity validation required")
     broker = pwd.getpwnam("mano-broker")
-    if peer.uid != broker.pw_uid or peer.uid == 0:
-        raise Denied("Private broker-to-root identity required")
-    envelope = json.loads(packet.decode("utf8"), object_pairs_hook=unique_object)
-    if (
-        not isinstance(envelope, dict)
-        or set(envelope) != {"schema_version", "operation", "body"}
-        or envelope["schema_version"] != "1.0"
-        or envelope["operation"] != "launch_task"
-        or not isinstance(envelope["body"], dict)
-    ):
-        raise Denied("Unknown launch envelope")
-    body = envelope["body"]
-    if set(body) != {"action_id", "caller_uid", "request"}:
-        raise Denied("Unknown launch fields")
-    action = identifier(body["action_id"])
-    if type(body["caller_uid"]) is not int or body["caller_uid"] < 1000:
+    if type(caller_uid) is not int or caller_uid < 1000:
         raise Denied("Unprivileged allocated task UID required")
-    account = pwd.getpwuid(body["caller_uid"])
+    account = pwd.getpwuid(caller_uid)
     request_group = grp.getgrnam("mano-request")
     primary = grp.getgrgid(account.pw_gid)
     if (
@@ -83,6 +68,29 @@ def admit(packet, descriptors, *, peer):
     ).split()
     if status[:2] != [account.pw_name, "L"]:
         raise Denied("Task login must remain locked")
+    return account
+
+
+def admit(packet, descriptors, *, peer):
+    if os.geteuid() != 0:
+        raise Denied("Root launch admission context required")
+    broker = pwd.getpwnam("mano-broker")
+    if peer.uid != broker.pw_uid or peer.uid == 0:
+        raise Denied("Private broker-to-root identity required")
+    envelope = json.loads(packet.decode("utf8"), object_pairs_hook=unique_object)
+    if (
+        not isinstance(envelope, dict)
+        or set(envelope) != {"schema_version", "operation", "body"}
+        or envelope["schema_version"] != "1.0"
+        or envelope["operation"] != "launch_task"
+        or not isinstance(envelope["body"], dict)
+    ):
+        raise Denied("Unknown launch envelope")
+    body = envelope["body"]
+    if set(body) != {"action_id", "caller_uid", "request"}:
+        raise Denied("Unknown launch fields")
+    action = identifier(body["action_id"])
+    account = task_account(body["caller_uid"])
     request = ActionRequest.parse(canonical(body["request"]).encode())
     if request.capability != Capability.RUN or len(descriptors) != 2:
         raise Denied("Terminal request and exactly two descriptors required")
