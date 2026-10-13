@@ -5,63 +5,19 @@ its private State. The listener must enable SO_PASSCRED before accepting request
 Systemd/socket provisioning and PAM control are separate work.
 """
 
-import array
 import base64
 import hashlib
 import json
-import os
-import socket
 import time
 
 from mano_protocol.transport import CREDENTIALS as CREDENTIALS
 from mano_protocol.transport import Peer as Peer
+from mano_protocol.transport import receive as receive
 
 from .approvals import Approvals
 from .artifacts import durable_chunk
-from .protocol import MAX_PACKET, ActionRequest, canonical, identifier, unique_object
+from .protocol import ActionRequest, canonical, identifier, unique_object
 from .state import Denied
-
-
-def receive(connection):
-    if connection.family != socket.AF_UNIX or connection.type != socket.SOCK_SEQPACKET:
-        raise Denied("Expected local packet transport")
-    peer = Peer(
-        *CREDENTIALS.unpack(
-            connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, CREDENTIALS.size)
-        )
-    )
-    connection.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
-    # Accommodate and close every possible Linux SCM_RIGHTS descriptor (max253).
-    packet, ancillary, flags, _ = connection.recvmsg(
-        MAX_PACKET,
-        socket.CMSG_SPACE(CREDENTIALS.size) + socket.CMSG_SPACE(253 * 4),
-        socket.MSG_CMSG_CLOEXEC,
-    )
-    credentials = []
-    unexpected = False
-    for level, kind, data in ancillary:
-        if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
-            descriptors = array.array("i")
-            descriptors.frombytes(data[: len(data) - len(data) % descriptors.itemsize])
-            for fd in descriptors:
-                os.close(fd)
-            unexpected = True
-        elif level == socket.SOL_SOCKET and kind == socket.SCM_CREDENTIALS:
-            if len(data) != CREDENTIALS.size:
-                unexpected = True
-            else:
-                credentials.append(Peer(*CREDENTIALS.unpack(data)))
-        else:
-            unexpected = True
-    if (
-        unexpected
-        or flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)
-        or len(credentials) != 1
-        or credentials[0] != peer
-        or not packet
-    ):
-        raise Denied("Truncated packet, inherited connection or unexpected ancillary data")
-    return peer, packet
 
 
 def public_action(row):
