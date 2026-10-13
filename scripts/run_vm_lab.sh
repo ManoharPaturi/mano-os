@@ -140,7 +140,7 @@ PYTHONPATH="$repo_root/src" python3 "$repo_root/scripts/serial_rescue.py" \
 serial_result=$?
 set -e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
-  'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+  'sudo tar --exclude=./report.json -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
 if [ "$serial_result" != 0 ]; then exit "$serial_result"; fi
 # Preserve first-root report separately; recovered-root observations are a new run.
 python3 - "$repo_root/evidence" <<'PY_COPY'
