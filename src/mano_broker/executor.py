@@ -116,6 +116,8 @@ class Executor:
             if status != "finished" or type(response.get("return_code")) is not int:
                 raise Denied("No explicit completed exit outcome")
             code = response["return_code"]
+            if code == 0 and response.get("reason") != "completed":
+                raise Denied("Zero exit without completed runner outcome")
             self.state.transition(action_id, "done" if code == 0 else "failed", exit_code=code)
             self.jobs.pop(action_id)
             return response

@@ -264,3 +264,8 @@ actual root-service VM fixture. No public Runtime execution or production daemon
 integration yet; grants in the VM originate from trusted operator fixture, notPAM.
 Fixed launcher ceilings require grant>=128MiB24pids20CPU; narrower grants denied.
 Local91tests12MacLinuxskips pass. Actual executor VM acceptance pending.
+
+PR41 now verified merged by GitHub accountManoharPaturi at13:29:57UTC,
+merge8e0e96a51be134dc0539f54d422757ebcab5e0c3, all3currentheadchecksSUCCESS.
+Accepted production_client_transport=true artifact11819101273. Local executor
+branch merged origin/main (36aec19) to stay current, no protection bypass.

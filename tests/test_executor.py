@@ -67,7 +67,7 @@ class DurableExecutorTests(unittest.TestCase):
         else:
             state = 'finished' if operation == 'status' else 'unknown'
         return dict(schema_version='1.0', ok=True, effect_verified=False, state=state,
-                    return_code=0, **self.handle)
+                    return_code=0, reason="completed", **self.handle)
 
     def test_start_is_durable_once_and_exit_remains_unverified(self):
         self.executor.launch(self.action)
