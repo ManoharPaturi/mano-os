@@ -306,6 +306,19 @@ Registry/executor/rootservice. Not actualkernelbrokerrequest/PAMacceptance.
 PR42merged7258a64 acceptedjournalVM. PR43freshhead6482552 CI38407737065 LIVE;
 old38407162561 auto-supersededcancelled, notaccepted. Postmain42 38407624336 LIVE.
 
+# Native PAM terminal integration draft
+
+PR43merged0053fcdacf1670819f4d872e678d7108e2e20406 afterall3SUCCESSrun38407737065.
+Acceptedartifact11820206179 productiondaemon/journalexecution/Stopcancellationtrue,
+PAMfalse. PR44oldhead743799a run38408278683 all3SUCCESS butnotfinalhead; branch
+mergedoriginmain to6f650b9, freshCI38409320590 LIVE. Postmain43 38409267628 LIVE.
+Currentfeat/phase1-pam-terminal-flow extends existingrealbroker/PAMfixture with
+actualRootpackagedlauncher+guard+mano_labcode andRootallocatedtask/workspace.
+Real taskUIDcallsrequest_approval, humanPAMwrongpwnoeffect/correctpwgrant,
+changedargsdeny/exactproposalintent/runtimeexec/doneknownfile/verified0/replay/
+wrongcallerstatusdenied. No directgrantinjection; physicalinputnull/fixturepassword
+inmemory only. Cleanupstopsallunits beforeownworkspace/identity/nativecleanup.
+ActualVMproofpending, fullversiongatesstillactive. No physical/verifiedartifactclaims.
 PR44 fresh38409320590 failedinstalledclient; subprocesscapture hidinnerstderr,
 exactinitialfailureunknown. Added bounded error-type/errno journalevents andstderr
 exposure. Sourceinspectionalsofoundobserverrace: Rootstatus couldfinishafter

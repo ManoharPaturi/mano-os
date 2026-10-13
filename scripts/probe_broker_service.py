@@ -12,6 +12,10 @@ import sys
 import time
 from pathlib import Path
 
+from mano_broker.identities import LOCK, allocate_identity
+from mano_broker.sandbox import GUARD
+from mano_broker.workspaces import BASE, create_workspace
+
 ROOT = Path("/opt/mano-lab")
 STATE = Path("/var/lib/mano-broker/runtime")
 CODE = Path("/usr/lib/mano-os")
@@ -31,6 +35,9 @@ UNITS = (
     "mano-broker-provision.socket",
     "mano-approve.service",
     "mano-approve.socket",
+    "mano-launcher.service",
+    "mano-launcher-prepare.socket",
+    "mano-launcher-control.socket",
 )
 assert (
     os.geteuid() == 0 and Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
@@ -40,7 +47,8 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
     "qemu",
 }
 assert all(
-    not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, *SOCKETS.values())
+    not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, GUARD, BASE,
+                           LOCK, *SOCKETS.values())
 )
 assert all(not (Path("/etc/systemd/system") / u).exists() for u in UNITS)
 old_mode = STATE.parent.stat().st_mode & 0o777
@@ -48,6 +56,7 @@ installed = []
 created_user = False
 created_group = False
 joined = False
+identity = None
 
 
 def command(*args):
@@ -171,13 +180,19 @@ try:
     subprocess.run(["usermod", "-a", "-G", "mano-request", "mano-worker"], check=True)
     joined = True
     CODE.mkdir(mode=0o755)
-    for package in ("mano_broker", "mano_prompt"):
+    for package in ("mano_broker", "mano_prompt", "mano_lab"):
         shutil.copytree(
             ROOT / "src" / package, CODE / package, ignore=shutil.ignore_patterns("__pycache__")
         )
         for file in (CODE / package).rglob("*.py"):
             file.chmod(0o444)
         (CODE / package).chmod(0o555)
+    GUARD.parent.mkdir(mode=0o755, exist_ok=True)
+    subprocess.run(["cc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+        "-fstack-protector-strong", "-D_FORTIFY_SOURCE=2",
+        str(ROOT / "native/mano_sandbox_guard.c"), "-lseccomp", "-Wl,-z,relro,-z,now",
+        "-o", str(GUARD)], check=True)
+    GUARD.chmod(0o555)
     LIBRARY.parent.mkdir(mode=0o755, exist_ok=True)
     NATIVE.parent.mkdir(mode=0o755, exist_ok=True)
     subprocess.run(
@@ -251,6 +266,8 @@ try:
             "mano-broker-control.socket",
             "mano-broker-provision.socket",
             "mano-approve.socket",
+            "mano-launcher-prepare.socket",
+            "mano-launcher-control.socket",
         ],
         check=True,
     )
@@ -500,6 +517,62 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     elapsed = time.monotonic() - started
     slow.wait(timeout=6)
     assert elapsed < 5
+    # Actual allocated caller → kernel broker socket → native PAM → journal
+    # → private root launcher → sandboxed terminal. No direct grant injection.
+    identity = allocate_identity()
+    terminal_workspace, terminal_fd = create_workspace(human_uid=1002, caller_uid=identity.uid)
+    os.close(terminal_fd)
+    terminal_task = rpc("provision", dict(schema_version="1.0", operation="provision_task",
+        body=dict(human_uid=1002, caller_uid=identity.uid, mode="supervised",
+                  classification="internal")), actor="root", directory=terminal_workspace)
+    assert terminal_task["ok"]
+    terminal_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
+        resource_id=terminal_task["resource_id"], capability="terminal.run",
+        args=dict(argv=["/usr/bin/python3", "-c",
+            "from pathlib import Path;"
+            "Path('/workspace/live-result').write_text('pam-terminal-ok')"],
+            cwd=".", timeout_seconds=10), idempotency_key="pam-terminal-once",
+        reason="actual PAM-bound terminal integration")
+    terminal_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=terminal_proposal), actor=identity.name)["approval"]
+    terminal_view = human(dict(mode="view", id=terminal_pending["approval_id"]))["view"]
+    assert human(dict(mode="confirm", view=terminal_view, password="wrong-ci-password")) == {
+        "ok": False
+    }
+    assert not (terminal_workspace / "live-result").exists()
+    terminal_grant = human(dict(mode="confirm", view=terminal_view, password=password))
+    assert terminal_grant["ok"]
+    terminal_body = terminal_proposal | {"grant_id": terminal_grant["grant_id"]}
+    changed = terminal_body | {"args": terminal_body["args"] | {"timeout_seconds": 11}}
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+                               body=changed), actor=identity.name) == denied
+    assert not (terminal_workspace / "live-result").exists()
+    terminal_action = rpc("request", dict(schema_version="1.0", operation="propose",
+        body=terminal_body), actor=identity.name)
+    assert terminal_action["ok"] and terminal_action["fresh"]
+    assert terminal_action["action"]["state"] == "intent"
+    terminal_query = dict(schema_version="1.0", operation="status", body=dict(
+        task_id=terminal_task["task_id"], action_id=terminal_action["action"]["id"]))
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        terminal_status = rpc("request", terminal_query, actor=identity.name)["action"]
+        if terminal_status["state"] in {"done", "failed", "unknown"}:
+            break
+        time.sleep(0.1)
+    assert terminal_status["state"] == "done", terminal_status
+    assert terminal_status["verified"] == 0
+    assert (terminal_workspace / "live-result").read_text() == "pam-terminal-ok"
+    terminal_replay = rpc("request", dict(schema_version="1.0", operation="propose",
+        body=terminal_body), actor=identity.name)
+    assert not terminal_replay["fresh"]
+    assert terminal_replay["action"]["id"] == terminal_action["action"]["id"]
+    assert terminal_replay["action"]["state"] == "done"
+    assert rpc("request", terminal_query) == denied
+    terminal_report = dict(actual_kernel_task_peer=True, allocated_task_uid=identity.uid,
+        native_pam_grant=True, wrong_password_no_effect=True, changed_arguments_denied=True,
+        durable_terminal_done=True,
+        workspace_effect_observed=True, effect_verified=False, replay_no_execution=True,
+        wrong_caller_status_denied=True, physical_input_provenance=None)
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
@@ -519,7 +592,7 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     print(
         json.dumps(
             dict(
-                scope="live descriptor-provisioned request runtime; executor not integrated",
+                scope="live broker/PAM/allocated-task terminal execution in disposable VM",
                 broker_uid=broker_uid,
                 no_new_privs=True,
                 seccomp_filter=True,
@@ -527,6 +600,7 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
                 service_limits=limits,
                 kernel_denials=denials,
                 native_pam=native_report,
+                terminal_execution=terminal_report,
                 real_root_fd_provisioned=True,
                 prepared_target_fd_verified=True,
                 mutation_syscalls_kernel_denied=True,
@@ -541,7 +615,7 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
                 lost_resource_denied=True,
                 fresh_provisioning_required=True,
                 slow_client_bounded_seconds=elapsed,
-                no_operation_executed=True,
+                no_operation_executed=False,
                 execution_state_seeded_for_recovery=True,
                 model_connected=False,
                 production_execution_authorized=False,
@@ -570,7 +644,7 @@ except BaseException:
 finally:
     subprocess.run(["systemctl", "stop", *UNITS], check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
-    for file in (LIBRARY, NATIVE, POLICY, PAM, *installed):
+    for file in (LIBRARY, NATIVE, POLICY, PAM, GUARD, *installed):
         file.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     subprocess.run(
@@ -578,10 +652,16 @@ finally:
         check=False,
         capture_output=True,
     )
-    for directory in (STATE, CODE, WORK):
+    for directory in (STATE, CODE, WORK, BASE):
         if directory.exists():
             shutil.rmtree(directory)
     STATE.parent.chmod(old_mode)
+    if identity is not None:
+        subprocess.run(["userdel", identity.name], check=False, capture_output=True)
+    LOCK.unlink(missing_ok=True)
+    launcher_dir = Path("/run/mano-launcher")
+    if launcher_dir.exists():
+        launcher_dir.rmdir()
     if joined:
         subprocess.run(
             ["gpasswd", "-d", "mano-worker", "mano-request"], check=False, capture_output=True
