@@ -81,14 +81,18 @@ class Runtime:
         for action_id in list(self.executor.jobs):
             try:
                 self.executor.poll(action_id)
-            except (OSError, ValueError, KeyError, TypeError):
-                pass  # Executor journals unknown and cancels; never automatically retry.
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.state.event(action_id, "terminal-poll-denied", {
+                    "error_type": type(error).__name__, "errno": getattr(error, "errno", None)
+                })  # No arguments, paths, grants or secrets in diagnostics.
         if self.pending and len(self.executor.jobs) < 2:
             action_id = self.pending.popleft()
             try:
                 self.executor.launch(action_id)
-            except (OSError, ValueError, KeyError, TypeError):
-                pass  # Failed/unknown intent is durable; idempotency cannot reschedule it.
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.state.event(action_id, "terminal-dispatch-denied", {
+                    "error_type": type(error).__name__, "errno": getattr(error, "errno", None)
+                })  # Failed/unknown intent is durable; never reschedule it.
 
     def close(self):
         try:

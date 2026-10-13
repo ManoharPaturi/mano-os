@@ -60,6 +60,11 @@ try:
 
     action = prepare("print('production-daemon-ok')", "daemon-once")
     runtime.tick()
+    if action not in executor.jobs:
+        events = state.db.execute(
+            "SELECT event,details_json FROM events WHERE action_id=?", (action,)
+        ).fetchall()
+        raise AssertionError("Dispatch did not retain job: " + repr([tuple(e) for e in events]))
     handle = executor.jobs[action].copy()
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
