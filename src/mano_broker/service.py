@@ -123,6 +123,7 @@ def serve_loop(selector, budgets, state, runtime, boot_id):
     next_tick = time.monotonic()
     while True:
         notify("WATCHDOG=1")
+        runtime.sync_stop()  # Protected approval control also observes the native latch.
         events = sorted(selector.select(0.5), key=lambda item: item[0].data != "control")
         for key, _ in events:
             try:

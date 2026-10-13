@@ -634,6 +634,9 @@ else:raise AssertionError('task reached native Stop')
 """
     subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--", "python3", "-c",
                     denied_client], check=True, capture_output=True, text=True, timeout=5)
+    pending_revoke = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=terminal_proposal | {"idempotency_key": "pending-native-stop"}),
+        actor=identity.name)["approval"]
     broker_pid = ready()
     launcher_pid = int(command(
         "systemctl", "show", "mano-launcher.service", "--property=MainPID", "--value"
@@ -658,7 +661,40 @@ else:raise AssertionError('task reached native Stop')
     terminal_report["native_stop_capabilities_zero"] = True
     terminal_report["native_stop_task_cgroup_drained"] = True
     terminal_report["native_stop_latch_written"] = True
-    terminal_report["native_stop_grant_latch_integrated"] = False
+    query_stop = dict(schema_version="1.0", operation="status", body=dict(
+        task_id=terminal_task["task_id"], action_id=stop_action["action"]["id"]))
+    stopped_status = rpc("request", query_stop, actor=identity.name)["action"]
+    assert stopped_status["state"] == "unknown" and stopped_status["verified"] == 0
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=terminal_body), actor=identity.name) == denied
+    revoked = rpc("request", dict(schema_version="1.0", operation="approval_status",
+        body=dict(approval_id=pending_revoke["approval_id"])), actor=identity.name)
+    assert revoked["approval"]["state"] == "revoked"
+    private_denial = """import array,json,os,sys
+from mano_broker.launch_client import Client
+packet=json.loads(sys.stdin.read());fds=[]
+try:
+ fds=[os.open(sys.argv[1],os.O_PATH|os.O_DIRECTORY|os.O_CLOEXEC) for _ in range(2)]
+ c=Client();result=c.exchange('prepare',packet,fds);c.close()
+ assert result['ok'] is False
+finally:
+ for fd in fds:os.close(fd)
+"""
+    negative = dict(schema_version="1.0", operation="launch_task", body=dict(
+        action_id="f" * 32, caller_uid=identity.uid, request=terminal_body,
+        limits=dict(memory_bytes=64*1024**2, pids=16, cpu_percent=10)))
+    subprocess.run(["/usr/sbin/runuser", "-u", "mano-broker", "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "python3", "-c", private_denial, str(terminal_workspace)],
+        input=json.dumps(negative), text=True, capture_output=True, check=True, timeout=10)
+    subprocess.run(["systemctl", "kill", "--signal=SIGKILL", "mano-broker.service"], check=True)
+    ready(broker_pid)
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=terminal_body), actor=identity.name) == denied
+    assert (STOP_STATE / "state").read_text() == "latched\n"
+    terminal_report["native_stop_grant_latch_integrated"] = True
+    terminal_report["native_stop_pending_revoked"] = True
+    terminal_report["native_stop_root_preparation_denied"] = True
+    terminal_report["native_stop_restart_no_rearm"] = True
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,

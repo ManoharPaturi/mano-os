@@ -32,6 +32,10 @@ from mano_broker.workspaces import BASE, create_workspace
 
 STATE = Path("/run/mano-delegation-ci")
 JOURNAL = Path("/run/mano-journal-ci")
+STOP_STATE = Path("/var/lib/mano-stopd")
+STOP_NATIVE = Path("/usr/libexec/mano-stopd")
+STOP_POLICY = Path("/etc/mano/human.uid")
+STOP_UNITS = [Path("/etc/systemd/system/mano-stopd." + kind) for kind in ("service", "socket")]
 CODE = Path("/usr/lib/mano-os")
 UNIT_FILE = Path("/etc/systemd/system/mano-launcher.service")
 SOCKET_UNITS = {name: Path(f"/etc/systemd/system/mano-launcher-{name}.socket") for name in PATHS}
@@ -617,6 +621,8 @@ assert not STATE.exists() and not CODE.exists() and not UNIT_FILE.exists() and n
 assert not BASE.exists() and not GUARD.exists()
 assert not LIBRARY.exists() and not TRANSPORT_DIR.exists() and not JOURNAL.exists()
 assert all(not path.exists() for path in SOCKET_UNITS.values())
+assert not STOP_STATE.exists() and not STOP_NATIVE.exists() and not STOP_POLICY.exists()
+assert all(not path.exists() for path in STOP_UNITS)
 assert "mano-broker" not in {p.pw_name for p in pwd.getpwall()}
 assert "mano-request" not in {g.gr_name for g in grp.getgrall()}
 created = []
@@ -671,6 +677,19 @@ try:
     JOURNAL.mkdir(mode=0o700)
     broker = pwd.getpwnam("mano-broker")
     os.chown(JOURNAL, broker.pw_uid, broker.pw_gid)
+    STOP_POLICY.parent.mkdir(mode=0o755, exist_ok=True)
+    STOP_POLICY.write_text("1002\n")
+    STOP_POLICY.chmod(0o600)
+    subprocess.run(["cc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+        "-fstack-protector-strong", "-D_FORTIFY_SOURCE=2", "/opt/mano-lab/native/mano_stopd.c",
+        *subprocess.check_output(["pkg-config", "--cflags", "--libs", "libsystemd"],
+                                 text=True).split(), "-Wl,-z,relro,-z,now", "-o", str(STOP_NATIVE)],
+        check=True)
+    STOP_NATIVE.chmod(0o555)
+    for unit in STOP_UNITS:
+        shutil.copyfile(Path("/opt/mano-lab/packaging/systemd") / unit.name, unit)
+    subprocess.run(["systemctl", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "start", "mano-stopd.socket", "mano-stopd.service"], check=True)
     STATE.mkdir(mode=0o700)
     (STATE / "identity.json").write_text(
         json.dumps({"uid": identity.uid, "gid": identity.gid, "workspace": str(workspace)})
@@ -777,10 +796,20 @@ except BaseException:
     raise
 finally:
     subprocess.run(
-        ["systemctl", "stop", "mano-launcher.service", *(p.name for p in SOCKET_UNITS.values())],
+        ["systemctl", "stop", "mano-launcher.service", *(p.name for p in SOCKET_UNITS.values()),
+         *(p.name for p in STOP_UNITS)],
         check=False,
         capture_output=True,
     )
+    for unit in STOP_UNITS:
+        unit.unlink(missing_ok=True)
+    STOP_NATIVE.unlink(missing_ok=True)
+    STOP_POLICY.unlink(missing_ok=True)
+    if STOP_STATE.exists():
+        shutil.rmtree(STOP_STATE)
+    stop_socket_dir = Path("/run/mano-stopd")
+    if stop_socket_dir.exists():
+        stop_socket_dir.rmdir()
     UNIT_FILE.unlink(missing_ok=True)
     for path in SOCKET_UNITS.values():
         path.unlink(missing_ok=True)

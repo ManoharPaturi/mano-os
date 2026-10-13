@@ -12,7 +12,7 @@ from mano_broker.state import Denied
 
 class PrivateControllerGuards(unittest.TestCase):
     def setUp(self):
-        self.controller = Controller(None)
+        self.controller = Controller(None, stop_check=lambda: None)
         self.peer = Peer(200, 999, 999)
         self.child = Mock()
         self.child.state = "finished"
@@ -72,3 +72,10 @@ class PrivateControllerGuards(unittest.TestCase):
         for peer in (Peer(200, 0, 0), Peer(200, 1005, 1005)):
             with self.assertRaises(Denied):
                 self.invoke("status", self.body, peer)
+
+    def test_native_latch_denies_start_even_with_authenticated_broker(self):
+        self.controller.stop_check = Mock(side_effect=Denied('native Stop latched'))
+        self.child.start.side_effect = lambda authority: authority()
+        with self.assertRaises(Denied):
+            self.invoke('start', self.body)
+        self.controller.stop_check.assert_called_once()
