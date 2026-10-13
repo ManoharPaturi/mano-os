@@ -1,7 +1,7 @@
 [Unit]
 Description=mano non-root request broker
-Requires=mano-broker.socket mano-broker-control.socket mano-broker-provision.socket
-After=mano-broker.socket mano-broker-control.socket mano-broker-provision.socket
+Requires=mano-broker.socket mano-broker-control.socket mano-broker-provision.socket mano-stopd.service
+After=mano-broker.socket mano-broker-control.socket mano-broker-provision.socket mano-stopd.service
 StartLimitIntervalSec=60
 StartLimitBurst=5
 

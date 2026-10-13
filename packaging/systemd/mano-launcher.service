@@ -1,7 +1,7 @@
 [Unit]
 Description=mano private task launcher
-Requires=mano-launcher-prepare.socket mano-launcher-control.socket
-After=mano-launcher-prepare.socket mano-launcher-control.socket
+Requires=mano-launcher-prepare.socket mano-launcher-control.socket mano-stopd.service
+After=mano-launcher-prepare.socket mano-launcher-control.socket mano-stopd.service
 
 [Service]
 Type=exec

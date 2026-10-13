@@ -10,15 +10,17 @@ from .ipc import dispatch, public_action, receive
 from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
 from .registry import Registry
 from .state import Denied
+from .stop_state import latched
 
 
 class Runtime:
-    def __init__(self, state, *, boot_id, launcher=None):
+    def __init__(self, state, *, boot_id, launcher=None, stop_reader=None):
         self.state = state
         self.boot_id = boot_id
         self.registry = Registry()
         self.pending = deque()
         self.launcher = launcher
+        self.stop_reader = stop_reader or (latched if launcher else None)
         self.executor = (
             Executor(state, self.registry, launcher, boot_id=boot_id) if launcher else None
         )
@@ -30,6 +32,19 @@ class Runtime:
             state.db.execute("UPDATE actions SET state='failed' WHERE state='intent'")
             state.db.execute("UPDATE meta SET value=value+1 WHERE key='epoch'")
             state.event(None, "runtime-authority-renewal", {"epoch": state.meta("epoch")})
+        self.sync_stop()
+
+    def sync_stop(self):
+        if self.stop_reader is None:
+            return
+        try:
+            stopped = self.stop_reader()
+            if type(stopped) is not bool:
+                stopped = True
+        except (OSError, ValueError):
+            stopped = True  # Missing/corrupt authority cannot enable execution.
+        if stopped and not self.state.meta("latched"):
+            self.state.emergency_stop()
 
     def live_task(self, body, peer):
         if not isinstance(body, dict):
@@ -51,6 +66,7 @@ class Runtime:
             raise Denied("No live provisioned task")
 
     def dispatch(self, packet, *, peer, now):
+        self.sync_stop()
         value = json.loads(packet.decode("utf8"), object_pairs_hook=unique_object)
         if (
             not isinstance(value, dict)
@@ -76,6 +92,7 @@ class Runtime:
         return dispatch(self.state, packet, peer=peer, now=now, boot_id=self.boot_id)
 
     def tick(self):
+        self.sync_stop()
         if self.executor is None:
             return
         for action_id in list(self.executor.jobs):

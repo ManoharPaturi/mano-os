@@ -365,3 +365,24 @@ Rootreply→populated0/latch/bothstillT→CONTfinally. MalformedSS deniedwithout
 taskUIDsocketEACCES. Stopsallownunitsbeforeownfiles/StateDircleanup.
 IMPORTANTnative_stop_grant_latch_integratedFALSE: nofuture-start/grant/restart
 coupling orPAMrearm yet. FullStopcontract NOT complete untilthosegatespass.
+
+# Native latch coupling draft
+
+PR46merged314e488faa85b1777f3367f6c648a8e7645b38f3 afterhead9dabca3/all3SUCCESS
+38414184726, artifact11824765108 lower_grant_kernel_limitstrue accepted.
+PR47priorhead e5eda65 CI38414621596 all3SUCCESS/nativeCcompilepass, artifact
+11823462600 truefrozenbroker+launcher/nativecap0/taskpopulated0/latchwritten,
+latchIntegratedFALSE. RefreshedPR47head64373b5 needsfreshCIbeforemerge.
+Currentfeat/phase1-stop-latch-coupling Rootstop_state fixedread-onlyauthority,
+Rootparent/fileowner/mode/nlink/contentvalidation, missing/corrupt/changingdeny.
+ControllerstopCheckbefore/afterprepare andinsidefreshStartcallback; blockedchild
+cancelontrip. Runtime.sync_stop beforedispatch/tick/serviceprotectedcontrol,
+StateemergencyStop onceadvancesepoch/revokes/intentsfailed/executingunknown,
+neverselfrearm evenifnativefilearmed. UnitsRequire/AfterNativeStopservice.
+DelegatedfixtureprovisionsrealnativeStop/policy/units tokeepstrictreadfailclosed,
+no fakeauthoritydefault. Unitexplicittrustedstop_reader/stop_check hooks forMocks.
+VMafternativekill verifiesunknown/replaydeny/pendingrevoked/privateRootpreparedenial/
+SIGKILLbrokerrestartno rearm, physicalnull andverifiedfalse retained.
+103tests12MacLinuxskips/Ruff/shell/diffpass. ActualVMcouplingpending. PAMboundrearm,
+nativegeneration/crashstate protocol andlauncherreplacementcgroup bindingaudit
+remainrequired; do notcallfullStopcomplete orfullversioncomplete.

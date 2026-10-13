@@ -17,6 +17,7 @@ from .launch_admission import receive as receive_admission
 from .protocol import canonical, identifier, unique_object
 from .runner import OUTPUT_LIMIT
 from .state import Denied
+from .stop_state import require_armed
 from .supervisor import Child
 
 
@@ -29,10 +30,11 @@ class Record:
 
 
 class Controller:
-    def __init__(self, manager):
+    def __init__(self, manager, *, stop_check=require_armed):
         self.manager = manager
         self.instance_id = secrets.token_hex(16)
         self.records = {}
+        self.stop_check = stop_check
 
     def actor(self, peer):
         if not isinstance(peer, Peer) or type(peer.pid) is not int or peer.pid <= 0:
@@ -47,14 +49,19 @@ class Controller:
 
     def prepare(self, admission):
         self.actor(admission.owner)
+        self.stop_check()
         if len(self.records) >= 64:
             raise Denied("Retained job quota exhausted")
         owner_fd = os.pidfd_open(admission.owner.pid)
+        child = None
         try:
             if select.select([owner_fd], [], [], 0)[0]:
                 raise Denied("Preparing broker already exited")
             child = Child(self.manager, admission)
+            self.stop_check()  # Stop may have tripped while the child was being prepared.
         except BaseException:
+            if child is not None:
+                child.cancel()
             os.close(owner_fd)
             raise
         job_id = secrets.token_hex(16)
@@ -104,7 +111,10 @@ class Controller:
         row = self.record(body, peer)
         child = row.child
         if operation == "start":
-            child.start(lambda: True)  # Authenticated broker assertion, not a forged model flag.
+            def authority():
+                self.stop_check()
+                return True  # Authenticated broker assertion plus independent root latch.
+            child.start(authority)
         elif operation == "cancel":
             child.cancel()
         else:

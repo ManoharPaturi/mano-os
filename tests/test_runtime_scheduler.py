@@ -15,7 +15,9 @@ class RuntimeSchedulerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.state = State(Path(self.temp.name).resolve() / 'state')
         with patch('mano_broker.runtime.Registry') as registry:
-            self.runtime = Runtime(self.state, boot_id='boot', launcher=Mock())
+            self.runtime = Runtime(
+                self.state, boot_id='boot', launcher=Mock(), stop_reader=lambda: False
+            )
             self.registry = registry.return_value
         self.runtime.executor = Mock()
         self.runtime.executor.jobs = {}
@@ -71,3 +73,25 @@ class RuntimeSchedulerTests(unittest.TestCase):
         self.runtime.tick()
         self.runtime.executor.launch.assert_called_once()
         self.assertFalse(self.runtime.pending)
+
+    def test_native_stop_revokes_and_does_not_automatically_rearm(self):
+        result = self.propose()
+        epoch = self.state.meta('epoch')
+        self.runtime.stop_reader = lambda: True
+        self.runtime.sync_stop()
+        self.assertEqual(self.state.meta('epoch'), epoch + 1)
+        self.assertEqual(self.state.meta('latched'), 1)
+        self.assertEqual(self.state.db.execute('SELECT revoked FROM grants').fetchone()[0], 1)
+        action = self.state.db.execute('SELECT state FROM actions WHERE id=?',
+                                      (result['action']['id'],)).fetchone()
+        self.assertEqual(action[0], 'failed')
+        self.runtime.sync_stop()
+        self.assertEqual(self.state.meta('epoch'), epoch + 1)
+        self.runtime.stop_reader = lambda: False
+        self.runtime.sync_stop()
+        self.assertEqual(self.state.meta('latched'), 1)
+
+    def test_missing_native_stop_authority_latches_broker(self):
+        self.runtime.stop_reader = Mock(side_effect=FileNotFoundError())
+        self.runtime.sync_stop()
+        self.assertEqual(self.state.meta('latched'), 1)
