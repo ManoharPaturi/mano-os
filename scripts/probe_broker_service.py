@@ -243,7 +243,17 @@ try:
         shutil.copyfile(ROOT / "packaging/systemd" / unit, dest)
         installed.append(dest)
     subprocess.run(["systemctl", "daemon-reload"], check=True)
-    subprocess.run(["systemctl", "start", "mano-broker.socket", "mano-approve.socket"], check=True)
+    subprocess.run(
+        [
+            "systemctl",
+            "start",
+            "mano-broker.socket",
+            "mano-broker-control.socket",
+            "mano-broker-provision.socket",
+            "mano-approve.socket",
+        ],
+        check=True,
+    )
     envelope = {
         "schema_version": "1.0",
         "operation": "provision_task",
