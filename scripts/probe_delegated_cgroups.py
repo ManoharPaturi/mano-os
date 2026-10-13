@@ -8,6 +8,8 @@ import json
 import os
 import pwd
 import shutil
+import socket
+import struct
 import subprocess
 import sys
 import time
@@ -18,8 +20,10 @@ from mano_broker.credentials import drop
 from mano_broker.identities import LOCK, allocate_identity
 from mano_broker.ipc import Peer
 from mano_broker.launch_admission import LaunchAdmission
-from mano_broker.launch_controller import Controller
+from mano_broker.launch_controller import Controller, serve_control, serve_prepare
+from mano_broker.launch_transport import PATHS, activated_listeners
 from mano_broker.protocol import ActionRequest, canonical
+from mano_broker.resources import LIBRARY
 from mano_broker.sandbox import GUARD
 from mano_broker.state import Denied
 from mano_broker.workspaces import BASE, create_workspace
@@ -27,6 +31,8 @@ from mano_broker.workspaces import BASE, create_workspace
 STATE = Path("/run/mano-delegation-ci")
 CODE = Path("/usr/lib/mano-os")
 UNIT_FILE = Path("/etc/systemd/system/mano-launcher.service")
+SOCKET_UNITS = {name: Path(f"/etc/systemd/system/mano-launcher-{name}.socket") for name in PATHS}
+TRANSPORT_DIR = Path("/run/mano-launcher")
 assert os.geteuid() == 0
 assert Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
 assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip() in {
@@ -35,6 +41,9 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
 }
 
 if sys.argv[1:] == ["--inner"]:
+    listeners = activated_listeners()
+    for listener in listeners.values():
+        listener.setblocking(False)
 
     def security_state(stage):
         fields = dict(
@@ -355,7 +364,142 @@ if sys.argv[1:] == ["--inner"]:
         os.close(root_fd)
         os.close(cwd_fd)
         assert not manager.jobs
+        proxy_report_r, proxy_report_w = os.pipe()
+        server_pid = os.getpid()
+        proxy = os.fork()
+        if proxy == 0:
+            try:
+                for entry in os.listdir("/proc/self/fd"):
+                    fd = int(entry)
+                    if fd not in {0, 1, 2, proxy_report_w}:
+                        try:
+                            os.close(fd)
+                        except OSError:
+                            pass
+                os.setgroups([])
+                os.setgid(broker_account.pw_gid)
+                os.setuid(broker_account.pw_uid)
+
+                def exchange(channel, envelope, with_fds=False):
+                    import array
+
+                    connection = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+                    connection.settimeout(8)
+                    connection.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+                    connection.connect(PATHS[channel])
+                    creator = struct.unpack(
+                        "3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+                    )
+                    assert creator[1] == 0
+                    rights = []
+                    if with_fds:
+                        rights = [
+                            os.open(workspace, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+                            for _ in range(2)
+                        ]
+                    try:
+                        connection.sendmsg(
+                            [canonical(envelope).encode()],
+                            [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", rights))]
+                            if rights
+                            else [],
+                        )
+                        packet, ancillary, flags, _ = connection.recvmsg(
+                            65536, socket.CMSG_SPACE(12)
+                        )
+                        assert not flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)
+                        assert len(ancillary) == 1
+                        assert ancillary[0][:2] == (socket.SOL_SOCKET, socket.SCM_CREDENTIALS)
+                        sender = struct.unpack("3i", ancillary[0][2])
+                        assert sender[0] == server_pid and sender[1] == 0
+                        return json.loads(packet)
+                    finally:
+                        for fd in rights:
+                            os.close(fd)
+                        connection.close()
+
+                def wire_prepare(action, source):
+                    request = dict(
+                        schema_version="1.0",
+                        task_id="a" * 32,
+                        grant_id="b" * 32,
+                        resource_id="c" * 32,
+                        capability="terminal.run",
+                        args=dict(
+                            argv=["/usr/bin/python3", "-c", source], cwd=".", timeout_seconds=10
+                        ),
+                        idempotency_key="wire-operator-" + action,
+                        reason="real broker transport; operator fixture grant only",
+                    )
+                    reply = exchange(
+                        "prepare",
+                        dict(
+                            schema_version="1.0",
+                            operation="launch_task",
+                            body=dict(action_id=action, caller_uid=account["uid"], request=request),
+                        ),
+                        True,
+                    )
+                    assert reply["ok"], reply
+                    return {key: reply[key] for key in ("instance_id", "job_id", "action_id")}
+
+                def wire_control(operation, handle, **extra):
+                    return exchange(
+                        "control",
+                        dict(schema_version="1.0", operation=operation, body=handle | extra),
+                    )
+
+                one = wire_prepare("d" * 32, "print('wire-ok')")
+                assert wire_control("start", one)["ok"]
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    state = wire_control("status", one)
+                    if state.get("state") == "finished":
+                        break
+                    time.sleep(0.01)
+                assert state["state"] == "finished" and state["return_code"] == 0
+                output = wire_control("read_output", one, stream="stdout", offset=0, length=64)
+                assert base64.b64decode(output["data"]).strip() == b"wire-ok"
+                assert output["effect_verified"] is False
+                running = wire_prepare("e" * 32, "import time;time.sleep(60)")
+                assert wire_control("start", running)["ok"]
+                concurrent = wire_prepare("f" * 32, "print('must-not-start')")
+                assert wire_control("status", running)["state"] == "running"
+                assert wire_control("cancel", concurrent)["state"] == "not-started"
+                assert wire_control("cancel", running)["state"] == "unknown"
+                os.write(proxy_report_w, b"ok")
+                os._exit(0)
+            except BaseException:
+                import traceback
+
+                traceback.print_exc()
+                os._exit(125)
+        os.close(proxy_report_w)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            for name, listener in listeners.items():
+                try:
+                    connection, _ = listener.accept()
+                except BlockingIOError:
+                    continue
+                with connection:
+                    if name == "prepare":
+                        serve_prepare(controller, connection)
+                    else:
+                        serve_control(controller, connection)
+            controller.sweep()
+            ended, proxy_status = os.waitpid(proxy, os.WNOHANG)
+            if ended:
+                assert os.waitstatus_to_exitcode(proxy_status) == 0
+                break
+            time.sleep(0.005)
+        else:
+            raise AssertionError("Persistent broker proxy deadline")
+        assert os.read(proxy_report_r, 64) == b"ok"
+        os.close(proxy_report_r)
         controller.close()
+        for listener in listeners.values():
+            listener.close()
         manager.close()
         assert not (ROOT / "control").exists()
         (STATE / "report.json").write_text(
@@ -393,6 +537,10 @@ if sys.argv[1:] == ["--inner"]:
                         output_chunk_bounded=True,
                         controller_verified_flag_false=True,
                         operator_peer_metadata_synthetic=True,
+                        real_persistent_broker_transport=True,
+                        reply_creator_and_message_credentials=True,
+                        minimum_capability_cwd_pin=True,
+                        metadata_pin_preserves_running_child=True,
                     ),
                     no_task_argv_executed=False,
                     model_connected=False,
@@ -409,6 +557,8 @@ if sys.argv[1:] == ["--inner"]:
 assert not sys.argv[1:]
 assert not STATE.exists() and not CODE.exists() and not UNIT_FILE.exists() and not LOCK.exists()
 assert not BASE.exists() and not GUARD.exists()
+assert not LIBRARY.exists() and not TRANSPORT_DIR.exists()
+assert all(not path.exists() for path in SOCKET_UNITS.values())
 assert "mano-broker" not in {p.pw_name for p in pwd.getpwall()}
 assert "mano-request" not in {g.gr_name for g in grp.getgrall()}
 created = []
@@ -441,6 +591,25 @@ try:
         check=True,
     )
     GUARD.chmod(0o555)
+    LIBRARY.parent.mkdir(mode=0o755, exist_ok=True)
+    subprocess.run(
+        [
+            "cc",
+            "-std=c11",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fPIC",
+            "-shared",
+            "/opt/mano-lab/native/mano_resources.c",
+            "-Wl,-z,relro,-z,now",
+            "-o",
+            str(LIBRARY),
+        ],
+        check=True,
+    )
+    LIBRARY.chmod(0o644)
     STATE.mkdir(mode=0o700)
     (STATE / "identity.json").write_text(
         json.dumps({"uid": identity.uid, "gid": identity.gid, "workspace": str(workspace)})
@@ -462,8 +631,11 @@ try:
         file.chmod(0o444)
     UNIT_FILE.write_text("""[Unit]
 Description=Disposable mano delegated cgroup proof
+Requires=mano-launcher-prepare.socket mano-launcher-control.socket
+After=mano-launcher-prepare.socket mano-launcher-control.socket
 [Service]
 Type=exec
+Sockets=mano-launcher-prepare.socket mano-launcher-control.socket
 User=root
 ExecStart=/usr/bin/python3 /usr/lib/mano-os/probe.py --inner
 Environment=PYTHONPATH=/usr/lib/mano-os
@@ -485,11 +657,28 @@ CPUQuota=60%
 KillMode=control-group
 TimeoutStartSec=15
 TimeoutStopSec=5
-RuntimeMaxSec=30
+RuntimeMaxSec=45
+""")
+    for name, unit in SOCKET_UNITS.items():
+        unit.write_text(f"""[Unit]
+Description=Disposable private launcher {name} activation
+[Socket]
+ListenSequentialPacket={PATHS[name]}
+Service=mano-launcher.service
+SocketUser=mano-broker
+SocketGroup=mano-broker
+SocketMode=0600
+DirectoryMode=0755
+PassCredentials=yes
+FileDescriptorName={name}
+RemoveOnStop=yes
 """)
     subprocess.run(["systemctl", "daemon-reload"], check=True)
-    subprocess.run(["systemctl", "start", "mano-launcher.service"], check=True)
-    deadline = time.monotonic() + 30
+    subprocess.run(
+        ["systemctl", "start", *(p.name for p in SOCKET_UNITS.values()), "mano-launcher.service"],
+        check=True,
+    )
+    deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
         if (STATE / "report.json").exists():
             print((STATE / "report.json").read_text())
@@ -510,8 +699,14 @@ except BaseException:
     )
     raise
 finally:
-    subprocess.run(["systemctl", "stop", "mano-launcher.service"], check=False, capture_output=True)
+    subprocess.run(
+        ["systemctl", "stop", "mano-launcher.service", *(p.name for p in SOCKET_UNITS.values())],
+        check=False,
+        capture_output=True,
+    )
     UNIT_FILE.unlink(missing_ok=True)
+    for path in SOCKET_UNITS.values():
+        path.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     subprocess.run(
         ["systemctl", "reset-failed", "mano-launcher.service"], check=False, capture_output=True
@@ -523,6 +718,9 @@ finally:
     if BASE.exists():
         shutil.rmtree(BASE)
     GUARD.unlink(missing_ok=True)
+    LIBRARY.unlink(missing_ok=True)
+    if TRANSPORT_DIR.exists():
+        TRANSPORT_DIR.rmdir()
 
     for name in reversed(created):
         subprocess.run(["userdel", name], check=False, capture_output=True)
