@@ -33,3 +33,10 @@ proposal before interpreting verified/done. A valid older action ID from the sam
 task cannot complete a different operation. The public digest exposes no command,
 grant or arguments. A regression test simulates an older verified journal action
 and swaps its ID into a different keyed proposal; completion is denied.
+
+The first hardened VM failure38454205190 exposed inherited workspace setgid:
+mkdir0700 produces2700 beneath the broker's2770 workspace. Session now clears this
+bit through a held no-follow directory FD only when it created that agent-owned
+directory. Existing directories must already satisfy exact0700 and are never
+silently changed. The regression covers setgid inheritance and existing2700 denial.
+No service capability, syscall or permission guard is relaxed.
