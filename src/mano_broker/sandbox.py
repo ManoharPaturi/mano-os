@@ -10,10 +10,23 @@ import os
 import pwd
 import stat
 import sys
+from pathlib import Path
 
 from mano_lab.sandbox import require_patched
 
 from .protocol import text
+
+GUARD = Path("/usr/libexec/mano-sandbox-guard")
+
+
+def guard():
+    for path in (GUARD, *GUARD.parents):
+        info = path.lstat()
+        if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
+            raise PermissionError("Untrusted native sandbox guard")
+    if not stat.S_ISREG(GUARD.stat().st_mode) or not GUARD.stat().st_mode & 0o111:
+        raise PermissionError("Missing executable native sandbox guard")
+    return str(GUARD)
 
 
 def command(workspace_fd, cwd_fd, argv):
@@ -56,6 +69,7 @@ def command(workspace_fd, cwd_fd, argv):
     for index, arg in enumerate(argv):
         text(arg, allow_empty=index > 0)
     require_patched()  # Fail closed; no unsandboxed or old-package fallback.
+    native = guard()
     return [
         "/usr/bin/bwrap",
         "--unshare-all",
@@ -88,6 +102,9 @@ def command(workspace_fd, cwd_fd, argv):
         "/usr/lib/mano-broker",
         "--tmpfs",
         "/usr/libexec",
+        "--ro-bind",
+        native,
+        "/task-guard",
         "--proc",
         "/proc",
         "--dev",
@@ -122,5 +139,6 @@ def command(workspace_fd, cwd_fd, argv):
         "LANG",
         "C.UTF-8",
         "--",
+        "/task-guard",
         *argv,
     ]

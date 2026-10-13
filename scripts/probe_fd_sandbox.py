@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from mano_broker.identities import LOCK, allocate_identity
-from mano_broker.sandbox import command
+from mano_broker.sandbox import GUARD, command
 from mano_broker.workspaces import BASE, create_workspace
 
 ROOT = Path("/opt/mano-lab")
@@ -57,13 +57,32 @@ assert not BASE.exists() and not LOCK.exists()
 assert "mano-broker" not in {p.pw_name for p in pwd.getpwall()}
 assert "mano-request" not in {g.gr_name for g in grp.getgrall()}
 code = Path("/usr/lib/mano-os")
-assert not code.exists()
+assert not code.exists() and not GUARD.exists()
 created = []
 group_created = False
 fds = []
 server = None
 child = None
 try:
+    subprocess.run(
+        [
+            "cc",
+            "-std=c11",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fstack-protector-strong",
+            "-D_FORTIFY_SOURCE=2",
+            "/opt/mano-lab/native/mano_sandbox_guard.c",
+            "-lseccomp",
+            "-Wl,-z,relro,-z,now",
+            "-o",
+            str(GUARD),
+        ],
+        check=True,
+    )
+    GUARD.chmod(0o555)
     limits = {
         prop: subprocess.check_output(
             ["systemctl", "show", "mano-fd-sandbox-ci.scope", f"--property={prop}", "--value"],
@@ -103,7 +122,7 @@ try:
             os.setgid(identity.gid)
             os.setuid(identity.uid)
             assert "mano-fd-sandbox-ci.scope" in Path("/proc/self/cgroup").read_text()
-            payload = """import errno,json,os,socket,sys
+            payload = """import ctypes,errno,json,os,socket,subprocess,sys
 from pathlib import Path
 assert Path('/workspace').stat().st_ino==int(sys.argv[1])
 assert Path.cwd().stat().st_ino==int(sys.argv[1])
@@ -123,17 +142,38 @@ for entry in Path('/proc/self/fd').iterdir():
 try:Path('/usr/share/mano-forbidden-ci').write_text('blocked')
 except OSError as e:assert e.errno in (errno.EROFS,errno.EACCES,errno.ENOENT)
 else:raise AssertionError('OS tree writable')
-s=socket.socket();s.settimeout(1)
-try:s.connect(('127.0.0.1',int(sys.argv[2])))
-except OSError as e:assert e.errno in (errno.ECONNREFUSED,errno.ENETUNREACH)
+try:
+ s=socket.socket();s.settimeout(1);s.connect(('127.0.0.1',int(sys.argv[2])))
+except OSError as e:assert e.errno==errno.EPERM
 else:raise AssertionError('host network reachable')
 status=dict(line.split(':',1) for line in Path('/proc/self/status').read_text().splitlines())
 assert status['NoNewPrivs'].strip()=='1'
 assert status['CapEff'].strip()=='0000000000000000'
-Path('/workspace/project.py').write_text('print(42)'+chr(10))
+assert status['Seccomp'].strip()=='2'
+libc=ctypes.CDLL(None,use_errno=True)
+assert libc.unshare(0)==-1 and ctypes.get_errno()==errno.EPERM
+assert libc.setresuid(-1,-1,-1)==-1 and ctypes.get_errno()==errno.EPERM
+try:Path('/etc/landlock-task-denial').write_text('blocked')
+except OSError as e:assert e.errno==errno.EACCES
+else:raise AssertionError('Landlock write escape')
+project=chr(10).join([
+ 'import ctypes,errno',
+ 'from pathlib import Path',
+ 'libc=ctypes.CDLL(None,use_errno=True)',
+ 'assert libc.unshare(0)==-1 and ctypes.get_errno()==errno.EPERM',
+ "try:Path('/etc/child-landlock-denial').write_text('blocked')",
+ 'except OSError as e:assert e.errno==errno.EACCES',
+ "else:raise AssertionError('child Landlock inheritance missing')",
+ 'print(42)',
+])+chr(10)
+Path('/workspace/project.py').write_text(project)
+result=subprocess.run(['/usr/bin/python3','/workspace/project.py'],capture_output=True,text=True)
+assert result.returncode==0 and result.stdout.strip()=='42',result.stderr
 print(json.dumps({'workspace_fd_identity':True,'cwd_fd_identity':True,
  'host_network_denied':True,'host_ipc_absent':True,'inherited_socket_absent':True,
- 'minimal_environment':True,'os_tree_readonly':True,'no_new_privs':True,'capabilities_zero':True}))
+ 'minimal_environment':True,'os_tree_readonly':True,'no_new_privs':True,'capabilities_zero':True,
+ 'seccomp_no_change_syscalls_denied':True,'landlock_private_etc_write_denied':True,
+ 'subprocess_execution_and_inheritance':True}))
 """
             args = command(
                 fd,
@@ -165,7 +205,7 @@ print(json.dumps({'workspace_fd_identity':True,'cwd_fd_identity':True,
     observed = json.loads(os.read(reader, 65536))
     os.close(reader)
     assert hashlib.sha256(protected.read_bytes()).hexdigest() == before
-    assert (moved / "project.py").read_text() == "print(42)" + chr(10)
+    assert "child Landlock inheritance missing" in (moved / "project.py").read_text()
     print(
         json.dumps(
             dict(
@@ -175,9 +215,10 @@ print(json.dumps({'workspace_fd_identity':True,'cwd_fd_identity':True,
                 protected_host_hash_unchanged=True,
                 workspace_output_verified=True,
                 cgroup_limits=limits,
-            current_process_and_task_in_scope=True,
-                seccomp_profile_enforced=None,
-                landlock_enforced=None,
+                current_process_and_task_in_scope=True,
+                seccomp_profile_enforced=True,
+                landlock_enforced=True,
+                native_guard_sha256=hashlib.sha256(GUARD.read_bytes()).hexdigest(),
                 model_connected=False,
                 production_execution_authorized=False,
             ),
@@ -196,6 +237,7 @@ finally:
         shutil.rmtree(BASE)
     if code.exists():
         code.rmdir()
+    GUARD.unlink(missing_ok=True)
     for name in reversed(created):
         subprocess.run(["userdel", name], check=False, capture_output=True)
     if group_created:
