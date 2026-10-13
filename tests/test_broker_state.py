@@ -32,6 +32,11 @@ class BrokerStateTests(unittest.TestCase):
     def issue(self, **changes):
         values = dict(
             approved_human_uid=1002,
+            approved_args={
+                "argv": ["python3", "-c", "print(1)"],
+                "cwd": ".",
+                "timeout_seconds": 10,
+            },
             capability=Capability.RUN,
             resource_id=self.resource,
             expires=100,
@@ -199,6 +204,11 @@ class BrokerStateTests(unittest.TestCase):
             grant = self.state.issue_grant(
                 task,
                 approved_human_uid=1002,
+                approved_args={
+                    "argv": ["python3", "-c", "print(1)"],
+                    "cwd": ".",
+                    "timeout_seconds": 10,
+                },
                 capability="terminal.run",
                 resource_id=self.resource,
                 expires=100,
@@ -235,3 +245,82 @@ class BrokerStateTests(unittest.TestCase):
         unsafe.mkdir(mode=0o755)
         with self.assertRaises(ValueError):
             State(unsafe)
+
+    def test_exact_terminal_arguments_cannot_change_under_valid_grant(self):
+        approved = json.loads(self.request().args_json)
+        changes = [
+            {"argv": ["python3", "-c", "print(2)"]},
+            {"cwd": "other"},
+            {"timeout_seconds": 9},
+        ]
+        for update in changes:
+            with self.subTest(update=update), self.assertRaises(Denied):
+                self.authorize(self.request(args=approved | update))
+        self.assertEqual(
+            self.state.db.execute("SELECT used FROM grants WHERE id=?", (self.grant,)).fetchone()[
+                0
+            ],
+            0,
+        )
+        self.assertTrue(self.authorize()[1])
+
+    def test_exact_write_target_and_content_and_empty_payload(self):
+        grant = self.issue(capability="files.write", approved_args={"path": "result", "text": ""})
+        for args in ({"path": "other", "text": ""}, {"path": "result", "text": "changed"}):
+            with self.assertRaises(Denied):
+                self.authorize(self.request(grant_id=grant, capability="files.write", args=args))
+        self.assertTrue(
+            self.authorize(
+                self.request(
+                    grant_id=grant, capability="files.write", args={"path": "result", "text": ""}
+                )
+            )[1]
+        )
+
+    def test_invalid_approval_template_denies_before_grant_creation(self):
+        count = self.state.db.execute("SELECT count(*) FROM grants").fetchone()[0]
+        for args in (
+            {"argv": ["true"], "cwd": "../escape", "timeout_seconds": 10},
+            {"argv": ["true"], "cwd": ".", "timeout_seconds": 31},
+            {"argv": ["true"], "cwd": ".", "timeout_seconds": 10, "env": {"KEY": "x"}},
+        ):
+            with self.assertRaises(ValueError):
+                self.issue(approved_args=args)
+        self.assertEqual(self.state.db.execute("SELECT count(*) FROM grants").fetchone()[0], count)
+
+    def test_legacy_journal_upgrade_preserves_history_and_revokes_broad_grants(self):
+        running, _ = self.authorize()
+        self.state.start(running["id"], now=11, boot_id="boot-a")
+        queued, _ = self.authorize(self.request(idempotency_key="queued"))
+        self.state.db.execute("ALTER TABLE grants DROP COLUMN approved_args_json")
+        self.state.close()
+        self.state = State(self.directory)
+        rows = {r["id"]: r["state"] for r in self.state.db.execute("SELECT id,state FROM actions")}
+        self.assertEqual(rows, {running["id"]: "unknown", queued["id"]: "failed"})
+        self.assertEqual(
+            self.state.db.execute(
+                "SELECT revoked FROM grants WHERE id=?", (self.grant,)
+            ).fetchone()[0],
+            1,
+        )
+        with self.assertRaises(Denied):
+            self.authorize(self.request(idempotency_key="new"))
+        with self.assertRaises(Denied):
+            self.state.start(queued["id"], now=12, boot_id="boot-a")
+        replay, fresh = self.authorize()
+        self.assertFalse(fresh)
+        self.assertEqual(replay["state"], "unknown")
+        self.assertEqual(
+            self.state.db.execute(
+                "SELECT count(*) FROM events WHERE event='exact-grant-migration'"
+            ).fetchone()[0],
+            1,
+        )
+        self.state.close()
+        self.state = State(self.directory)
+        self.assertEqual(
+            self.state.db.execute(
+                "SELECT count(*) FROM events WHERE event='exact-grant-migration'"
+            ).fetchone()[0],
+            1,
+        )

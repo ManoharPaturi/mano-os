@@ -37,6 +37,7 @@ try:
     grant = state.issue_grant(
         task,
         approved_human_uid=1002,
+        approved_args={"argv": ["true"], "cwd": ".", "timeout_seconds": 10},
         capability="terminal.run",
         resource_id=resource,
         expires=time.monotonic() + 30,
@@ -119,6 +120,27 @@ try:
             assert result.returncode == 0, result.stderr
             attacks.append({"actor": actor, "operation": operation, "kernel_errno": "EACCES"})
     assert hashlib.sha256((DIRECTORY / "state.sqlite3").read_bytes()).hexdigest() == before
+    # Exercise upgrade from a journal whose grants predate exact arguments.
+    state.db.execute("ALTER TABLE grants DROP COLUMN approved_args_json")
+    state.close()
+    state = State(DIRECTORY)
+    assert state.db.execute("SELECT revoked FROM grants WHERE id=?", (grant,)).fetchone()[0] == 1
+    assert (
+        state.db.execute("SELECT state FROM actions WHERE id=?", (action["id"],)).fetchone()[0]
+        == "unknown"
+    )
+    changed = request.body() | {"idempotency_key": "after-legacy-upgrade"}
+    try:
+        state.authorize(
+            ActionRequest.parse(canonical(changed).encode()),
+            caller_uid=1004,
+            now=time.monotonic(),
+            boot_id=boot,
+        )
+    except Denied:
+        pass
+    else:
+        raise AssertionError("Legacy unbound grant authorized new action")
     state.emergency_stop()
     state.close()
     state = State(DIRECTORY)
@@ -133,6 +155,7 @@ try:
         "kernel_denials": attacks,
         "denial_attempts_preserved_database_hash": True,
         "durable_stop_latch": True,
+        "legacy_grants_revoked_history_preserved": True,
         "model_connected": False,
         "production_execution_authorized": False,
     }

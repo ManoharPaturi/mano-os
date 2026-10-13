@@ -99,7 +99,7 @@ from mano_broker.state import State
 from mano_broker.protocol import ActionRequest
 s=State(Path('/var/lib/mano-broker/runtime'));boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
 t=s.create_task(human_uid=1002,caller_uid=1004,mode='supervised',resource_id='a'*32,classification='internal',boot_id=boot)
-g=s.issue_grant(t,approved_human_uid=1002,capability='files.read',resource_id='a'*32,expires=time.monotonic()+300,max_count=2,memory_bytes=1048576,pids=4,cpu_percent=10,max_timeout_seconds=10)
+g=s.issue_grant(t,approved_human_uid=1002,approved_args={'path':'file'},capability='files.read',resource_id='a'*32,expires=time.monotonic()+300,max_count=2,memory_bytes=1048576,pids=4,cpu_percent=10,max_timeout_seconds=10)
 b=dict(schema_version='1.0',task_id=t,grant_id=g,capability='files.read',
  resource_id='a'*32,args={'path':'file'},idempotency_key='pre-restart',reason='fixed CI seed')
 a,_=s.authorize(ActionRequest.parse(json.dumps(b).encode()),caller_uid=1004,now=time.monotonic(),boot_id=boot)
@@ -180,6 +180,12 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
         )
         assert result.returncode == 0, result.stderr
         denials.append({"actor": actor, "target": "private-journal", "kernel_errno": "EACCES"})
+    altered = request(
+        "mano-worker",
+        packet
+        | {"body": seed_body | {"args": {"path": "other"}, "idempotency_key": "changed-target"}},
+    )
+    assert altered == {"schema_version": "1.0", "ok": False, "error": "denied"}
     # One incomplete client cannot stall the watchdog or the next valid request indefinitely.
     slow = subprocess.Popen(
         [
@@ -223,6 +229,7 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
                 actual_sigkill_restart=True,
                 restart_pid_changed=pid != replacement,
                 unknown_preserved_no_replay=True,
+                approved_target_change_denied=True,
                 model_connected=False,
                 production_execution_authorized=False,
             ),

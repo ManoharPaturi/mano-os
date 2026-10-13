@@ -43,6 +43,7 @@ try:
     grant = state.issue_grant(
         task,
         approved_human_uid=1002,
+        approved_args={"path": "file"},
         capability="files.read",
         resource_id="a" * 32,
         expires=time.monotonic() + 120,
@@ -117,6 +118,12 @@ print(s.recv(65536).decode());s.close()
     )
     assert exchange("mano-worker", canonical(query).encode())["ok"]
     attacks = [
+        (
+            "changed-approved-target",
+            "mano-worker",
+            proposal | {"body": body | {"args": {"path": "other"}, "idempotency_key": "altered"}},
+            "normal",
+        ),
         ("wrong-agent", "mano-agent", proposal, "normal"),
         ("wrong-core", "mano-core", proposal, "normal"),
         ("wrong-human", "mano-human", proposal, "normal"),

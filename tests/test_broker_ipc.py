@@ -24,6 +24,7 @@ class BrokerIPCTests(unittest.TestCase):
         self.grant = self.state.issue_grant(
             self.task,
             approved_human_uid=1002,
+            approved_args={"path": "file"},
             capability="files.read",
             resource_id="a" * 32,
             expires=100,
