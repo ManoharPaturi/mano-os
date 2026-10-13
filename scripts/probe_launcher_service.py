@@ -103,6 +103,20 @@ try:
             assert error.errno == errno.EPERM
         else:
             raise AssertionError("Sealed artifact mutated")
+    artifacts.persist(state, artifact["artifact_id"])
+    artifacts.close()  # No sealed descriptor is available to the fresh child.
+    durable_reader = """import sys
+from pathlib import Path
+from mano_broker.state import State
+from mano_broker.artifacts import durable_chunk
+s=State(Path('/run/mano-journal-ci/daemon'))
+r=durable_chunk(s,sys.argv[1],task_id=sys.argv[2],caller_uid=int(sys.argv[3]),
+ boot_id='daemon',offset=0,length=4096)
+assert r['data']==b'sealed-bytes' and r['eof'] and not r['metadata']['effect_verified']
+s.close()
+"""
+    subprocess.run(["/usr/bin/python3", "-c", durable_reader, artifact["artifact_id"], task,
+                    str(identity["uid"])], check=True, capture_output=True, text=True, timeout=5)
     active = prepare("import time;time.sleep(60)", "daemon-stop")
     runtime.tick()
     state.emergency_stop()
@@ -115,7 +129,8 @@ try:
         daemon_stop_cancellation=True, runtime_terminal_scheduling=True,
         runtime_caller_metadata_synthetic=True, sealed_artifact_custody=True,
         artifact_source_mutation_isolated=True, artifact_write_and_truncate_denied=True,
-        artifact_effect_verified=False, pam_authorization=False, model_connected=False)))
+        artifact_effect_verified=False, durable_artifact_fresh_process=True,
+        pam_authorization=False, model_connected=False)))
 finally:
     artifacts.close()
     runtime.close()

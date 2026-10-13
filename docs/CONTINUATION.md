@@ -461,3 +461,16 @@ No record_verification/publicretrieve/persistence/brokerfilter proofyet; effectF
 actualinstalled-launcherVM taskoutput/nativepin/capture/source-mutation-isolation/
 write+truncateEPERM expected. VMoperatorbrokerproxy, notproductionbrokerfilter;
 acceptancepending. Neednext durablecustody/outcomechecks; originalfullscopeactive.
+
+# Durable artifact draft
+
+Currentfeat/phase1-durable-artifacts basedPR52e07ae56, adds artifacts table BLOB
+<=8MiB/actionFK/metadata inprivateStateSQLite; Store.persist live sealed/hash/size/
+doneoriginaltask check, atomictransaction+event, max8 total, exactidempotency.
+durable_chunk trusted librarycaller taskUID/bootbinding/ranges<=4096, rechecksfull
+boundedBLOBhash/size beforechunk, no paths/publicmutation/outcomeverification.
+Store.close fixedplacementinsideclass.112tests16MacLinuxskips/Ruff/shell/diffpass;
+Linuxactualpersist/reopen/corrupt/permissioncasespending. VMclosessealedFDs thenfresh
+brokerUIDprocess readsprivatejournal data unverified. No powercut/persistencefakeclaim.
+PR52CI38443695245 all3SUCCESS butholdmergeuntilwatchdogfix53accepted. PR53
+CI38444304133 remainsLIVE atlatestcheck, knownpostmain51failureunderinvestigation.
