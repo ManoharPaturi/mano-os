@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/random.h>
+#include <time.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/un.h>
@@ -21,6 +23,7 @@
 #include <unistd.h>
 
 #define HUMAN_SOCKET "/run/mano-stopd/human.sock"
+#define CONTROL_SOCKET "/run/mano-stopd/control.sock"
 #define STATE_DIR "/var/lib/mano-stopd"
 #define GROUP "/sys/fs/cgroup/system.slice/mano-launcher.service"
 static bool expected_fd(int fd, const char *path) {
@@ -157,7 +160,7 @@ static bool task_name(const char *name) {
                                   (name[i]>='a' && name[i]<='f'))) return false;
     return true;
 }
-static bool kill_tasks(void) {
+static bool task_groups(bool killing) {
     int fd=open(GROUP,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
     if (fd<0) return errno==ENOENT;
     struct stat st;struct statfs filesystem;
@@ -177,36 +180,100 @@ static bool kill_tasks(void) {
         if (fstat(child,&st) || st.st_uid!=0 || (st.st_mode&022)) {
             close(child);okay=false;continue;
         }
-        int control=openat(child,"cgroup.kill",O_WRONLY|O_NOFOLLOW|O_CLOEXEC);
+        int flags=(killing?O_WRONLY:O_RDONLY)|O_NOFOLLOW|O_CLOEXEC;
+        int control=openat(child,killing?"cgroup.kill":"cgroup.events",flags);
         if (control<0) {if (errno!=ENOENT) okay=false;}
-        else {if (write(control,"1",1)!=1) okay=false;close(control);}
+        else {
+            if (killing) {if (write(control,"1",1)!=1) okay=false;}
+            else {
+                char values[128]={0};ssize_t n=read(control,values,sizeof(values)-1);
+                if (n<=0 || !strstr(values,"populated 0\n") || strstr(values,"populated 1\n")) okay=false;
+            }
+            close(control);
+        }
         close(child);
     }
     closedir(directory);return okay;
 }
+static unsigned long long decode_generation(const unsigned char *data) {
+    unsigned long long value=0;
+    for (unsigned i=0;i<8;i++) value=(value<<8)|data[i];
+    return value;
+}
+static double monotonic(void) {
+    struct timespec value;if (clock_gettime(CLOCK_MONOTONIC,&value)) return -1;
+    return value.tv_sec+value.tv_nsec/1000000000.0;
+}
 int main(int argc,char **argv) {
     (void)argv;
-    if (argc!=1 || geteuid()!=0 || sd_listen_fds(1)!=1 ||
-        !expected_fd(3,HUMAN_SOCKET)) return 2;
+    const char *names=getenv("LISTEN_FDNAMES");int human_fd=-1,control_fd=-1;
+    if (names && !strcmp(names,"human:control")) {human_fd=3;control_fd=4;}
+    else if (names && !strcmp(names,"control:human")) {human_fd=4;control_fd=3;}
+    if (argc!=1 || geteuid()!=0 || human_fd<0 || sd_listen_fds(1)!=2 ||
+        !expected_fd(human_fd,HUMAN_SOCKET) || !expected_fd(control_fd,CONTROL_SOCKET)) return 2;
     uid_t human=human_policy();if (human==(uid_t)-1) return 2;
     int directory=state_directory();if (directory<0 || !initialize(directory)) return 2;
-    sd_notify(0,"READY=1");struct pollfd listener={3,POLLIN,0};
+    unsigned char challenge[32]={0};unsigned long long bound=0;double expires=0;bool issued=false;
+    sd_notify(0,"READY=1");struct pollfd listeners[2]={{human_fd,POLLIN,0},{control_fd,POLLIN,0}};
     for (;;) {
-        sd_notify(0,"WATCHDOG=1");int ready=poll(&listener,1,500);
+        sd_notify(0,"WATCHDOG=1");int ready=poll(listeners,2,500);
         if (ready<0) {if (errno==EINTR) continue;return 3;}
         if (!ready) continue;
-        int fd=accept4(3,NULL,NULL,SOCK_CLOEXEC);if (fd<0) continue;
-        struct timeval timeout={1,0};
-        setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
-        setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout));
-        unsigned char packet[2]={0};ssize_t size=0;
-        bool valid=credentials(fd,packet,sizeof(packet),&size,human) &&
-            size==1 && packet[0]=='S';
-        bool durable=true,killed=false;
-        if (valid) {durable=latch(directory);killed=kill_tasks();}
-        bool okay=valid && durable && killed;
-        const char *response=okay?"stopped":"denied";
-        (void)send(fd,response,strlen(response),MSG_NOSIGNAL);close(fd);
-        if (valid && !durable) return 4; /* Restart into fail-closed pending recovery. */
+        for (unsigned channel=0;channel<2;channel++) {
+            if (!(listeners[channel].revents&POLLIN)) continue;
+            int fd=accept4(listeners[channel].fd,NULL,NULL,SOCK_CLOEXEC);if (fd<0) continue;
+            struct timeval timeout={1,0};
+            if (setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout)) ||
+                setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout))) {close(fd);continue;}
+            unsigned char packet[42]={0};ssize_t size=0;
+            bool valid=credentials(fd,packet,sizeof(packet),&size,channel?0:human);
+            bool durable=true,okay=false;const char *response="denied";
+            if (!channel && valid && size==1 && packet[0]=='S') {
+                issued=false;explicit_bzero(challenge,sizeof(challenge));
+                durable=latch(directory);bool killed=task_groups(true);
+                okay=durable && killed;response=okay?"stopped":"denied";
+            } else if (channel && valid) {
+                unsigned long long generation=0;bool stopped=false,legacy=false;
+                if (read_state(directory,"state",&generation,&stopped,&legacy) && stopped && !legacy) {
+                    if (size==1 && packet[0]=='V' && generation<(unsigned long long)LLONG_MAX) {
+                        issued=false;
+                        double now=monotonic();
+                        if (now>=0 && getrandom(challenge,sizeof(challenge),0)==(ssize_t)sizeof(challenge)) {
+                            issued=true;bound=generation;expires=now+60;
+                            char nonce[65]={0};const char *hex="0123456789abcdef";
+                            for (unsigned i=0;i<32;i++) {
+                                nonce[2*i]=hex[challenge[i]>>4];nonce[2*i+1]=hex[challenge[i]&15];
+                            }
+                            char view[320];int n=snprintf(view,sizeof(view),
+                                "{\"schema_version\":\"1.0\",\"ok\":true,\"view\":{"
+                                "\"operation\":\"system.rearm\",\"human_uid\":%u,"
+                                "\"generation\":%llu,\"nonce\":\"%s\"}}",
+                                (unsigned)human,generation,nonce);
+                            if (n>0 && (size_t)n<sizeof(view)) (void)send(fd,view,(size_t)n,MSG_NOSIGNAL);
+                            close(fd);continue;
+                        }
+                    } else if (size==41 && packet[0]=='R') {
+                        double now=monotonic();
+                        bool matches=issued && now>=0 && now<expires &&
+                            generation==bound && decode_generation(packet+1)==bound &&
+                            !memcmp(packet+9,challenge,sizeof(challenge));
+                        issued=false;explicit_bzero(challenge,sizeof(challenge));
+                        if (matches && task_groups(false) && generation<(unsigned long long)LLONG_MAX) {
+                            durable=publish(directory,generation+1,false,false);
+                            if (durable) {
+                                char reply[128];int n=snprintf(reply,sizeof(reply),
+                                    "{\"schema_version\":\"1.0\",\"ok\":true,\"rearmed\":true,"
+                                    "\"generation\":%llu}",generation+1);
+                                if (n>0 && (size_t)n<sizeof(reply)) (void)send(fd,reply,(size_t)n,MSG_NOSIGNAL);
+                                close(fd);continue;
+                            }
+                        }
+                    }
+                }
+            }
+            if (channel) response="{\"schema_version\":\"1.0\",\"ok\":false,\"error\":\"denied\"}";
+            (void)send(fd,response,strlen(response),MSG_NOSIGNAL);close(fd);
+            if (!durable) return 4;
+        }
     }
 }

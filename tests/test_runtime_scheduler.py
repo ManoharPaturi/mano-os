@@ -8,6 +8,7 @@ from mano_broker.ipc import Peer
 from mano_broker.protocol import ActionRequest, Capability, Mode, canonical
 from mano_broker.runtime import Runtime
 from mano_broker.state import Denied, State
+from mano_broker.stop_state import Snapshot
 
 
 class RuntimeSchedulerTests(unittest.TestCase):
@@ -97,3 +98,18 @@ class RuntimeSchedulerTests(unittest.TestCase):
         self.runtime.stop_reader = Mock(side_effect=FileNotFoundError())
         self.runtime.sync_stop()
         self.assertEqual(self.state.meta('latched'), 1)
+
+    def test_rearm_seen_after_frozen_stop_revokes_before_new_authority(self):
+        self.runtime.stop_reader = lambda: Snapshot(0, False)
+        self.runtime.sync_stop()
+        result = self.propose()
+        self.runtime.stop_reader = lambda: Snapshot(2, False)
+        self.runtime.sync_stop()
+        self.assertEqual(self.state.meta('latched'), 0)
+        self.assertEqual(self.state.db.execute('SELECT revoked FROM grants').fetchone()[0], 1)
+        self.assertEqual(self.state.db.execute('SELECT state FROM actions WHERE id=?',
+            (result['action']['id'],)).fetchone()[0], 'failed')
+        self.runtime.stop_reader = lambda: Snapshot(1, False)
+        self.runtime.sync_stop()
+        self.assertEqual(self.state.meta('latched'), 1)
+        self.assertEqual(self.state.meta('native_generation'), 2)

@@ -42,6 +42,7 @@ UNITS = (
     "mano-launcher-control.socket",
     "mano-stopd.service",
     "mano-stopd.socket",
+    "mano-stopd-control.socket",
 )
 assert (
     os.geteuid() == 0 and Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
@@ -136,10 +137,14 @@ def rpc(channel, body, actor="mano-worker", directory=None):
 
 
 native_client = """import json,sys
-from mano_prompt.approve import rpc,view_packet,confirmation_packet
+from mano_prompt.approve import (rpc,view_packet,confirmation_packet,
+ rearm_view_packet,rearm_confirmation_packet)
 body=json.loads(sys.stdin.read())
 try:
  if body['mode']=='view':result=rpc(view_packet(body['id']))
+ elif body['mode']=='rearm_view':result=rpc(rearm_view_packet())
+ elif body['mode']=='rearm_confirm':
+  result=rpc(rearm_confirmation_packet(body['view'],body['password']))
  else:result=rpc(confirmation_packet(body['view'],body['password']))
 except (PermissionError,ValueError):result={'ok':False}
 print(json.dumps(result))
@@ -716,6 +721,72 @@ finally:
         body=terminal_body), actor=identity.name) == denied
     terminal_report["native_stop_interrupted_arm_recovers_latched"] = True
     terminal_report["native_stop_generation"] = 4
+    rearm_view = human(dict(mode="rearm_view"))["view"]
+    assert rearm_view["generation"] == 4 and rearm_view["human_uid"] == 1002
+    assert human(dict(mode="rearm_view"), actor=identity.name) == {"ok": False}
+    assert human(dict(mode="rearm_confirm", view=rearm_view, password="wrong-ci-password")) == {
+        "ok": False
+    }
+    assert (STOP_STATE / "state").read_text() == "v1:4:latched\n"
+    assert human(dict(mode="rearm_confirm", view=rearm_view | {"nonce": "0"*64},
+                      password=password)) == {"ok": False}
+    rearm_view = human(dict(mode="rearm_view"))["view"]
+    broker_pid = ready()
+    stop_pid = int(command("systemctl", "show", "mano-stopd.service",
+                           "--property=MainPID", "--value"))
+    subprocess.run(["kill", "-STOP", str(broker_pid)], check=True)
+    try:
+        subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
+            stop_client, "S", "stopped", str(stop_pid)], check=True, capture_output=True,
+            text=True, timeout=5)
+        assert human(dict(mode="rearm_confirm", view=rearm_view, password=password)) == {
+            "ok": False
+        }
+        fresh_rearm = human(dict(mode="rearm_view"))["view"]
+        assert fresh_rearm["generation"] == 5
+        armed = human(dict(mode="rearm_confirm", view=fresh_rearm, password=password))
+        assert armed["ok"] and armed["rearmed"] and armed["generation"] == 6
+        assert "T" in next(line for line in Path(f"/proc/{broker_pid}/status").read_text()
+                           .splitlines() if line.startswith("State:"))
+    finally:
+        subprocess.run(["kill", "-CONT", str(broker_pid)], check=False)
+    assert human(dict(mode="rearm_confirm", view=fresh_rearm, password=password)) == {"ok": False}
+    assert (STOP_STATE / "state").read_text() == "v1:6:armed\n"
+    # Fresh provisioning is required after the prior broker restarts; old grants
+    # remain revoked even when native rearm was completed while Python was frozen.
+    task_after = rpc("provision", dict(schema_version="1.0", operation="provision_task",
+        body=dict(human_uid=1002, caller_uid=identity.uid, mode="supervised",
+                  classification="internal")), actor="root", directory=terminal_workspace)
+    proposal_after = terminal_proposal | dict(task_id=task_after["task_id"],
+        resource_id=task_after["resource_id"], idempotency_key="after-native-rearm", args=dict(
+            argv=["/usr/bin/python3", "-c", "from pathlib import Path;"
+                  "Path('/workspace/rearmed-result').write_text('rearmed-ok')"],
+            cwd=".", timeout_seconds=10))
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=proposal_after | {"grant_id": terminal_grant["grant_id"]}),
+        actor=identity.name) == denied
+    after_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=proposal_after), actor=identity.name)["approval"]
+    after_view = human(dict(mode="view", id=after_pending["approval_id"]))["view"]
+    after_grant = human(dict(mode="confirm", view=after_view, password=password))
+    assert after_grant["ok"]
+    after_action = rpc("request", dict(schema_version="1.0", operation="propose",
+        body=proposal_after | {"grant_id": after_grant["grant_id"]}), actor=identity.name)
+    after_query = dict(schema_version="1.0", operation="status", body=dict(
+        task_id=task_after["task_id"], action_id=after_action["action"]["id"]))
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        after_status = rpc("request", after_query, actor=identity.name)["action"]
+        if after_status["state"] in {"done", "failed", "unknown"}:
+            break
+        time.sleep(0.1)
+    assert after_status["state"] == "done" and after_status["verified"] == 0
+    assert (terminal_workspace / "rearmed-result").read_text() == "rearmed-ok"
+    terminal_report.update(native_pam_rearm=True, rearm_wrong_password_denied=True,
+        rearm_bad_nonce_denied=True, newer_stop_invalidates_rearm=True, rearm_replay_denied=True,
+        frozen_broker_rearm=True, old_grant_not_resurrected=True,
+        fresh_pam_terminal_after_rearm=True, native_stop_generation=6)
+
 
     native_report = dict(
         real_pam_authenticated=True,

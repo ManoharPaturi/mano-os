@@ -10,7 +10,7 @@ from .ipc import dispatch, public_action, receive
 from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
 from .registry import Registry
 from .state import Denied
-from .stop_state import latched
+from .stop_state import Snapshot, snapshot
 
 
 class Runtime:
@@ -20,7 +20,7 @@ class Runtime:
         self.registry = Registry()
         self.pending = deque()
         self.launcher = launcher
-        self.stop_reader = stop_reader or (latched if launcher else None)
+        self.stop_reader = stop_reader or (snapshot if launcher else None)
         self.executor = (
             Executor(state, self.registry, launcher, boot_id=boot_id) if launcher else None
         )
@@ -32,13 +32,37 @@ class Runtime:
             state.db.execute("UPDATE actions SET state='failed' WHERE state='intent'")
             state.db.execute("UPDATE meta SET value=value+1 WHERE key='epoch'")
             state.event(None, "runtime-authority-renewal", {"epoch": state.meta("epoch")})
+            state.db.execute("INSERT OR IGNORE INTO meta VALUES('native_generation',-1)")
         self.sync_stop()
 
     def sync_stop(self):
         if self.stop_reader is None:
             return
         try:
-            stopped = self.stop_reader()
+            observed = self.stop_reader()
+            if isinstance(observed, Snapshot):
+                previous = self.state.meta("native_generation")
+                if observed.generation < previous:
+                    stopped = True  # Native rollback cannot restore authority.
+                else:
+                    if observed.generation > previous:
+                        with self.state.transaction():
+                            if previous >= 0 or observed.generation > 0:
+                                self.state.emergency_stop()  # Revoke even if Stop was unseen.
+                                if not observed.latched:
+                                    self.state.db.execute(
+                                        "UPDATE meta SET value=0 WHERE key='latched'"
+                                    )
+                                    self.state.event(None, "native-authenticated-rearm", {
+                                        "generation": observed.generation
+                                    })
+                            self.state.db.execute(
+                                "UPDATE meta SET value=? WHERE key='native_generation'",
+                                (observed.generation,)
+                            )
+                    stopped = observed.latched
+            else:
+                stopped = observed  # Explicit trusted test adapter; no public caller supplies it.
             if type(stopped) is not bool:
                 stopped = True
         except (OSError, ValueError):

@@ -17,6 +17,24 @@ def view_packet(approval_id):
     return b"\x01\x01" + identifier(approval_id).encode("ascii")
 
 
+def rearm_view_packet():
+    return b"\x01\x03"
+
+
+def rearm_confirmation_packet(view, password):
+    generation = view.get("generation")
+    nonce = view.get("nonce")
+    if (view.get("operation") != "system.rearm" or type(generation) is not int
+            or not 0 <= generation <= (1 << 63) - 1 or not isinstance(nonce, str)
+            or len(nonce) != 64 or any(c not in "0123456789abcdef" for c in nonce)):
+        raise ValueError("Invalid native rearm challenge")
+    encoded = password.encode("utf8")
+    if not 1 <= len(encoded) <= 256 or b"\0" in encoded:
+        raise ValueError("Invalid bounded authentication password")
+    return bytearray(b"\x01\x04" + generation.to_bytes(8, "big") + nonce.encode("ascii")
+                     + len(encoded).to_bytes(2, "big") + encoded)
+
+
 def confirmation_packet(view, password):
     approval_id = identifier(view["approval_id"])
     fields = []
@@ -88,22 +106,27 @@ def rpc(packet):
 
 def main():
     if len(sys.argv) != 2 or not os.isatty(0) or not os.isatty(1):
-        raise ValueError("Use mano-approve APPROVAL_ID from your human TTY")
-    view = rpc(view_packet(sys.argv[1]))["view"]
-    if view["human_uid"] != os.getuid() or view["approval_id"] != sys.argv[1]:
+        raise ValueError("Use mano-approve APPROVAL_ID or --rearm from your human TTY")
+    rearming = sys.argv[1] == "--rearm"
+    view = rpc(rearm_view_packet() if rearming else view_packet(sys.argv[1]))["view"]
+    if view["human_uid"] != os.getuid() or (
+        not rearming and view["approval_id"] != sys.argv[1]
+    ):
         raise ValueError("Approval is not bound to this human and request")
-    print("Broker-owned operation (reason_untrusted is only model explanation):")
+    print("Allow new tasks again; old permissions stay revoked:" if rearming else
+          "Broker-owned operation (reason_untrusted is only model explanation):")
     print(json.dumps(view, indent=2, sort_keys=True, ensure_ascii=True))
     if input("Approve this exact operation? [y/N] ").strip().lower() != "y":
         return
     password = getpass.getpass("OS authentication password: ")
-    packet = confirmation_packet(view, password)
+    packet = (rearm_confirmation_packet(view, password) if rearming
+              else confirmation_packet(view, password))
     del password
     try:
         result = rpc(packet)
     finally:
         packet[:] = b"\0" * len(packet)
-    print("Approval recorded: " + result["grant_id"])
+    print("Emergency Stop rearmed." if rearming else "Approval recorded: " + result["grant_id"])
 
 
 if __name__ == "__main__":

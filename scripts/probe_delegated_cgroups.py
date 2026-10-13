@@ -35,7 +35,9 @@ JOURNAL = Path("/run/mano-journal-ci")
 STOP_STATE = Path("/var/lib/mano-stopd")
 STOP_NATIVE = Path("/usr/libexec/mano-stopd")
 STOP_POLICY = Path("/etc/mano/human.uid")
-STOP_UNITS = [Path("/etc/systemd/system/mano-stopd." + kind) for kind in ("service", "socket")]
+STOP_UNITS = [Path("/etc/systemd/system") / name for name in (
+    "mano-stopd.service", "mano-stopd.socket", "mano-stopd-control.socket"
+)]
 CODE = Path("/usr/lib/mano-os")
 UNIT_FILE = Path("/etc/systemd/system/mano-launcher.service")
 SOCKET_UNITS = {name: Path(f"/etc/systemd/system/mano-launcher-{name}.socket") for name in PATHS}
