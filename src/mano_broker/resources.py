@@ -26,6 +26,8 @@ def library():
     loaded = ctypes.CDLL(str(LIBRARY), use_errno=True)
     loaded.mano_pin_beneath.argtypes = (ctypes.c_int, ctypes.c_char_p)
     loaded.mano_pin_beneath.restype = ctypes.c_int
+    loaded.mano_read_pinned.argtypes = (ctypes.c_int,)
+    loaded.mano_read_pinned.restype = ctypes.c_int
     return loaded
 
 
@@ -34,6 +36,15 @@ class Pinned:
     fd: int
     device: int
     inode: int
+
+    def read_fd(self):
+        if self.fd < 0:
+            raise Denied("Closed resource pin")
+        fd = library().mano_read_pinned(self.fd)
+        if fd < 0:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error))
+        return fd
 
     def close(self):
         if self.fd >= 0:

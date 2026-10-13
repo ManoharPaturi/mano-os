@@ -2,6 +2,8 @@
 """Operator journal client against the installed launcher in the disposable VM."""
 
 import base64
+import errno
+import hashlib
 import json
 import os
 import pwd
@@ -9,6 +11,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from mano_broker.artifacts import Store
 from mano_broker.ipc import Peer
 from mano_broker.launch_client import Client
 from mano_broker.protocol import ActionRequest, Capability, Mode, canonical
@@ -29,6 +32,7 @@ state = State(Path("/run/mano-journal-ci") / "daemon")
 client = Client()
 runtime = Runtime(state, boot_id="daemon", launcher=client)
 registry = runtime.registry
+artifacts = Store()
 try:
     fd = os.open(identity["workspace"], os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
     try:
@@ -58,7 +62,9 @@ try:
         assert response["fresh"]
         return response["action"]["id"]
 
-    action = prepare("print('production-daemon-ok')", "daemon-once")
+    action = prepare("from pathlib import Path;"
+        "Path('/workspace/captured-result').write_bytes(b'sealed-bytes');"
+        "print('production-daemon-ok')", "daemon-once")
     runtime.tick()
     if action not in executor.jobs:
         events = state.db.execute(
@@ -84,6 +90,19 @@ try:
         body=handle | dict(stream="stdout", offset=0, length=64)))
     assert base64.b64decode(output["data"]).strip() == b"production-daemon-ok"
     assert output["effect_verified"] is False
+    artifact = artifacts.capture(state, registry, action, "captured-result", boot_id="daemon")
+    sealed_fd = artifacts.items[artifact["artifact_id"]].fd
+    Path(identity["workspace"], "captured-result").write_bytes(b"source-was-mutated")
+    assert os.pread(sealed_fd, 64, 0) == b"sealed-bytes"
+    assert artifact["sha256"] == hashlib.sha256(b"sealed-bytes").hexdigest()
+    assert artifact["effect_verified"] is False
+    for mutation in (lambda: os.pwrite(sealed_fd, b"x", 0), lambda: os.ftruncate(sealed_fd, 0)):
+        try:
+            mutation()
+        except OSError as error:
+            assert error.errno == errno.EPERM
+        else:
+            raise AssertionError("Sealed artifact mutated")
     active = prepare("import time;time.sleep(60)", "daemon-stop")
     runtime.tick()
     state.emergency_stop()
@@ -94,7 +113,10 @@ try:
     assert not registry.leases
     print(json.dumps(dict(production_launcher_daemon=True, daemon_journal_execution=True,
         daemon_stop_cancellation=True, runtime_terminal_scheduling=True,
-        runtime_caller_metadata_synthetic=True, pam_authorization=False, model_connected=False)))
+        runtime_caller_metadata_synthetic=True, sealed_artifact_custody=True,
+        artifact_source_mutation_isolated=True, artifact_write_and_truncate_denied=True,
+        artifact_effect_verified=False, pam_authorization=False, model_connected=False)))
 finally:
+    artifacts.close()
     runtime.close()
     state.close()
