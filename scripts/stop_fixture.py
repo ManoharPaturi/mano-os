@@ -269,6 +269,8 @@ def main():
             BASE / "cgroup-path",
             BASE / "watchdog-before.json",
             BASE / "manual-before.json",
+            BASE / "pulse-watchdog.log",
+            BASE / "pulse-manual.log",
         ):
             file.unlink(missing_ok=True)
         return

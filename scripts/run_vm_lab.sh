@@ -173,6 +173,8 @@ if [ "$result" = 0 ]; then
     --known-hosts "$lab_dir/known_hosts" --out "$repo_root/evidence"
   result=$?
   set -e
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo tar --exclude=./report.json -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
 fi
 sha256sum "$lab_dir/$image" > "$repo_root/evidence/bootstrap-preserved-after.sha256"
 cmp "$repo_root/evidence/bootstrap-preserved-before.sha256" \
