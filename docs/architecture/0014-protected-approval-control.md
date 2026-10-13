@@ -28,6 +28,10 @@ worker/human connection attempts get kernel EACCES. Root view/confirmation must 
 wrong human, nonce, digest and injected password fields, deny second consumption,
 return one grant, and allow only its exact operation on the public channel. Existing
 private pending-state SIGKILL recovery and all VM/stop/security tests still run.
+The client validates root socket-creator credentials separately from broker UID/PID
+per-message reply credentials: systemd created the activated listener, while the
+non-root service actually sends the response. The initial CI rejected this legitimate
+creator/sender distinction; both checks are now required.
 This root fixture performs no PAM authentication and records that fact explicitly.
 
 Next: small native PAM adapter, root-owned human-UID mapping and separate protected

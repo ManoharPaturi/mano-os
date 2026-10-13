@@ -74,13 +74,19 @@ def request(actor, body):
 
 control_client = """import errno,json,socket,struct,sys
 s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);s.settimeout(5)
+s.setsockopt(socket.SOL_SOCKET,socket.SO_PASSCRED,1)
 try:s.connect(sys.argv[1])
 except PermissionError as e:
  assert e.errno==errno.EACCES;print(json.dumps({'kernel_errno':'EACCES'}));sys.exit(0)
-_,uid,_=struct.unpack('3i',s.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
-assert uid==int(sys.argv[2]);s.sendall(sys.stdin.buffer.read())
-packet,ancillary,flags,_=s.recvmsg(131072)
-assert not flags & socket.MSG_TRUNC and not ancillary;print(packet.decode())
+_,creator_uid,_=struct.unpack('3i',s.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
+assert creator_uid==0,('unexpected socket creator',creator_uid)
+s.sendall(sys.stdin.buffer.read())
+packet,ancillary,flags,_=s.recvmsg(131072,socket.CMSG_SPACE(12))
+assert not flags & (socket.MSG_TRUNC|socket.MSG_CTRUNC)
+assert len(ancillary)==1 and ancillary[0][:2]==(socket.SOL_SOCKET,socket.SCM_CREDENTIALS)
+pid,uid,_=struct.unpack('3i',ancillary[0][2])
+assert uid==int(sys.argv[2]) and pid==int(sys.argv[3]),('unexpected reply sender',pid,uid)
+print(packet.decode())
 """
 
 
@@ -96,13 +102,15 @@ def control_rpc(body, actor="root"):
             control_client,
             str(CONTROL),
             str(broker_uid),
+            str(replacement),
         ],
         input=json.dumps(body),
         capture_output=True,
         text=True,
         timeout=10,
-        check=True,
+        check=False,
     )
+    assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
 
@@ -339,6 +347,7 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
                 root_control_single_confirmation=True,
                 confirmation_binding_denials=4,
                 control_pam_authenticated=False,
+                root_control_reply_credentials_verified=True,
                 model_connected=False,
                 production_execution_authorized=False,
             ),
