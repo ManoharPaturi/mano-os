@@ -31,7 +31,8 @@ class Session:
         try:
             info = os.fstat(fd)
             if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
-                    or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o600):
+                    or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o600
+                    or info.st_size > 4 * 1024**2):
                 raise ValueError('Expected private single-link checkpoint file')
             conn = sqlite3.connect(file, check_same_thread=False)
             current = file.lstat()
@@ -43,7 +44,10 @@ class Session:
         try:
             conn.execute('PRAGMA trusted_schema=OFF')
             conn.execute('PRAGMA synchronous=FULL')
-            conn.execute('PRAGMA max_page_count=1024')
+            if (conn.execute('PRAGMA page_size').fetchone()[0] != 4096
+                    or conn.execute('PRAGMA max_page_count=1024').fetchone()[0] != 1024):
+                raise ValueError('Checkpoint database exceeds supported page budget')
+            conn.execute('PRAGMA journal_size_limit=4194304')
             conn.execute('PRAGMA wal_autocheckpoint=64')
             conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 1024 * 1024)
             serde = JsonPlusSerializer(pickle_fallback=False, allowed_json_modules=[],

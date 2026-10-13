@@ -65,7 +65,8 @@ class BrokerIPCTests(unittest.TestCase):
         self.assertTrue(result["fresh"])
         self.assertEqual(result["action"]["state"], "intent")
         self.assertFalse(result["action"]["verified"])
-        self.assertEqual(set(result["action"]), {"id", "task_id", "state", "exit_code", "verified"})
+        self.assertEqual(set(result["action"]),
+                         {"id", "task_id", "state", "exit_code", "verified", "proposal_digest"})
         self.assertFalse(self.call()["fresh"])
         query = dict(task_id=self.task, action_id=result["action"]["id"])
         self.assertEqual(self.call("status", query)["action"], result["action"])

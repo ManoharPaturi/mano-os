@@ -95,3 +95,17 @@ class AgentRuntimeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.step(changed)
         self.assertEqual(self.calls, calls)
+
+    def test_old_verified_action_cannot_complete_a_different_operation_in_same_task(self):
+        pending = self.step(self.input)
+        self.approve(pending)
+        queued = self.step(pending)
+        action = queued['action_id']
+        self.journal.start(action, now=10, boot_id='boot')
+        self.journal.transition(action, 'done', exit_code=0)
+        # Simulate an already verified older action in the trusted journal fixture.
+        self.journal.db.execute('UPDATE actions SET verified=1 WHERE id=?', (action,))
+        forged = queued | dict(operation_key='different-operation',
+            proposal=queued['proposal'] | {'idempotency_key': 'different-operation'})
+        with self.assertRaisesRegex(ValueError, 'Journal action does not match'):
+            self.step(forged)

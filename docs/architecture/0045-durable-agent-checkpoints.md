@@ -26,3 +26,10 @@ The process itself reads back cgroup and credential/filter constraints. A separa
 old-response replay case still uses the saved pre-action state to check idempotence.
 Actual VM acceptance remains pending final-head CI. This transient test service is
 not yet the installed long-lived prompt/core service or a real-model integration.
+
+Recovery also binds each journal status to a broker-generated SHA256 of the exact
+original proposal (grant ID excluded). AgentRuntime compares this with its saved
+proposal before interpreting verified/done. A valid older action ID from the same
+task cannot complete a different operation. The public digest exposes no command,
+grant or arguments. A regression test simulates an older verified journal action
+and swaps its ID into a different keyed proposal; completion is denied.
