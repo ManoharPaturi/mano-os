@@ -6,6 +6,7 @@ import os
 import pwd
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -228,6 +229,15 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
             indent=2,
         )
     )
+except BaseException:
+    subprocess.run(
+        ["journalctl", "-u", "mano-broker.service", "--no-pager", "-n", "60"],
+        stdout=sys.stderr,
+        stderr=sys.stderr,
+        check=False,
+        timeout=10,
+    )
+    raise
 finally:
     subprocess.run(["systemctl", "stop", *UNITS], check=False, capture_output=True)
     for file in installed:
