@@ -22,8 +22,8 @@ def receive_directory(connection):
     peer = Peer(
         *CREDENTIALS.unpack(connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
     )
-    if peer.uid != 0:
-        raise Denied("Provisioning requires root sender")
+    # Drain one bounded packet before denying, closing all passed rights. Closing
+    # an unread seqpacket can reset the peer before its denial response is read.
     connection.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
     packet, ancillary, flags, _ = connection.recvmsg(
         MAX_PACKET, socket.CMSG_SPACE(12) + socket.CMSG_SPACE(253 * 4), socket.MSG_CMSG_CLOEXEC
@@ -42,7 +42,8 @@ def receive_directory(connection):
             else:
                 unexpected = True
         if (
-            unexpected
+            peer.uid != 0
+            or unexpected
             or flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)
             or not packet
             or len(descriptors) != 1

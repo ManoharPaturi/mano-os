@@ -154,8 +154,9 @@ s.sendall(b'{}');print(s.recv(65536).decode())
                 capture_output=True,
                 text=True,
                 timeout=10,
-                check=True,
+                check=False,
             )
+            assert result.returncode == 0, result.stderr
             response = json.loads(result.stdout)
         else:
             client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
