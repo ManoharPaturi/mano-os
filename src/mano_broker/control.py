@@ -9,6 +9,7 @@ import time
 
 from .approvals import Approvals
 from .ipc import receive
+from .prompts import Prompts
 from .protocol import canonical, unique_object
 from .state import Denied
 from .verifier import check, declare
@@ -26,6 +27,16 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value["operation"] == "submit_prompt":
+        if set(body) != {"human_uid", "request_key", "prompt"}:
+            raise Denied("Unexpected human prompt fields")
+        result = Prompts(state).submit(**body, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, prompt=result)
+    if value["operation"] == "prompt_status":
+        if set(body) != {"human_uid", "prompt_id"}:
+            raise Denied("Unexpected prompt status fields")
+        result = Prompts(state).status(**body, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, prompt=result)
     if value["operation"] == "declare_artifact_contract":
         if set(body) != {"approval_id", "path", "sha256", "size"}:
             raise Denied("Unexpected expectation fields")

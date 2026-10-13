@@ -77,6 +77,10 @@ class State:
                 approval_id TEXT PRIMARY KEY REFERENCES approvals(id),path TEXT NOT NULL,
                 sha256 TEXT NOT NULL,size INTEGER NOT NULL,boot_id TEXT NOT NULL,
                 epoch INTEGER NOT NULL,CHECK(size>=0 AND size<=8388608));
+            CREATE TABLE IF NOT EXISTS human_prompts(
+                id TEXT PRIMARY KEY,human_uid INTEGER NOT NULL,request_key TEXT NOT NULL,
+                prompt TEXT NOT NULL,boot_id TEXT NOT NULL,state TEXT NOT NULL,
+                task_id TEXT REFERENCES tasks(id),UNIQUE(human_uid,request_key));
         """)
 
         # Upgrade pre-binding journals without silently retaining broad authority.

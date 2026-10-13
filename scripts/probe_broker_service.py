@@ -141,9 +141,13 @@ def rpc(channel, body, actor="mano-worker", directory=None):
 native_client = """import json,sys
 from mano_prompt.approve import (rpc,view_packet,confirmation_packet,
  rearm_view_packet,rearm_confirmation_packet)
+from mano_prompt.submit import prompt_packet,status_packet
 body=json.loads(sys.stdin.read())
 try:
- if body['mode']=='view':result=rpc(view_packet(body['id']))
+ if body['mode']=='submit_prompt':result=rpc(prompt_packet(body['prompt'],body['key']))
+ elif body['mode']=='prompt_status':result=rpc(status_packet(body['id']))
+ elif body['mode']=='raw_prompt':result=rpc(bytes.fromhex(body['wire']))
+ elif body['mode']=='view':result=rpc(view_packet(body['id']))
  elif body['mode']=='rearm_view':result=rpc(rearm_view_packet())
  elif body['mode']=='rearm_confirm':
   result=rpc(rearm_confirmation_packet(body['view'],body['password']))
@@ -535,6 +539,20 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     assert elapsed < 5
     # Actual allocated caller → kernel broker socket → native PAM → journal
     # → private root launcher → sandboxed terminal. No direct grant injection.
+    prompt_request = dict(mode="submit_prompt", key="a" * 32,
+                          prompt="Create and test a small addition project")
+    human_receipt = human(prompt_request)
+    assert human_receipt["ok"] and human_receipt["prompt"]["state"] == "received"
+    assert human_receipt["prompt"]["task_id"] is None
+    assert human(prompt_request) == human_receipt
+    assert human(dict(mode="prompt_status", id=human_receipt["prompt"]["id"])) == human_receipt
+    for wire in (b"\x01\x05" + b"b" * 32 + b"\x00\x02x",
+                 b"\x01\x05" + b"b" * 32 + b"\x00\x01\xff"):
+        assert human(dict(mode="raw_prompt", wire=wire.hex()))["ok"] is False
+    for actor in ("mano-agent", "mano-core", "mano-worker"):
+        assert human(prompt_request, actor=actor)["ok"] is False
+    assert rpc("request", dict(schema_version="1.0", operation="submit_prompt",
+        body=dict(human_uid=1002, request_key="b" * 32, prompt="forged human"))) == denied
     factory_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt="Create and test a small addition project")),
@@ -739,6 +757,9 @@ finally:client.close()
         sqlite_agent_checkpoint_new_process_recovery=True,
         installed_core_cli_entrypoint=True,
         installed_root_task_factory=True,
+        authenticated_native_human_prompt_queue=True,
+        prompt_duplicate_and_malformed_cases_verified=True,
+        prompt_untrusted_sender_and_public_route_denied=True,
         core_step_cgroup_and_capability_limits_verified=True,
         mock_agent_exit_alone_unverified=True, preapproval_exact_file_predicate=True,
         verifier_public_and_wrong_action_denied=True,
