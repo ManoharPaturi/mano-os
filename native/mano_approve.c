@@ -113,28 +113,17 @@ static bool authenticate(uid_t human,char *password) {
     if (handle) pam_end(handle,result);
     return result==PAM_SUCCESS;
 }
-static struct json_object *control(const char *operation,const char *id,uid_t human,const char *nonce,const char *digest) {
-    struct passwd *broker=getpwnam("mano-broker");if (!broker || !broker->pw_uid) return NULL;
-    uid_t broker_uid=broker->pw_uid;
+static struct json_object *exchange(const char *path,const unsigned char *wire,size_t wire_size,uid_t sender_uid) {
     int fd=socket(AF_UNIX,SOCK_SEQPACKET|SOCK_CLOEXEC,0);if (fd<0) return NULL;
     int passcred=1;
     if (setsockopt(fd,SOL_SOCKET,SO_PASSCRED,&passcred,sizeof(passcred))) {close(fd);return NULL;}
     struct timeval timeout={2,0};
     if (setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout)) ||
         setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout))) {close(fd);return NULL;}
-    struct sockaddr_un address={.sun_family=AF_UNIX};strcpy(address.sun_path,CONTROL_SOCKET);
+    struct sockaddr_un address={.sun_family=AF_UNIX};strcpy(address.sun_path,path);
     struct ucred peer; socklen_t size=sizeof(peer);struct json_object *result=NULL;
     if (connect(fd,(struct sockaddr *)&address,sizeof(address)) ||
         getsockopt(fd,SOL_SOCKET,SO_PEERCRED,&peer,&size) || peer.uid!=0) {close(fd);return NULL;}
-    struct json_object *request=json_object_new_object(),*body=json_object_new_object();
-    json_object_object_add(request,"schema_version",json_object_new_string("1.0"));
-    json_object_object_add(request,"operation",json_object_new_string(operation));
-    json_object_object_add(body,"approval_id",json_object_new_string(id));
-    json_object_object_add(body,"human_uid",json_object_new_int64(human));
-    if (nonce) json_object_object_add(body,"nonce",json_object_new_string(nonce));
-    if (digest) json_object_object_add(body,"operation_digest",json_object_new_string(digest));
-    json_object_object_add(request,"body",body);
-    const char *wire=json_object_to_json_string_ext(request,JSON_C_TO_STRING_PLAIN);size_t wire_size=strlen(wire);
     if (send(fd,wire,wire_size,MSG_NOSIGNAL)!=(ssize_t)wire_size) goto done;
     char *reply=malloc(MAX_REPLY+1);if (!reply) goto done;
     union {struct cmsghdr aligned;unsigned char bytes[CMSG_SPACE(sizeof(struct ucred))+CMSG_SPACE(253*sizeof(int))];} ancillary;
@@ -145,7 +134,7 @@ static struct json_object *control(const char *operation,const char *id,uid_t hu
     for (struct cmsghdr *c=CMSG_FIRSTHDR(&message);c;c=CMSG_NXTHDR(&message,c)) {
         if (c->cmsg_level==SOL_SOCKET && c->cmsg_type==SCM_CREDENTIALS && c->cmsg_len==CMSG_LEN(sizeof(struct ucred))) {
             struct ucred sender;memcpy(&sender,CMSG_DATA(c),sizeof(sender));count++;
-            if (sender.uid!=broker_uid || sender.pid<=0) valid=false;
+            if (sender.uid!=sender_uid || (sender_uid==0 && sender.gid!=0) || sender.pid<=0) valid=false;
         } else {
             valid=false;
             if (c->cmsg_level==SOL_SOCKET && c->cmsg_type==SCM_RIGHTS) {
@@ -167,7 +156,22 @@ static struct json_object *control(const char *operation,const char *id,uid_t hu
         }
     }
     free(reply);
-done:json_object_put(request);close(fd);return result;
+done:close(fd);return result;
+}
+static struct json_object *control(const char *operation,const char *id,uid_t human,const char *nonce,const char *digest) {
+    struct passwd *broker=getpwnam("mano-broker");if (!broker || !broker->pw_uid) return NULL;
+    uid_t broker_uid=broker->pw_uid;
+    struct json_object *request=json_object_new_object(),*body=json_object_new_object();
+    json_object_object_add(request,"schema_version",json_object_new_string("1.0"));
+    json_object_object_add(request,"operation",json_object_new_string(operation));
+    json_object_object_add(body,"approval_id",json_object_new_string(id));
+    json_object_object_add(body,"human_uid",json_object_new_int64(human));
+    if (nonce) json_object_object_add(body,"nonce",json_object_new_string(nonce));
+    if (digest) json_object_object_add(body,"operation_digest",json_object_new_string(digest));
+    json_object_object_add(request,"body",body);
+    const char *wire=json_object_to_json_string_ext(request,JSON_C_TO_STRING_PLAIN);size_t wire_size=strlen(wire);
+    struct json_object *result=exchange(CONTROL_SOCKET,(const unsigned char *)wire,wire_size,broker_uid);
+    json_object_put(request);return result;
 }
 static bool field_hex(struct json_object *view,const char *name,const char *expected,size_t length) {
     struct json_object *field=NULL;
@@ -180,7 +184,30 @@ static void handle(int fd,uid_t human) {
     struct timeval timeout={2,0};
     if (setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout)) ||
         setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout))) goto done;
-    if (!credentials(fd,packet,sizeof(packet)-1,&size,human) || size<34 || packet[0]!=1 || !hex((char *)packet+2,32)) goto done;
+    if (!credentials(fd,packet,sizeof(packet)-1,&size,human) || size<2 || packet[0]!=1) goto done;
+    if (packet[1]==3 && size==2) {
+        const unsigned char query='V';
+        reply=exchange("/run/mano-stopd/control.sock",&query,1,0);
+        if (reply) goto send_reply;
+        goto failed;
+    }
+    if (packet[1]==4) {
+        if (size<77 || !hex((char *)packet+10,64)) goto failed;
+        unsigned length=((unsigned)packet[74]<<8)|packet[75];
+        if (!length || length>256 || size!=76+(ssize_t)length || memchr(packet+76,0,length)) goto failed;
+        if (!authenticate(human,(char *)packet+76)) goto failed;
+        unsigned char command[41]={0};command[0]='R';memcpy(command+1,packet+2,8);
+        for (unsigned i=0;i<32;i++) {
+            unsigned char high=packet[10+2*i],low=packet[11+2*i];
+            command[9+i]=(unsigned char)(((high<='9'?high-'0':high-'a'+10)<<4)|
+                                       (low<='9'?low-'0':low-'a'+10));
+        }
+        reply=exchange("/run/mano-stopd/control.sock",command,sizeof(command),0);
+        explicit_bzero(command,sizeof(command));
+        if (reply) goto send_reply;
+        goto failed;
+    }
+    if (size<34 || !hex((char *)packet+2,32)) goto done;
     char id[33]={0};memcpy(id,packet+2,32);
     reply=control("approval_view",id,human,NULL,NULL);
     struct json_object *ok=NULL,*view=NULL;

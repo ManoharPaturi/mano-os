@@ -1,11 +1,11 @@
 [Unit]
 Description=mano native independent emergency Stop
-Requires=mano-stopd.socket
-After=mano-stopd.socket
+Requires=mano-stopd.socket mano-stopd-control.socket
+After=mano-stopd.socket mano-stopd-control.socket
 
 [Service]
 Type=notify
-Sockets=mano-stopd.socket
+Sockets=mano-stopd.socket mano-stopd-control.socket
 ExecStart=/usr/libexec/mano-stopd
 User=root
 Group=root

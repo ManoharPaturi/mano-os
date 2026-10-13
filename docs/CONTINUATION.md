@@ -409,3 +409,25 @@ reportsfailure/exitsrestart. NativeS remainsfixedhuman-only, no newrearmroute ye
 105tests12MacLinuxskips/Ruff/diffpass; nativecompile/actualfaultinjectionVMpending.
 VMcheckspartialv1:2:arm→v1:2:latched, fullpendingv1:3:armed→v1:4:latched,
 oldproposalsremainDenied. PAMboundrearm andfulloriginalscope stillrequired.
+
+# PAM native rearm draft
+
+PR49mergeda6d3d5d493f870a83ca0c7b202f1cf5624a7aec0 afterallheadf3d9c15checks
+SUCCESS run38436956340/artifact11833402852 (bothpendingfaultrecoverslatched).
+Currentfeat/phase1-pam-rearm nativeStopnow2fixedFDshuman/control (exactnames+paths),
+Rootcontrol0600 packetV view random32nonce/generation/TTL60, Rgen8+nonce32 afterPAM
+roothelper. EachHumanS invalidateschallenge; Rconsumeschallenge, verifiesgen/expiry/
+groupsunpopulated thenatomicallypublishesg+1ARMED. PAMstaysseparateNativeApprove,
+newtypedhumanop3view/op4confirmation (generation8,noncehex64,pwlength2/pw<=256),
+fixedRoottransport refactor reusedexistingstrictreplycredentials/JSON checks.
+NativeEmergencyS keepspriority andneverrunsPAM/Python. RootUID0control trustedOS
+adapter justlikeexistingbrokerapprovalcontrol; model/broker UIDs no access.
+HumanTTY mano-approve --rearm available. PythonRuntime nowSnapshot/generationaware,
+durableMeta.native_generation; onnewarmedgen revoke/unknown/epoch FIRST thenclear
+latch, evenifbrokerfrozen throughStop+rearm; decreasinggenfailsclosed. Explicit
+trustedbooltestadapter remainsforunitMocks, nopublicoverride. Initialpositivearmed
+generation alsoallowsauthenticatedrearm onupgrade/restart whileoldgrantsrevoked.
+108tests12MacLinuxskips/Ruff/shell/diffpass. NewrealVMrearmwrongpw/noncemismatch/
+newStopinvalidates/replay/frozenBroker/newPAMterminalafterrearm added, pendingCI.
+Needadditionalexpiry+populatedgroupVMdenial/replacementcgrouprecovery/latencybefore
+fullStopclaim. No physical/verifiedartifact/model claims fromthisdraft.
