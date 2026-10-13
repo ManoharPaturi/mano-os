@@ -71,6 +71,6 @@ approval queue supports public request/status without exposing nonce or confirma
 Trusted confirmation consumes one challenge and issues one exact grant atomically.
 Protected root control and native PAM authentication are verified in synthetic CI;
 manual TTY/GUI and physical-input verification remain pending. Descriptor custody
-is verified, with task-bound registry integration in progress. Trusted provisioning,
-sandbox execution, native stop/verifier and model routing remain required.
-No model command is executed. See ADR0009–0017 and accepted CI evidence for scope.
+and task-bound registry are verified. Live daemon provisioning/preparation is being
+integrated; sandbox execution, native stop/verifier and model routing remain required.
+No model command is executed. See ADR0009–0019 and accepted CI evidence for scope.

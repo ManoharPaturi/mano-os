@@ -117,3 +117,13 @@ registryTaskcreation andcleanup. NewDebianprobe realnonrootreceiver/rootFD
 plus11denials/per-requestFDdeltas. No daemon/publicprepare wiring yet.
 ADR0018 boundaries; local67tests8MacLinuxskips pendingrerun. NeedallCIbeforemerge.
 Full original goalactive. Disk14GiB93%last, no localimages oruserdata deletion.
+
+Latest PR28 main691440ce3e5e0e43f4978585dbdbe9ad2617ec1e post-main38349318031
+all3success nowverified. Currentfeat/phase1-live-runtime Runtime+thirdroot0600
+provision listener actualservice integration. Proposeprepares liveFDs beforeintent;
+approvalrequestrequiresliveTask. Startup revokesgrants/failsintent/unknownexecuting/
+epoch++ preserveshistory/latch.69localtests10MacLinuxskips passed; realLinuxCI
+pending. Actualservicefixture rewritten liveFDprovision/nativePAM/heldFD/symlink
+replay/SIGKILL revokeoldIDs and freshrootprovision. Seededexecutingstate explicitly
+metadataonly/nooperation. ADR0019. NeedallCI beforemerge, no skip/rootbypass.
+No executor yet; nextsandbox/jobUID/ACL/nativeStop/verifier/model/goldengate.

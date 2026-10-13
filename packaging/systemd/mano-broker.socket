@@ -1,5 +1,7 @@
 [Unit]
 Description=mano broker request-only socket
+Wants=mano-broker-control.socket mano-broker-provision.socket
+After=mano-broker-control.socket mano-broker-provision.socket
 
 [Socket]
 ListenSequentialPacket=/run/mano-broker/request.sock
