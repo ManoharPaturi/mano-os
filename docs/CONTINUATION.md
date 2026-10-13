@@ -53,3 +53,10 @@ limit rejection; setup stalled launching pointer service. No merge/evidence prom
 Next candidate paces successful forks at 10ms, retains sustained rejected attempts,
 and requires nonzero pids.events max counters in both worker units before stop.
 This is a diagnostic change, not proof the underlying guest stall is resolved.
+
+PR16 diagnostics run 38327438447: native daemon active, latch false, 50 task PIDs,
+pointer pulses 1-7, worker1 max=100, worker2 max=0; pressure readiness failed.
+Pacing alone did not resolve loss of guest progress. Candidate now explicitly uses
+QEMU -cpu host under KVM (QEMU recommended for non-migrating guests), max for TCG,
+and records the selection. Keep two vCPUs and both saturated task groups required.
+No stop success or merge is claimed. Reference: https://www.qemu.org/docs/master/system/i386/cpu.html
