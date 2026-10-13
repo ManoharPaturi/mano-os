@@ -127,3 +127,16 @@ pending. Actualservicefixture rewritten liveFDprovision/nativePAM/heldFD/symlink
 replay/SIGKILL revokeoldIDs and freshrootprovision. Seededexecutingstate explicitly
 metadataonly/nooperation. ADR0019. NeedallCI beforemerge, no skip/rootbypass.
 No executor yet; nextsandbox/jobUID/ACL/nativeStop/verifier/model/goldengate.
+# Workspace continuation
+
+PR #29 merged at 8e74341e2600715d157210a6adc3206fe80fa2c5 after all three
+checks passed on 54a03db (run 38352199729). Accepted VM broker report proves
+real descriptor preparation, mutation-syscall EPERM, native PAM, held inode,
+SIGKILL restart and fresh provisioning. No actual operation/model ran.
+
+Next branch feat/phase1-workspace-acl adds root administrative workspace creation
+and actual VM default ACL tests. Local 70 tests pass with 10 Linux-only skips.
+Linux workspace evidence is pending CI; do not claim its gate passed yet.
+Continue with task UID allocation and actual sandbox/executor after acceptance.
+Full original version goal remains active. Physical gates remain unmeasured.
+Disk 14 GiB free / 94 percent used; no local VM images or model downloads.

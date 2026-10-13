@@ -9,7 +9,7 @@ mkdir -p evidence
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -y upgrade
-apt-get install -y --no-install-recommends python3 python3-venv bubblewrap \
+apt-get install -y --no-install-recommends python3 python3-venv bubblewrap acl \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
   libreoffice-calc libreoffice-gtk3 python3-uno poppler-utils gir1.2-gtk-4.0 fonts-dejavu-core jq procps rsync gcc libc6-dev libpam0g-dev libjson-c-dev libsystemd-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols xauth x11-utils xfonts-base
