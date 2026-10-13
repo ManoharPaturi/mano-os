@@ -1,0 +1,16 @@
+[Unit]
+Description=mano protected human emergency Stop socket
+
+[Socket]
+ListenSequentialPacket=/run/mano-stopd/human.sock
+SocketUser=root
+SocketGroup=mano-human
+SocketMode=0660
+DirectoryMode=0755
+PassCredentials=yes
+FileDescriptorName=human
+Backlog=8
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

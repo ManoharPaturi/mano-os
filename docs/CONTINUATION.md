@@ -345,3 +345,23 @@ realenforcementpending. No publiclimits/pathfield or extraRootcapability.
 PR44latestpollpacingfix5163264 andPR45merges8b49b2d pushed; freshCIpending.
 Prior45run38410592981 failedSAMEcontrolECONNRESET inlaterdaemonprobe, no actual
 PAMfailure inferred. Rootbudgetunchanged, probe0.25sec/BrokerTick0.5sec.
+
+# Native Stop draft continuation
+
+PR45merged71f15ab073eb9aab9687d45acdce8ff3117651dc afterhead5b54708/all3SUCCESS
+38412562531. Artifact11822308070 actualkernelTask/nativePAM/terminaldone/knownfile/
+wrongpw/changedargs/replay/wrongcallerdenial accepted; verifiedfalse/physicalnull.
+outputs/broker-service.json updated. PR46priorhead62852fd CI38412590811 all3SUCCESS,
+but refreshedagainstmain head9dabca3 needsfresh38414184726 (LIVE).
+Currentfeat/phase1-native-stop adds Cmano_stopd fixedhumanSocket, RootUIDpolicy,
+SCMconnection/messagebinding/rightsclose, armed→latchedRoot0644state guarded0755
+RootStateDir, neverstartupresetlatched/corrupt. Noargs/commands/paths/models.
+FixedRootlauncher cgroup2/task-32hex only, <=64, writescgroup.kill afterlatch,
+noPython/capabilities. UnitsRootcapemptyNNP/syscall/readwritefixedgroup/state,
+watchdog6sec. NativeCstrictcompile addedqualityCI; notcompiledMac/notyetverified.
+Broker/PAMVMfixture builds/installsnativeunit afteractualtasktests, realapproved
+forkedchildsetsidready→freezeactualBroker+RootLauncher→humanS packet authenticated
+Rootreply→populated0/latch/bothstillT→CONTfinally. MalformedSS deniedwithoutlatch,
+taskUIDsocketEACCES. Stopsallownunitsbeforeownfiles/StateDircleanup.
+IMPORTANTnative_stop_grant_latch_integratedFALSE: nofuture-start/grant/restart
+coupling orPAMrearm yet. FullStopcontract NOT complete untilthosegatespass.
