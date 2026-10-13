@@ -99,3 +99,12 @@ symlink/magic/mount rejection/type/hardlink policy. No registry/executor/readwri
 wire yet.61localtests2MacLinuxskips pass; LinuxCI installsDSO/runs test, actual
 Debianroot/mount/sentinel probeadded. ADR0016 limitsmutablecontent/hardlinkraces
 and lostFDrestart. NeednewPR/allcurrentheadCIbeforemerge. Disk14GiB93%last.
+
+Latest PR26 main70f89fd64c5c307d14c651a964d4889779d8f694, postmain38345354682
+all3success verified. Currentfeat/phase1-resource-registry trustedFD→opaqueID
+subject/task/boot binding, exactgrant prepare/read/cwd/writeparent pins, parent-race
+fix, one start metadata, replaynofreshFD, release/lostregistry/quota boundaries.
+66localtests7MacLinuxskips pass. LinuxCI and actualDebianregistryproof pending.
+NO provisioningwire/executor yet; publicpropose metadata mustrouteRegistry.prepare
+beforeState.authorize oncewired, notpretendpre-reserved intentsacquiredFDs.
+READMEstalePAMclaim fixed. ADR0017. NeednewPR/allCIbeforemerge. Fullgoalactive.
