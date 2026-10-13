@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -184,8 +185,28 @@ class BrokerStateTests(unittest.TestCase):
             self.state.record_verification(action["id"], checked_artifacts=[])
         self.state.start(action["id"], now=11, boot_id="boot-a")
         self.state.transition(action["id"], "done", exit_code=0)
+        data = b"independently checked result"
+        digest = hashlib.sha256(data).hexdigest()
+        evidence = {"artifact_id": "c" * 32, "sha256": digest}
+        with self.assertRaises(Denied):
+            self.state.record_verification(action["id"], checked_artifacts=[evidence])
+        self.state.db.execute("INSERT INTO artifacts VALUES(?,?,?,?)", (
+            "c" * 32, action["id"], json.dumps(dict(size=len(data), sha256=digest)), data
+        ))
+        for entries in ([evidence | {"sha256": "d" * 64}], [evidence, evidence]):
+            with self.assertRaises(Denied):
+                self.state.record_verification(action["id"], checked_artifacts=entries)
+        other, _ = self.authorize(self.request(idempotency_key="other-result"))
+        self.state.db.execute("UPDATE artifacts SET action_id=?", (other["id"],))
+        with self.assertRaises(Denied):
+            self.state.record_verification(action["id"], checked_artifacts=[evidence])
+        self.state.db.execute("UPDATE artifacts SET action_id=?", (action["id"],))
+        self.state.db.execute("UPDATE artifacts SET data=?", (b"corrupt",))
+        with self.assertRaises(Denied):
+            self.state.record_verification(action["id"], checked_artifacts=[evidence])
+        self.state.db.execute("UPDATE artifacts SET data=?", (data,))
         self.state.record_verification(
-            action["id"], checked_artifacts=[{"artifact_id": "c" * 32, "sha256": "d" * 64}]
+            action["id"], checked_artifacts=[evidence]
         )
         row, _ = self.authorize()
         self.assertEqual(row["verified"], 1)

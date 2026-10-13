@@ -4,6 +4,7 @@ Only trusted broker code calls mutation methods. A later authenticated IPC servi
 must derive caller UID from kernel credentials and expose a restricted method set.
 """
 
+import hashlib
 import json
 import math
 import os
@@ -350,6 +351,20 @@ class State:
             ).fetchone()
             if row is None or row["state"] != "done" or row["verified"]:
                 raise Denied("Action cannot be verified")
+            seen = set()
+            for item in checked_artifacts:
+                artifact = self.db.execute(
+                    "SELECT metadata_json,data FROM artifacts WHERE id=? AND action_id=?",
+                    (item["artifact_id"], action_id),
+                ).fetchone()
+                if artifact is None or item["artifact_id"] in seen:
+                    raise Denied("Verification requires original unique artifact custody")
+                seen.add(item["artifact_id"])
+                metadata = json.loads(artifact[0])
+                if (len(artifact[1]) != metadata["size"]
+                        or metadata["sha256"] != item["sha256"]
+                        or hashlib.sha256(artifact[1]).hexdigest() != item["sha256"]):
+                    raise Denied("Verification artifact integrity mismatch")
             self.db.execute(
                 "UPDATE actions SET verified=1,evidence_json=? WHERE id=?",
                 (canonical(checked_artifacts), action_id),
