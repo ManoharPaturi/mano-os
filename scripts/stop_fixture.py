@@ -97,7 +97,29 @@ def phase_start(phase):
         ):
             break
         if time.monotonic() > deadline:
-            raise RuntimeError("Bounded process storm/input not ready")
+            diagnostic = {
+                "pids": pids,
+                "limits": limits,
+                "pulse": pulse.read_text() if pulse.is_file() else None,
+                "latched": Path("/var/lib/mano-broker/stop-latched").exists(),
+                "journal": run(
+                    [
+                        "journalctl",
+                        "--no-pager",
+                        "-n",
+                        "60",
+                        "-u",
+                        "mano-stopd-spike.service",
+                        "-u",
+                        f"mano-stop-{phase}-input.service",
+                        "-u",
+                        "mano-stop-display.service",
+                    ],
+                    check=False,
+                ).stdout,
+            }
+            (OUT / "stop-readiness.json").write_text(json.dumps(diagnostic, indent=2) + "\n")
+            raise RuntimeError("Bounded process storm/input not ready: " + json.dumps(diagnostic))
         time.sleep(0.05)
     seats = query_seat()
     assert any(seat["capabilities"] & 1 for seat in seats)
