@@ -2,8 +2,8 @@
 
 AI-native, prompt-first Linux with a trusted broker and isolated agent desktop.
 
-**Status: Phase 0 lab in development. A native prompt prototype is implemented.
-Production runtime, coding-agent integration, .deb and ISO remain pending.**
+**Status: Phase 0 feasibility gates passed in CI; Phase 1 implementation is in progress.
+The complete agent workflow, physical acceptance, .deb and ISO remain pending.**
 
 The complete original [v2.1 specification](docs/spec-v2.1.md) is preserved verbatim.
 Its architecture and acceptance gates remain the product contract.
@@ -69,8 +69,19 @@ and runtime gates; physical 8 GB and installer/firmware requirements remain late
 kernel-authenticated request channel under a hardened non-root service. A pending
 approval queue supports public request/status without exposing nonce or confirmation.
 Trusted confirmation consumes one challenge and issues one exact grant atomically.
-Protected root control and native PAM authentication are verified in synthetic CI;
-manual TTY/GUI and physical-input verification remain pending. Descriptor custody
-and task-bound registry are verified. Live daemon provisioning/preparation is being
-integrated; sandbox execution, native stop/verifier and model routing remain required.
-No model command is executed. See ADR0009–0019 and accepted CI evidence for scope.
+Protected control and native PAM authentication are verified with synthetic CI input;
+physical input and manual acceptance remain pending. Actual allocated task identities,
+descriptor custody, journal scheduling and restricted terminal execution passed in
+the Debian VM. Independent native Stop drains task cgroups while Python services
+are frozen; authenticated rearm preserves grant revocation across generations.
+
+Sealed artifact capture, private journal persistence and bounded public retrieval
+passed the installed broker VM probes, including source mutation, caller/range
+denials and process restart. Capturing bytes keeps effect_verified=false.
+Independent outcome verification remains a separate requirement.
+
+Draft agent PRs add a pinned LangGraph runtime and deterministic mock project test.
+Their current-head CI must pass before acceptance; no real model is connected yet.
+Prompt-to-agent integration, durable graph recovery, broader golden tasks and the
+original later version gates remain required. See the architecture documents and
+accepted CI artifacts for the precise scope of each implementation.
