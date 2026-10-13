@@ -79,7 +79,22 @@ def phase_start(phase):
             int(value) for file in group.rglob("cgroup.procs") for value in file.read_text().split()
         ]
         pulse = BASE / f"pulse-{phase}.log"
-        if len(pids) >= 20 and pulse.is_file() and len(pulse.read_text().splitlines()) >= 4:
+        limits = {
+            file.parent.name: file.read_text().strip()
+            for file in group.rglob("pids.events")
+            if file.parent.name.endswith(f"{phase}-1.service")
+            or file.parent.name.endswith(f"{phase}-2.service")
+        }
+        saturated = len(limits) == 2 and all(
+            any(line.startswith("max ") and int(line.split()[1]) > 0 for line in value.splitlines())
+            for value in limits.values()
+        )
+        if (
+            saturated
+            and len(pids) >= 20
+            and pulse.is_file()
+            and len(pulse.read_text().splitlines()) >= 4
+        ):
             break
         if time.monotonic() > deadline:
             raise RuntimeError("Bounded process storm/input not ready")
@@ -90,6 +105,7 @@ def phase_start(phase):
         "phase": phase,
         "cgroup": str(group),
         "task_pids": pids,
+        "pids_limit_events_before": limits,
         "seats_before": seats,
         "pulse_bytes_before": pulse.stat().st_size,
         "grant": grant,

@@ -46,3 +46,10 @@ Disk: ~15.7 GiB free on Mac, above 90% used. Warn below 20 GiB; stop new large
 local downloads below 10 GiB. Avoid local VM/model images and never delete user data.
 No direct agent /compact tool is exposed; preserve concise notes across automatic
 compaction. Goal remains active until the full specification is actually verified.
+
+PR16 run 38326217996 failed before stop trigger. Guest kernel 6.12.111 logged
+RCU starvation and two CPUs waiting in smp_call_function_many_cond after pids
+limit rejection; setup stalled launching pointer service. No merge/evidence promotion.
+Next candidate paces successful forks at 10ms, retains sustained rejected attempts,
+and requires nonzero pids.events max counters in both worker units before stop.
+This is a diagnostic change, not proof the underlying guest stall is resolved.
