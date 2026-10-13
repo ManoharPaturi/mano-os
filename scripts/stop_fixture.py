@@ -256,6 +256,13 @@ def main():
         )
         for unit in ("mano-stopd-spike.service", SLICE, "mano-stop-display.service"):
             run(["systemctl", "stop", unit], check=False)
+        (OUT / "stop-kernel-journal.txt").write_text(
+            run(["journalctl", "-k", "--no-pager"], check=False).stdout
+        )
+        printk = BASE / "console-printk-before"
+        if printk.is_file():
+            Path("/proc/sys/kernel/printk").write_text(printk.read_text())
+            printk.unlink()
         for file in (
             BASE / "human.sock",
             BASE / "ever-started",
@@ -268,6 +275,14 @@ def main():
     if action == "prepare":
         BASE.mkdir(mode=0o711, exist_ok=True)
         assert BASE.stat().st_uid == 0 and not BASE.is_symlink()
+        # Preserve warning/error console output, keep info in the kernel journal.
+        # Slow emulated UART printk can stall RCU while pressure rejects forks.
+        printk = Path("/proc/sys/kernel/printk")
+        prior = printk.read_text()
+        (BASE / "console-printk-before").write_text(prior)
+        values = prior.split()
+        values[0] = "5"
+        printk.write_text(" ".join(values) + "\n")
         run(
             [
                 "systemd-run",

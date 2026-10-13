@@ -60,3 +60,11 @@ Pacing alone did not resolve loss of guest progress. Candidate now explicitly us
 QEMU -cpu host under KVM (QEMU recommended for non-migrating guests), max for TCG,
 and records the selection. Keep two vCPUs and both saturated task groups required.
 No stop success or merge is claimed. Reference: https://www.qemu.org/docs/master/system/i386/cpu.html
+
+Host CPU run38327886679 failed readiness, but pointeradvanced200pulses; capture
+truncated beforepids. Next diagnostic preserves console printk settings, routes
+info to journal (consolelevel5 retainswarnings/errors) duringpressure, restores
+settings and saveskerneljournal duringcleanup. LinuxRCUdocs identify slowserial
+console asstallcause; this remains a hypothesis. Postserial guest evidence now
+collected evenwhenprobe fails. Rootstage mustnot hide anykernelerror or relaxPID
+saturation, input, grant orstopassertions.
