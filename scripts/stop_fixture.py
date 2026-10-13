@@ -104,13 +104,38 @@ def observe(phase):
     group = Path(before["cgroup"])
     deadline = time.monotonic() + 15
     while True:
-        empty = (group / "cgroup.events").is_file() and "populated 0" in (
-            group / "cgroup.events"
-        ).read_text()
+        events = (
+            (group / "cgroup.events").read_text() if (group / "cgroup.events").is_file() else None
+        )
+        empty = not group.exists() or (events is not None and "populated 0" in events)
         if empty and Path("/var/lib/mano-broker/stop-latched").exists():
             break
         if time.monotonic() > deadline:
-            raise RuntimeError("Tasks not emptied/stop not latched")
+            diagnostic = {
+                "group_exists": group.exists(),
+                "events": events,
+                "latched": Path("/var/lib/mano-broker/stop-latched").exists(),
+                "epoch": Path("/var/lib/mano-broker/grant-epoch").read_text(),
+                "unit": run(
+                    [
+                        "systemctl",
+                        "show",
+                        "mano-stopd-spike.service",
+                        "-p",
+                        "ActiveState",
+                        "-p",
+                        "MainPID",
+                        "-p",
+                        "NRestarts",
+                    ],
+                    check=False,
+                ).stdout,
+                "journal": run(
+                    ["journalctl", "-u", "mano-stopd-spike.service", "--no-pager", "-n", "25"],
+                    check=False,
+                ).stdout,
+            }
+            raise RuntimeError("Stop did not settle: " + json.dumps(diagnostic))
         time.sleep(0.05)
     epoch = int(Path("/var/lib/mano-broker/grant-epoch").read_text())
     assert epoch > before["grant"]["epoch"]
@@ -147,7 +172,10 @@ def observe(phase):
             attacks.append({"actor": actor, "route": kind, "denied": True})
     result = {
         "before": before,
-        "cgroup_events_after": (group / "cgroup.events").read_text(),
+        "cgroup_events_after": (group / "cgroup.events").read_text()
+        if group.exists()
+        else "cgroup removed",
+        "cgroup_removed": not group.exists(),
         "epoch_after": epoch,
         "seats_after": seats,
         "pulse_stopped": True,
