@@ -2,8 +2,10 @@
 """Real delegated service cgroup custody in the disposable VM, no task argv."""
 
 import ctypes
+import grp
 import json
 import os
+import pwd
 import shutil
 import subprocess
 import sys
@@ -11,6 +13,8 @@ import time
 from pathlib import Path
 
 from mano_broker.cgroups import ROOT, Manager
+from mano_broker.credentials import drop
+from mano_broker.identities import LOCK, allocate_identity
 from mano_broker.state import Denied
 
 STATE = Path("/run/mano-delegation-ci")
@@ -62,6 +66,7 @@ if sys.argv[1:] == ["--inner"]:
     assert int(manager_security["CapPrm"].strip(), 16) == 0xC0
     assert int(manager_security["CapBnd"].strip(), 16) == 0xC0
     assert int(manager_security["CapAmb"].strip(), 16) == 0x80
+    account = json.loads((STATE / "identity.json").read_text())
     manager = Manager()
     first = manager.create("a" * 32)
     second = manager.create("b" * 32)
@@ -83,36 +88,19 @@ if sys.argv[1:] == ["--inner"]:
     assert (first.path / "memory.oom.group").read_text().strip() == "1"
     reader, writer = os.pipe()
     ready_reader, ready_writer = os.pipe()
+    parent_pid = os.getpid()
     child = os.fork()
     if child == 0:
         os.close(writer)
         os.close(ready_reader)
         assert os.read(reader, 1) == b"g"
         security_state("child-before-drop")
-        os.setgroups([])
-        os.setgid(1004)
-        security_state("child-after-group-drop")
-        os.setuid(1004)
-
-        # UID change clears permitted/effective/ambient, but an inherited bit
-        # may remain. capset can lower our own sets without CAP_SETPCAP.
-        class Header(ctypes.Structure):
-            _fields_ = [("version", ctypes.c_uint32), ("pid", ctypes.c_int)]
-
-        class Data(ctypes.Structure):
-            _fields_ = [
-                ("effective", ctypes.c_uint32),
-                ("permitted", ctypes.c_uint32),
-                ("inheritable", ctypes.c_uint32),
-            ]
-
-        libc = ctypes.CDLL(None, use_errno=True)
-        libc.capset.argtypes = (ctypes.POINTER(Header), ctypes.POINTER(Data))
-        libc.capset.restype = ctypes.c_int
-        header = Header(0x20080522, 0)
-        data = (Data * 2)()
-        assert libc.capset(ctypes.byref(header), data) == 0, ctypes.get_errno()
+        drop(action_id="a" * 32, caller_uid=account["uid"], parent_pid=parent_pid)
         security_state("child-after-user-drop")
+        death_signal = ctypes.c_int()
+        libc = ctypes.CDLL(None, use_errno=True)
+        assert libc.prctl(2, ctypes.byref(death_signal), 0, 0, 0) == 0
+        assert death_signal.value == 9
         child_security = dict(
             line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines()
         )
@@ -152,7 +140,7 @@ if sys.argv[1:] == ["--inner"]:
         assert first.populated()
         assert Path(f"/proc/{child}/status").read_text().split("Uid:", 1)[1].splitlines()[
             0
-        ].split() == ["1004", "1004", "1004", "1004"]
+        ].split() == [str(account["uid"])] * 4
         first.kill_and_close()
         _, status = os.waitpid(child, 0)
         assert os.waitstatus_to_exitcode(status) == -9
@@ -175,7 +163,9 @@ if sys.argv[1:] == ["--inner"]:
                     manager_control_separated=True,
                     task_limits=dict(memory_bytes=134217728, pids=24, cpu_quota="20000 100000"),
                     placed_before_credential_drop=True,
-                    task_uid=1004,
+                    task_uid=account["uid"],
+                    allocated_identity_drop=True,
+                    parent_death_signal_set=True,
                     detached_descendant_killed=True,
                     task_group_removed=True,
                     concurrent_quota_denied=True,
@@ -197,9 +187,21 @@ if sys.argv[1:] == ["--inner"]:
     sys.exit(0)
 
 assert not sys.argv[1:]
-assert not STATE.exists() and not CODE.exists() and not UNIT_FILE.exists()
+assert not STATE.exists() and not CODE.exists() and not UNIT_FILE.exists() and not LOCK.exists()
+assert "mano-broker" not in {p.pw_name for p in pwd.getpwall()}
+assert "mano-request" not in {g.gr_name for g in grp.getgrall()}
+created = []
+group_created = False
 try:
+    subprocess.run(["groupadd", "mano-request"], check=True)
+    group_created = True
+    subprocess.run(["useradd", "--system", "--no-create-home", "mano-broker"], check=True)
+    created.append("mano-broker")
+    identity = allocate_identity()
+    created.append(identity.name)
     STATE.mkdir(mode=0o700)
+    (STATE / "identity.json").write_text(json.dumps({"uid": identity.uid, "gid": identity.gid}))
+    (STATE / "identity.json").chmod(0o600)
     CODE.mkdir(mode=0o755)
     shutil.copytree(
         "/opt/mano-lab/src/mano_broker",
@@ -268,3 +270,9 @@ finally:
         shutil.rmtree(CODE)
     if STATE.exists():
         shutil.rmtree(STATE)
+
+    for name in reversed(created):
+        subprocess.run(["userdel", name], check=False, capture_output=True)
+    if group_created:
+        subprocess.run(["groupdel", "mano-request"], check=False, capture_output=True)
+    LOCK.unlink(missing_ok=True)

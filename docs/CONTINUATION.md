@@ -204,3 +204,13 @@ Currentfeat/phase1-delegated-cgroups addsfixedrootservice delegatedgroupcustody 
 actualephemeralservice test of placementbeforedrop/cgroupkilldetachedUID1004children/
 quota/actionreuse/arbitraryPIDdenial. Local77tests10MacLinuxskips pass; VMpending.
 No productionrootlaunchservice/modelendpoint installed. Fulloriginalgoalactive.
+# Credential transition continuation
+
+PR36 mergeda68bd9ad7c2cdab02145a59a8c663276fd16221a after all3currenthead checks
+SUCCESS run38366463779/head23d0c6e. Actualdelegatedservice proofzerochildcapsets,
+confirmedSIDdetachment/cgroupkill/groupremove/manageralive/quotaPIDreuse denial.
+SourceverifiedsystemdSETUIDdroponexec; ambientSETUIDonly/boundc0 required; noextra
+caps added. Currentfeat/phase1-credential-drop sharesrestrictedtaskidentityvalidator
+and own-child/cgroup credentialhelper withNNP/capclear/PDEATHSIG afterUIDdrop and
+PPid recheck. Fixtureusesfreshallocatedidentity instead offixedworker1004.
+Local78tests10MacLinuxskips pass; realhelperVMproofpending. No processlaunchendpoint.
