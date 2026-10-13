@@ -89,3 +89,13 @@ wrongpass/nonce/replay/validexactgrant/zeroCapsNNPSeccomp+hash added.
 NeednativewarningsfixifCIrejects; neverdisableWerror/tests. Nativehelperownbuffer
 wipeonly, PAM/Pythoncopies notguaranteederased. ADR0015 documentspending scopes.
 No hostservices/models installed, fullPhase1goldengate/alllateroriginalscope active.
+
+Latest PR25 mergedad7eff9bbcd3786b09b63407e6b66f6e07da53e5 after accepted
+CI38342918494 all3success. ActualnativePAMwrongpass/nonce/replay denied, valid
+exactgrant used, rootZeroCapsNNPSeccomp/hash verified. PhysicalTTY null.
+Postmain pendingIDneedlookup. Currentfeat/phase1-resource-pins root-installed
+openat2 DSOnofallback, trustedDirectoryFDanchor andretained targetinodes,
+symlink/magic/mount rejection/type/hardlink policy. No registry/executor/readwrite
+wire yet.61localtests2MacLinuxskips pass; LinuxCI installsDSO/runs test, actual
+Debianroot/mount/sentinel probeadded. ADR0016 limitsmutablecontent/hardlinkraces
+and lostFDrestart. NeednewPR/allcurrentheadCIbeforemerge. Disk14GiB93%last.
