@@ -30,6 +30,7 @@ from mano_broker.state import Denied, State
 from mano_broker.workspaces import BASE, create_workspace
 
 STATE = Path("/run/mano-delegation-ci")
+JOURNAL = Path("/run/mano-journal-ci")
 CODE = Path("/usr/lib/mano-os")
 UNIT_FILE = Path("/etc/systemd/system/mano-launcher.service")
 SOCKET_UNITS = {name: Path(f"/etc/systemd/system/mano-launcher-{name}.socket") for name in PATHS}
@@ -447,7 +448,7 @@ if sys.argv[1:] == ["--inner"]:
                 assert wire_control("status", running)["state"] == "running"
                 assert wire_control("cancel", concurrent)["state"] == "not-started"
                 assert wire_control("cancel", running)["state"] == "unknown"
-                journal = State(Path(workspace) / "executor-journal")
+                journal = State(JOURNAL / "executor")
                 registry = Registry()
                 fd = os.open(workspace, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
                 try:
@@ -609,7 +610,7 @@ if sys.argv[1:] == ["--inner"]:
 assert not sys.argv[1:]
 assert not STATE.exists() and not CODE.exists() and not UNIT_FILE.exists() and not LOCK.exists()
 assert not BASE.exists() and not GUARD.exists()
-assert not LIBRARY.exists() and not TRANSPORT_DIR.exists()
+assert not LIBRARY.exists() and not TRANSPORT_DIR.exists() and not JOURNAL.exists()
 assert all(not path.exists() for path in SOCKET_UNITS.values())
 assert "mano-broker" not in {p.pw_name for p in pwd.getpwall()}
 assert "mano-request" not in {g.gr_name for g in grp.getgrall()}
@@ -662,6 +663,9 @@ try:
         check=True,
     )
     LIBRARY.chmod(0o644)
+    JOURNAL.mkdir(mode=0o700)
+    broker = pwd.getpwnam("mano-broker")
+    os.chown(JOURNAL, broker.pw_uid, broker.pw_gid)
     STATE.mkdir(mode=0o700)
     (STATE / "identity.json").write_text(
         json.dumps({"uid": identity.uid, "gid": identity.gid, "workspace": str(workspace)})
@@ -702,7 +706,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectControlGroups=no
 ReadWritePaths=/sys/fs/cgroup/system.slice/mano-launcher.service /run/mano-delegation-ci
-ReadWritePaths=/var/lib/mano-workspaces
+ReadWritePaths=/var/lib/mano-workspaces /run/mano-journal-ci
 MemoryMax=320M
 TasksMax=64
 CPUQuota=60%
@@ -767,6 +771,8 @@ finally:
         shutil.rmtree(CODE)
     if STATE.exists():
         shutil.rmtree(STATE)
+    if JOURNAL.exists():
+        shutil.rmtree(JOURNAL)
     if BASE.exists():
         shutil.rmtree(BASE)
     GUARD.unlink(missing_ok=True)

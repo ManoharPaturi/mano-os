@@ -269,3 +269,9 @@ PR41 now verified merged by GitHub accountManoharPaturi at13:29:57UTC,
 merge8e0e96a51be134dc0539f54d422757ebcab5e0c3, all3currentheadchecksSUCCESS.
 Accepted production_client_transport=true artifact11819101273. Local executor
 branch merged origin/main (36aec19) to stay current, no protection bypass.
+
+PR42 initialVM38405746717 FAILED atStateconstructor: journalunderworkspace
+inheritedsetgid/ACL soexact0700checkdenied. Fixedfixtureprovisionsseparate
+/run/mano-journal-ci broker-owned0700 outsideworkspace, unitReadWritePathallows
+proxy journalwrites, Rootoutercleanupafterstop. Statechecksunchanged.
+Launcher-service draftstashed onfeat/phase1-launcher-service pendingPR42fix.
