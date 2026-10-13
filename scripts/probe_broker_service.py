@@ -22,6 +22,8 @@ CODE = Path("/usr/lib/mano-os")
 WORK = Path("/run/mano-live-workspace-ci")
 LIBRARY = Path("/usr/lib/mano-broker/libmano-resources.so")
 NATIVE = Path("/usr/libexec/mano-approve")
+STOP_NATIVE = Path("/usr/libexec/mano-stopd")
+STOP_STATE = Path("/var/lib/mano-stopd")
 POLICY = Path("/etc/mano/human.uid")
 PAM = Path("/etc/pam.d/mano-approve")
 SOCKETS = {
@@ -38,6 +40,8 @@ UNITS = (
     "mano-launcher.service",
     "mano-launcher-prepare.socket",
     "mano-launcher-control.socket",
+    "mano-stopd.service",
+    "mano-stopd.socket",
 )
 assert (
     os.geteuid() == 0 and Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
@@ -48,7 +52,7 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
 }
 assert all(
     not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, GUARD, BASE,
-                           LOCK, *SOCKETS.values())
+                           LOCK, STOP_NATIVE, STOP_STATE, *SOCKETS.values())
 )
 assert all(not (Path("/etc/systemd/system") / u).exists() for u in UNITS)
 old_mode = STATE.parent.stat().st_mode & 0o777
@@ -193,6 +197,11 @@ try:
         str(ROOT / "native/mano_sandbox_guard.c"), "-lseccomp", "-Wl,-z,relro,-z,now",
         "-o", str(GUARD)], check=True)
     GUARD.chmod(0o555)
+    subprocess.run(["cc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+        "-fstack-protector-strong", "-D_FORTIFY_SOURCE=2", str(ROOT / "native/mano_stopd.c"),
+        *command("pkg-config", "--cflags", "--libs", "libsystemd").split(),
+        "-Wl,-z,relro,-z,now", "-o", str(STOP_NATIVE)], check=True)
+    STOP_NATIVE.chmod(0o555)
     LIBRARY.parent.mkdir(mode=0o755, exist_ok=True)
     NATIVE.parent.mkdir(mode=0o755, exist_ok=True)
     subprocess.run(
@@ -573,6 +582,83 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
         durable_terminal_done=True,
         workspace_effect_observed=True, effect_verified=False, replay_no_execution=True,
         wrong_caller_status_denied=True, physical_input_provenance=None)
+    subprocess.run(["systemctl", "start", "mano-stopd.socket", "mano-stopd.service"], check=True)
+    stop_pid = int(command(
+        "systemctl", "show", "mano-stopd.service", "--property=MainPID", "--value"
+    ))
+    stop_fields = dict(line.split(":", 1) for line in Path(f"/proc/{stop_pid}/status").read_text()
+                       .splitlines() if ":" in line)
+    assert int(stop_fields["CapEff"].strip(), 16) == 0
+    assert stop_fields["NoNewPrivs"].strip() == "1" and stop_fields["Seccomp"].strip() == "2"
+    stop_proposal = terminal_proposal | dict(idempotency_key="native-stop-task", args=dict(
+        argv=["/usr/bin/python3", "-c", "import os,time;from pathlib import Path;"
+              "p=os.fork()\nif p==0:\n os.setsid()\n"
+              " Path('/workspace/stoppable').write_text('ready')\ntime.sleep(60)"],
+        cwd=".", timeout_seconds=60))
+    pending_stop = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=stop_proposal), actor=identity.name)["approval"]
+    stop_view = human(dict(mode="view", id=pending_stop["approval_id"]))["view"]
+    stop_grant = human(dict(mode="confirm", view=stop_view, password=password))
+    assert stop_grant["ok"]
+    stop_action = rpc("request", dict(schema_version="1.0", operation="propose",
+        body=stop_proposal | {"grant_id": stop_grant["grant_id"]}), actor=identity.name)
+    group = Path("/sys/fs/cgroup/system.slice/mano-launcher.service") / (
+        "task-" + stop_action["action"]["id"])
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if (terminal_workspace / "stoppable").exists():
+            break
+        time.sleep(0.1)
+    assert (terminal_workspace / "stoppable").read_text() == "ready"
+    assert len((group / "cgroup.procs").read_text().split()) >= 2
+    stop_client = """import socket,struct,sys
+s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);s.settimeout(3)
+s.setsockopt(socket.SOL_SOCKET,socket.SO_PASSCRED,1)
+s.connect('/run/mano-stopd/human.sock');s.sendall(sys.argv[1].encode())
+reply,ancillary,flags,_=s.recvmsg(32,socket.CMSG_SPACE(12))
+assert not flags and len(ancillary)==1
+assert ancillary[0][:2]==(socket.SOL_SOCKET,socket.SCM_CREDENTIALS)
+pid,uid,gid=struct.unpack('3i',ancillary[0][2])
+assert pid==int(sys.argv[3]) and uid==0 and gid==0
+assert reply==sys.argv[2].encode()
+"""
+    subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
+        stop_client, "SS", "denied", str(stop_pid)], check=True, capture_output=True,
+        text=True, timeout=5)
+    assert (STOP_STATE / "state").read_text() == "armed\n"
+    denied_client = """import errno,socket
+s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+try:s.connect('/run/mano-stopd/human.sock')
+except PermissionError as e:assert e.errno==errno.EACCES
+else:raise AssertionError('task reached native Stop')
+"""
+    subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--", "python3", "-c",
+                    denied_client], check=True, capture_output=True, text=True, timeout=5)
+    broker_pid = ready()
+    launcher_pid = int(command(
+        "systemctl", "show", "mano-launcher.service", "--property=MainPID", "--value"
+    ))
+    subprocess.run(["kill", "-STOP", str(broker_pid), str(launcher_pid)], check=True)
+    try:
+        subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
+                        stop_client, "S", "stopped", str(stop_pid)], check=True,
+                       capture_output=True, text=True, timeout=5)
+        deadline = time.monotonic() + 3
+        while (time.monotonic() < deadline
+               and "populated 1" in (group / "cgroup.events").read_text()):
+            time.sleep(0.05)
+        assert "populated 0" in (group / "cgroup.events").read_text()
+        assert (STOP_STATE / "state").read_text() == "latched\n"
+        for frozen in (broker_pid, launcher_pid):
+            assert "T" in next(line for line in Path(f"/proc/{frozen}/status").read_text()
+                               .splitlines() if line.startswith("State:"))
+    finally:
+        subprocess.run(["kill", "-CONT", str(broker_pid), str(launcher_pid)], check=False)
+    terminal_report["native_stop_broker_and_launcher_frozen"] = True
+    terminal_report["native_stop_capabilities_zero"] = True
+    terminal_report["native_stop_task_cgroup_drained"] = True
+    terminal_report["native_stop_latch_written"] = True
+    terminal_report["native_stop_grant_latch_integrated"] = False
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
@@ -644,7 +730,7 @@ except BaseException:
 finally:
     subprocess.run(["systemctl", "stop", *UNITS], check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
-    for file in (LIBRARY, NATIVE, POLICY, PAM, GUARD, *installed):
+    for file in (LIBRARY, NATIVE, STOP_NATIVE, POLICY, PAM, GUARD, *installed):
         file.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     subprocess.run(
@@ -652,13 +738,16 @@ finally:
         check=False,
         capture_output=True,
     )
-    for directory in (STATE, CODE, WORK, BASE):
+    for directory in (STATE, CODE, WORK, BASE, STOP_STATE):
         if directory.exists():
             shutil.rmtree(directory)
     STATE.parent.chmod(old_mode)
     if identity is not None:
         subprocess.run(["userdel", identity.name], check=False, capture_output=True)
     LOCK.unlink(missing_ok=True)
+    stop_dir = Path("/run/mano-stopd")
+    if stop_dir.exists():
+        stop_dir.rmdir()
     launcher_dir = Path("/run/mano-launcher")
     if launcher_dir.exists():
         launcher_dir.rmdir()
