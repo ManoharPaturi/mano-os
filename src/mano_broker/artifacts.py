@@ -97,7 +97,8 @@ class Store:
             fd, metadata = seal(pinned)
         artifact_id = secrets.token_hex(16)
         metadata.update(artifact_id=artifact_id, action_id=action_id,
-                        task_id=request.task_id, boot_id=boot_id, effect_verified=False)
+                        task_id=request.task_id, boot_id=boot_id, relative_path=relative,
+                        effect_verified=False)
         self.items[artifact_id] = Artifact(fd, metadata)
         return dict(metadata)
 

@@ -11,6 +11,7 @@ from .approvals import Approvals
 from .ipc import receive
 from .protocol import canonical, unique_object
 from .state import Denied
+from .verifier import check, declare
 
 
 def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
@@ -25,6 +26,17 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value["operation"] == "declare_artifact_contract":
+        if set(body) != {"approval_id", "path", "sha256", "size"}:
+            raise Denied("Unexpected expectation fields")
+        declare(state, body["approval_id"], path=body["path"], sha256=body["sha256"],
+                size=body["size"], now=now, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True)
+    if value["operation"] == "check_artifact_contract":
+        if set(body) != {"action_id", "artifact_id"}:
+            raise Denied("Unexpected verifier fields")
+        result = check(state, body["action_id"], body["artifact_id"], boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, verification=result)
     if value["operation"] == "capture_artifact":
         if runtime is None or set(body) != {"action_id", "path"}:
             raise Denied("Trusted live artifact capture required")

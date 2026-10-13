@@ -75,6 +75,10 @@ class State:
                 id TEXT PRIMARY KEY,action_id TEXT NOT NULL REFERENCES actions(id),
                 metadata_json TEXT NOT NULL,data BLOB NOT NULL,
                 CHECK(length(data)<=8388608));
+            CREATE TABLE IF NOT EXISTS artifact_contracts(
+                approval_id TEXT PRIMARY KEY REFERENCES approvals(id),path TEXT NOT NULL,
+                sha256 TEXT NOT NULL,size INTEGER NOT NULL,boot_id TEXT NOT NULL,
+                epoch INTEGER NOT NULL,CHECK(size>=0 AND size<=8388608));
         """)
 
         # Upgrade pre-binding journals without silently retaining broad authority.
