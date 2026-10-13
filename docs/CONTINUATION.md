@@ -431,3 +431,16 @@ generation alsoallowsauthenticatedrearm onupgrade/restart whileoldgrantsrevoked.
 newStopinvalidates/replay/frozenBroker/newPAMterminalafterrearm added, pendingCI.
 Needadditionalexpiry+populatedgroupVMdenial/replacementcgrouprecovery/latencybefore
 fullStopclaim. No physical/verifiedartifact/model claims fromthisdraft.
+
+# Remaining rearm gate draft
+
+PR50merged5c47f8d2694508b4b44c9ac385050e74ee6fcb76 afterheadbf0459f/all3PASS
+38440089964 artifact11835656203 nativePAMrearm/wrongpw+nonce/newStopinvalidates/
+replay/frozenBroker/oldgrantdeny/freshPAMterminalaccepted. FullStopstillothergates.
+Currentfeat/phase1-rearm-negative-gates addReal61secexpirydeny; operatorinjected
+Roottask-shapedgroup withknownunprivilegedsleepchild requirespopulateddeny and
+freshrearmafterdrain; childneverfallsintoparentcleanup. LauncherCGreplacementwhile
+NativePIDunchanged, explicitbrokertransportrestart/newprovision/newPAMtask, Stop
+mustdrainreplacement. ReadonlyactualjournalRootBrokerUIDobserver checksoldgrant
+revoked1/nativegeneration6. No productionpolicychanges.108tests12MacLinuxskips
+pass; actualVMacceptancepending. Runtime51fixtureendsnativeg9latched.
