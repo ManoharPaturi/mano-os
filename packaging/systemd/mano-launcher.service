@@ -1,0 +1,29 @@
+[Unit]
+Description=mano private task launcher
+Requires=mano-launcher-prepare.socket mano-launcher-control.socket
+After=mano-launcher-prepare.socket mano-launcher-control.socket
+
+[Service]
+Type=exec
+User=root
+Sockets=mano-launcher-prepare.socket mano-launcher-control.socket
+ExecStart=/usr/bin/python3 -m mano_broker.launcher_service
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/mano-os
+Delegate=cpu memory pids
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+AmbientCapabilities=CAP_SETUID
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectControlGroups=no
+ReadWritePaths=/sys/fs/cgroup/system.slice/mano-launcher.service /var/lib/mano-workspaces
+MemoryMax=320M
+TasksMax=64
+CPUQuota=60%
+KillMode=control-group
+TimeoutStopSec=5
+Restart=on-failure
+RestartSec=1

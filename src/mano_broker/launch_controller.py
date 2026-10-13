@@ -168,7 +168,10 @@ def serve_prepare(controller, connection):
     finally:
         if admission is not None:
             admission.close()
-    connection.sendall(canonical(response).encode())
+    try:
+        connection.sendall(canonical(response).encode())
+    except OSError:
+        pass  # Ownership/TTL remain live; an abandoned reply must not kill the service.
 
 
 def serve_control(controller, connection):
@@ -178,4 +181,7 @@ def serve_control(controller, connection):
         response = controller.dispatch(packet, peer=peer)
     except (ValueError, TypeError, KeyError, RecursionError, OSError):
         response = dict(schema_version="1.0", ok=False, error="denied")
-    connection.sendall(canonical(response).encode())
+    try:
+        connection.sendall(canonical(response).encode())
+    except OSError:
+        pass

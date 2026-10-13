@@ -1,0 +1,16 @@
+[Unit]
+Description=mano private launch preparation
+
+[Socket]
+ListenSequentialPacket=/run/mano-launcher/prepare.sock
+Service=mano-launcher.service
+SocketUser=mano-broker
+SocketGroup=mano-broker
+SocketMode=0600
+DirectoryMode=0755
+PassCredentials=yes
+FileDescriptorName=prepare
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

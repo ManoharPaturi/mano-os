@@ -275,3 +275,15 @@ inheritedsetgid/ACL soexact0700checkdenied. Fixedfixtureprovisionsseparate
 /run/mano-journal-ci broker-owned0700 outsideworkspace, unitReadWritePathallows
 proxy journalwrites, Rootoutercleanupafterstop. Statechecksunchanged.
 Launcher-service draftstashed onfeat/phase1-launcher-service pendingPR42fix.
+
+# Launcher service draft continuation
+
+Currentfeat/phase1-launcher-service has production module, fixedpackagedsocket/
+serviceunits, disconnectedreplysurvival and actualstandalone daemon VMphase.
+Local93tests12MacLinuxskips/Ruff/shell/diffpass. NewproofNOTaccepteduntilCI.
+PR42 initialrunfailedstrictjournalmode; fixedheadbe8ed3a run38406670474 LIVE.
+This branchcherrypickedfixe78c7d6; afterPR42merge mergeoriginmain beforePR43publish.
+Standalone daemonproxy uses /run/mano-journal-ci/daemon (not taskworkspace),
+actualjournal/Registry/nativepins/start/completion/output/Stopcancel; operator
+approvalonly, noPAM/publicRuntime/frozenbrokerStop claims. Productionunitreplaces
+fixtureunit ONLYindisposableVM; no host service installation.
