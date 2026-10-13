@@ -43,6 +43,11 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
             raise Denied("Unexpected human prompt fields")
         result = Prompts(state).submit(**body, boot_id=boot_id)
         return dict(schema_version="1.0", ok=True, prompt=result)
+    if value["operation"] == "pending_prompts":
+        if set(body) != {"human_uid"}:
+            raise Denied("Unexpected prompt discovery fields")
+        prompts = Prompts(state).pending(**body, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, prompts=prompts)
     if value["operation"] == "prompt_status":
         if set(body) != {"human_uid", "prompt_id"}:
             raise Denied("Unexpected prompt status fields")

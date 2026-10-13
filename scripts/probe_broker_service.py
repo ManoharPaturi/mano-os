@@ -568,6 +568,13 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
         default_prompt_code], capture_output=True, text=True, timeout=10, check=False)
     assert default_prompt.returncode == 0, default_prompt.stderr
     assert json.loads(default_prompt.stdout)["default_handler_native_ack"] is True
+    discovery = dict(schema_version="1.0", operation="pending_prompts",
+                     body=dict(human_uid=1002))
+    queued = rpc("control", discovery, actor="root")["prompts"]
+    assert human_receipt["prompt"] in queued
+    assert all(set(item) == {"id", "state", "task_id"}
+               and item["state"] == "received" and item["task_id"] is None for item in queued)
+    assert rpc("request", discovery) == denied
     factory_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
@@ -584,6 +591,8 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     attached_status = human(dict(mode="prompt_status", id=human_receipt["prompt"]["id"]))
     assert attached_status["prompt"]["state"] == "task_created"
     assert attached_status["prompt"]["task_id"] == terminal_task["task_id"]
+    assert human_receipt["prompt"]["id"] not in {
+        item["id"] for item in rpc("control", discovery, actor="root")["prompts"]}
     duplicate_creation = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
@@ -787,6 +796,7 @@ finally:client.close()
         installed_root_task_factory=True,
         authenticated_native_human_prompt_queue=True,
         default_prompt_handler_actual_native_transport=True,
+        protected_pending_prompt_discovery=True,
         human_prompt_claim_to_actual_task=True,
         prompt_creation_replay_denied=True,
         prompt_duplicate_and_malformed_cases_verified=True,
