@@ -223,3 +223,12 @@ one-shotblockedRootchild/cgroupplacement/drop/READY/authority-start/reportdrain/
 cancelunknown lifecycle library. Actualoperatorargvexec fixture pendingCI;
 operatorcallback authority ONLY, notbrokergrant/epoch integration. Local78tests
 10MacLinuxskips/Ruffpass. No productionlistener/modelendpoint orverifiedeffects.
+# Private controller continuation
+
+Post-main38 run38377627167 all3SUCCESS verified. Currentfeat/phase1-launch-controller
+addsinstance/job/action/ownerPeer+pidfd custody, brokeronly metadata control and
+boundedoutputchunks/effect_verifiedFalse. AdmissioncarriesownerPeer fromreceiver.
+Actualrootservicefixture usesexplicitlysyntheticoperatorpeer withrealsupervised
+children fordispatcher/state/chunkchecks; no kernelbrokergranttransportclaimed.
+Local81tests10MacLinuxskips pass. No activationlistener/modelendpoint installed.
+Next privateactivation +realpersistentbrokertransport/grantjournal/epoch integration.
