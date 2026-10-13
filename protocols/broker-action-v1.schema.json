@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Untrusted broker action proposal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "grant_id",
+    "capability",
+    "resource_id",
+    "args",
+    "idempotency_key",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "grant_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "resource_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "capability": {
+      "enum": [
+        "system.inspect_health",
+        "files.read",
+        "files.write",
+        "terminal.run"
+      ]
+    },
+    "args": {
+      "type": "object"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    }
+  },
+  "description": "Detailed capability arguments and byte bounds are enforced by mano_broker.protocol.ActionRequest.parse. No caller_uid, action_id, env, approval, verified or execution authority fields are accepted. Resource selectors are broker-issued identities, not host mount paths.",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "capability": {
+            "const": "system.inspect_health"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {
+            "const": "files.read"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "description": "Canonical workspace-relative path; runtime rejects absolute/dotdot/noncanonical/NUL paths."
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {
+            "const": "files.write"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "text"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "description": "Canonical workspace-relative path; runtime rejects absolute/dotdot/noncanonical/NUL paths."
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 32768
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {
+            "const": "terminal.run"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "argv",
+              "cwd",
+              "timeout_seconds"
+            ],
+            "properties": {
+              "argv": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 128,
+                "items": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              },
+              "cwd": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "description": "Canonical workspace-relative path; runtime rejects absolute/dotdot/noncanonical/NUL paths."
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 300
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

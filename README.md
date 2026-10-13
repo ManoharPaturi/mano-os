@@ -62,3 +62,12 @@ current PR head. Branch protection is the final server authority.
 Passing Phase 0 audit means the feasibility boundaries passed, using the specified
 OS-authenticated fallback. Model-facing execution still requires Phase 1 broker
 and runtime gates; physical 8 GB and installer/firmware requirements remain later.
+
+## Phase 1 work in progress
+
+`mano_broker` adds a strict action proposal contract and durable grant/journal state
+core. It reserves usage/intent atomically, rechecks dispatch authority, binds replay,
+keeps zero-exit separate from verification and preserves unknown/revoked states.
+Production IPC/approval, descriptor-pinned resources, sandbox execution and model
+routing remain unimplemented. This core does not run commands or authenticate an
+untrusted Python caller. See ADR0009 and fresh CI `broker-state.json` for its scope.

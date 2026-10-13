@@ -182,5 +182,8 @@ cmp "$repo_root/evidence/bootstrap-preserved-before.sha256" \
 if [ "$result" = 0 ]; then
   PYTHONPATH="$repo_root/src" python3 "$repo_root/scripts/audit_phase0.py" \
     --evidence "$repo_root/evidence"
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_state.py' \
+    > "$repo_root/evidence/broker-state.json"
 fi
 exit "$result"
