@@ -18,6 +18,7 @@ mano-prompt = "mano_prompt.app:main"
 mano-approve = "mano_prompt.approve:main"
 mano-core = "mano_core.cli:main"
 mano-task = "mano_broker.task_factory:main"
+mano-core-step = "mano_broker.lifecycle:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

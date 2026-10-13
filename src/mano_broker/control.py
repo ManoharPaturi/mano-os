@@ -8,9 +8,9 @@ import json
 import time
 
 from .approvals import Approvals
-from .ipc import receive
+from .ipc import public_action, receive
 from .prompts import Prompts
-from .protocol import canonical, unique_object
+from .protocol import canonical, identifier, unique_object
 from .state import Denied
 from .verifier import check, declare
 
@@ -27,6 +27,17 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value["operation"] == "inspect_action":
+        if set(body) != {"task_id", "action_id"}:
+            raise Denied("Unexpected protected action query")
+        identifier(body["task_id"])
+        identifier(body["action_id"])
+        row = state.db.execute("SELECT a.* FROM actions a JOIN tasks t ON a.task_id=t.id "
+                               "WHERE a.id=? AND a.task_id=? AND t.boot_id=?",
+                               (body["action_id"], body["task_id"], boot_id)).fetchone()
+        if row is None:
+            raise Denied("No matching journal action")
+        return dict(schema_version="1.0", ok=True, action=public_action(row))
     if value["operation"] == "submit_prompt":
         if set(body) != {"human_uid", "request_key", "prompt"}:
             raise Denied("Unexpected human prompt fields")
