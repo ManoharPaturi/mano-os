@@ -23,6 +23,37 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
 }
 
 if sys.argv[1:] == ["--inner"]:
+
+    def security_state(stage):
+        fields = dict(
+            line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines()
+        )
+        print(
+            json.dumps(
+                dict(
+                    stage=stage,
+                    pid=os.getpid(),
+                    security={
+                        name: fields[name].strip()
+                        for name in (
+                            "Uid",
+                            "Gid",
+                            "CapInh",
+                            "CapPrm",
+                            "CapEff",
+                            "CapBnd",
+                            "CapAmb",
+                            "NoNewPrivs",
+                            "Seccomp",
+                        )
+                    },
+                )
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
+
+    security_state("manager-start")
     manager = Manager()
     first = manager.create("a" * 32)
     second = manager.create("b" * 32)
@@ -49,9 +80,12 @@ if sys.argv[1:] == ["--inner"]:
         os.close(writer)
         os.close(ready_reader)
         assert os.read(reader, 1) == b"g"
+        security_state("child-before-drop")
         os.setgroups([])
         os.setgid(1004)
+        security_state("child-after-group-drop")
         os.setuid(1004)
+        security_state("child-after-user-drop")
         grandchild = os.fork()
         if grandchild == 0:
             os.setsid()
