@@ -121,11 +121,18 @@ if sys.argv[1:] == ["--inner"]:
             for name in ("CapEff", "CapPrm", "CapInh", "CapAmb")
         )
         assert child_security["NoNewPrivs"].strip() == "1"
+        detached_reader, detached_writer = os.pipe()
         grandchild = os.fork()
         if grandchild == 0:
+            os.close(detached_reader)
             os.setsid()
+            os.write(detached_writer, b"d")
+            os.close(detached_writer)
             time.sleep(60)
             os._exit(0)
+        os.close(detached_writer)
+        assert os.read(detached_reader, 1) == b"d"
+        os.close(detached_reader)
         os.write(ready_writer, b"r")
         time.sleep(60)
         os._exit(0)
@@ -138,7 +145,10 @@ if sys.argv[1:] == ["--inner"]:
         os.close(writer)
         writer = -1
         assert os.read(ready_reader, 1) == b"r"
-        assert len((first.path / "cgroup.procs").read_text().split()) == 2
+        members = set((first.path / "cgroup.procs").read_text().split())
+        assert len(members) == 2 and str(child) in members
+        detached_pid = int((members - {str(child)}).pop())
+        assert os.getsid(detached_pid) == detached_pid
         assert first.populated()
         assert Path(f"/proc/{child}/status").read_text().split("Uid:", 1)[1].splitlines()[
             0
