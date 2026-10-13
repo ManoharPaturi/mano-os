@@ -185,5 +185,8 @@ if [ "$result" = 0 ]; then
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_state.py' \
     > "$repo_root/evidence/broker-state.json"
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_ipc.py' \
+    > "$repo_root/evidence/broker-ipc.json"
 fi
 exit "$result"
