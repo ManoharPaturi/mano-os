@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from mano_broker.ipc import Peer
 from mano_broker.protocol import ActionRequest, Capability, Mode, canonical
 from mano_broker.runtime import Runtime
-from mano_broker.state import State
+from mano_broker.state import Denied, State
 
 
 class RuntimeSchedulerTests(unittest.TestCase):
@@ -81,6 +81,8 @@ class RuntimeSchedulerTests(unittest.TestCase):
         self.runtime.sync_stop()
         self.assertEqual(self.state.meta('epoch'), epoch + 1)
         self.assertEqual(self.state.meta('latched'), 1)
+        with self.assertRaises(Denied):
+            self.propose()
         self.assertEqual(self.state.db.execute('SELECT revoked FROM grants').fetchone()[0], 1)
         action = self.state.db.execute('SELECT state FROM actions WHERE id=?',
                                       (result['action']['id'],)).fetchone()

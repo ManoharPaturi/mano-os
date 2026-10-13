@@ -77,6 +77,8 @@ class Runtime:
         if value["operation"] in {"propose", "request_approval"}:
             self.live_task(value["body"], peer)
         if value["operation"] == "propose":
+            if self.state.meta("latched"):
+                raise Denied("Proposals unavailable while emergency Stop is latched")
             request = ActionRequest.parse(canonical(value["body"]).encode())
             row, prepared = self.registry.prepare(
                 self.state, request, caller_uid=peer.uid, now=now, boot_id=self.boot_id

@@ -386,3 +386,8 @@ SIGKILLbrokerrestartno rearm, physicalnull andverifiedfalse retained.
 103tests12MacLinuxskips/Ruff/shell/diffpass. ActualVMcouplingpending. PAMboundrearm,
 nativegeneration/crashstate protocol andlauncherreplacementcgroup bindingaudit
 remainrequired; do notcallfullStopcomplete orfullversioncomplete.
+
+PR48currentcdfadb7 CI38417737884 FAILED publicproposeafterStop returnscompleted
+idempotentreplay (noexecution). Added explicitRuntime latchedproposaldenial BEFORE
+Registry.prepare; historyremainsavailableviaStatus. UnitNativeStoptripnowrequires
+replayDenied. No Stopguardweakened. Atomicgenerationdraftstashedon49branch.
