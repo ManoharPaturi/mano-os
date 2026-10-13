@@ -13,7 +13,7 @@ from .protocol import canonical, unique_object
 from .state import Denied
 
 
-def dispatch_control(state, packet, *, peer, now, boot_id):
+def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     if peer.uid != 0:
         raise Denied("Control requires trusted root adapter")
     value = json.loads(packet.decode("utf8"), object_pairs_hook=unique_object)
@@ -25,6 +25,18 @@ def dispatch_control(state, packet, *, peer, now, boot_id):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value["operation"] == "capture_artifact":
+        if runtime is None or set(body) != {"action_id", "path"}:
+            raise Denied("Trusted live artifact capture required")
+        metadata = runtime.artifacts.capture(state, runtime.registry, body["action_id"],
+                                             body["path"], boot_id=boot_id)
+        artifact_id = metadata["artifact_id"]
+        try:
+            runtime.artifacts.persist(state, artifact_id)
+        except BaseException:
+            runtime.artifacts.items.pop(artifact_id).close()
+            raise
+        return dict(schema_version="1.0", ok=True, artifact=metadata)
     queue = Approvals(state)
     if value["operation"] == "approval_view":
         if set(body) != {"approval_id", "human_uid"}:
@@ -49,11 +61,12 @@ def dispatch_control(state, packet, *, peer, now, boot_id):
     raise Denied("Control operation not supported")
 
 
-def serve_control(state, connection, *, boot_id):
+def serve_control(state, connection, *, boot_id, runtime=None):
     connection.settimeout(2)
     try:
         peer, packet = receive(connection)
-        result = dispatch_control(state, packet, peer=peer, now=time.monotonic(), boot_id=boot_id)
+        result = dispatch_control(state, packet, peer=peer, now=time.monotonic(),
+                                  boot_id=boot_id, runtime=runtime)
     except (ValueError, TypeError, KeyError, RecursionError, OSError):
         result = {"schema_version": "1.0", "ok": False, "error": "denied"}
     payload = canonical(result).encode()

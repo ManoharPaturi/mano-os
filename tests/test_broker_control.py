@@ -55,8 +55,10 @@ class ControlTests(unittest.TestCase):
         for uid in (1001, 1002, 1003, 1004):
             with self.assertRaises(Denied):
                 self.call("approval_view", body, uid)
+            with self.assertRaises(Denied):
+                self.call("capture_artifact", {"action_id": "a" * 32, "path": "result"}, uid)
         view = self.call("approval_view", body)["view"]
-        for operation in ("exec", "issue_grant", "stop", "rearm", "verify"):
+        for operation in ("exec", "issue_grant", "stop", "rearm", "verify", "capture_artifact"):
             with self.assertRaises(Denied):
                 self.call(operation, body)
         with self.assertRaises(Denied):

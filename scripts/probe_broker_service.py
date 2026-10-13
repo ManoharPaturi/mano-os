@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Actual provision/PAM/descriptor preparation service flow in disposable Debian."""
 
+import base64
 import hashlib
 import json
 import os
@@ -576,6 +577,22 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     assert terminal_status["state"] == "done", terminal_status
     assert terminal_status["verified"] == 0
     assert (terminal_workspace / "live-result").read_text() == "pam-terminal-ok"
+    captured = rpc("control", dict(schema_version="1.0", operation="capture_artifact",
+        body=dict(action_id=terminal_action["action"]["id"], path="live-result")), actor="root")
+    assert captured["ok"] and captured["artifact"]["effect_verified"] is False
+    artifact_query = dict(schema_version="1.0", operation="artifact_read", body=dict(
+        task_id=terminal_task["task_id"], artifact_id=captured["artifact"]["artifact_id"],
+        offset=0, length=4096))
+    artifact_read = rpc("request", artifact_query, actor=identity.name)
+    assert artifact_read["ok"] and artifact_read["eof"]
+    assert base64.b64decode(artifact_read["data"]) == b"pam-terminal-ok"
+    assert artifact_read["artifact"]["effect_verified"] is False
+    assert rpc("request", artifact_query) == denied
+    assert rpc("request", artifact_query | {"body": artifact_query["body"] | {"length": 4097}},
+        actor=identity.name) == denied
+    assert rpc("request", dict(schema_version="1.0", operation="capture_artifact",
+        body=dict(action_id=terminal_action["action"]["id"], path="live-result")),
+        actor=identity.name) == denied
     terminal_replay = rpc("request", dict(schema_version="1.0", operation="propose",
         body=terminal_body), actor=identity.name)
     assert not terminal_replay["fresh"]
@@ -586,7 +603,9 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
         native_pam_grant=True, wrong_password_no_effect=True, changed_arguments_denied=True,
         durable_terminal_done=True,
         workspace_effect_observed=True, effect_verified=False, replay_no_execution=True,
-        wrong_caller_status_denied=True, physical_input_provenance=None)
+        wrong_caller_status_denied=True, physical_input_provenance=None,
+        production_broker_sealed_capture=True, actual_task_artifact_read=True,
+        artifact_capture_request_denied=True, artifact_wrong_caller_and_range_denied=True)
     subprocess.run(["systemctl", "start", "mano-stopd.socket", "mano-stopd.service"], check=True)
     stop_pid = int(command(
         "systemctl", "show", "mano-stopd.service", "--property=MainPID", "--value"
@@ -693,6 +712,8 @@ finally:
         input=json.dumps(negative), text=True, capture_output=True, check=True, timeout=10)
     subprocess.run(["systemctl", "kill", "--signal=SIGKILL", "mano-broker.service"], check=True)
     ready(broker_pid)
+    recovered_artifact = rpc("request", artifact_query, actor=identity.name)
+    assert base64.b64decode(recovered_artifact["data"]) == b"pam-terminal-ok"
     assert rpc("request", dict(schema_version="1.0", operation="propose",
         body=terminal_body), actor=identity.name) == denied
     assert (STOP_STATE / "state").read_text() == "v1:1:latched\n"

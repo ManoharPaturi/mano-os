@@ -6,6 +6,7 @@ Systemd/socket provisioning and PAM control are separate work.
 """
 
 import array
+import base64
 import json
 import os
 import socket
@@ -14,6 +15,7 @@ import time
 from dataclasses import dataclass
 
 from .approvals import Approvals
+from .artifacts import durable_chunk
 from .protocol import MAX_PACKET, ActionRequest, canonical, identifier, unique_object
 from .state import Denied
 
@@ -79,6 +81,16 @@ def dispatch(state, packet, *, peer, now, boot_id):
         raise Denied("Unknown request envelope")
     if value["schema_version"] != "1.0":
         raise Denied("Unknown IPC version")
+    if value["operation"] == "artifact_read":
+        body = value["body"]
+        if (not isinstance(body, dict)
+                or set(body) != {"task_id", "artifact_id", "offset", "length"}):
+            raise Denied("Unknown artifact read fields")
+        result = durable_chunk(state, body["artifact_id"], task_id=body["task_id"],
+                               caller_uid=peer.uid, boot_id=boot_id,
+                               offset=body["offset"], length=body["length"])
+        return dict(schema_version="1.0", ok=True, artifact=result["metadata"],
+                    data=base64.b64encode(result["data"]).decode("ascii"), eof=result["eof"])
     if value["operation"] == "request_approval":
         pending = Approvals(state).request(
             value["body"], caller_uid=peer.uid, now=now, boot_id=boot_id

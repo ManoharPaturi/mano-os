@@ -488,3 +488,15 @@ PR53 merged42ba32903b8b84e140726200c5a453f31b723fe8 afterheada06314f/all3PASS
 38444304133/artifact11837358440. Watchdogacceptedpop0/allpidexit-Z/core+authority
 stillT/pulseStopped/inputrevoke/6actorDenials/restart1; originalpost51 precisecause
 unknown. PR52 refreshesmain; docappendconflictpreservesbothnotes, no sourceconflict.
+
+## Protected artifact transport in progress
+
+PR52 merged e438cd09d3f55526cd7e6980a679cebd79cb47e6 after all checks on
+44b6f3a passed; CI38445468367/artifact11838685435 confirms sealed custody,
+source-mutation isolation and write/truncate denial in the installed launcher VM.
+PR54 refreshed main: b39c279, fresh CI required. Current transport adds root-only
+capture through the protected control socket, using live Registry custody and
+private SQLite persistence. Public artifact_read exposes only bounded base64 bytes
+bound to kernel peer UID, task and boot. No public capture or verified-outcome claim.
+Actual broker filter/memfd capture, caller/range denials and broker-restart retrieval
+are CI acceptance requirements. All original later version gates remain required.
