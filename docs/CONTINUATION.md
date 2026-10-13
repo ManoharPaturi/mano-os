@@ -193,3 +193,14 @@ taskeffects inferred. Currentfeat/phase1-launch-admission adds privatebroker→r
 kernelpeer/twoFD admission library and14case real VM test. Local76tests10Linux
 Macskips pass; admissionVMproof pending. No rootexecutionservice/listener installed.
 Nextactualroot lifecycle/cgroup/drop/one-shotaction+livegrant/stopintegration.
+# Delegation continuation
+
+PR35 merged0c2014d040569a20872d08004700bd62d8999a16 after all3currenthead checks
+SUCCESS run38362982094 (headb6ed889). Actualknowncontroller/transientPID observer
+andallboundedrunner cases passed; rootadmission1positive13deny/noleak passed.
+Originalpost-main34 failureprecisePIDdifference unknown; observernowstricterinitial
+drain/exactknown2controllers. Needpostmain35 result beforeclaimmainstable.
+Currentfeat/phase1-delegated-cgroups addsfixedrootservice delegatedgroupcustody and
+actualephemeralservice test of placementbeforedrop/cgroupkilldetachedUID1004children/
+quota/actionreuse/arbitraryPIDdenial. Local77tests10MacLinuxskips pass; VMpending.
+No productionrootlaunchservice/modelendpoint installed. Fulloriginalgoalactive.
