@@ -305,3 +305,10 @@ withEXPLICITsynthetic callerPeer(operatorfixture) andoperatorgrant, actualschedu
 Registry/executor/rootservice. Not actualkernelbrokerrequest/PAMacceptance.
 PR42merged7258a64 acceptedjournalVM. PR43freshhead6482552 CI38407737065 LIVE;
 old38407162561 auto-supersededcancelled, notaccepted. Postmain42 38407624336 LIVE.
+
+PR44 fresh38409320590 failedinstalledclient; subprocesscapture hidinnerstderr,
+exactinitialfailureunknown. Added bounded error-type/errno journalevents andstderr
+exposure. Sourceinspectionalsofoundobserverrace: Rootstatus couldfinishafter
+Runtime.tick poll but beforesecondcontrolRPC, so testbroke beforeSQLitebecamedone.
+Fixture nowawaits BOTHRootfinishedANDjournal(done,0) withinSAME5seconddeadline,
+thenassertsboth. No productionexit/grantchecksweakened. NewCIrequired.
