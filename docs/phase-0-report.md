@@ -75,3 +75,19 @@ and nine kernel EACCES actor probes verified. Cloud uinput driver unavailable;
 character-node permissions tested, physical/device behavior not claimed. This is
 a fixed CI authority spike; production broker and full grant lifecycle remain later
 work. Final PR head must pass CI before merge; architecture remains NO-GO for P0-10.
+
+Independent stop acceptance: [CI 38328405772](https://github.com/ManoharPaturi/mano-os/actions/runs/38328405772)
+passed normal and recovered root probes. Native C watchdog restart and human ttyS0
+STOP killed all task descendants (50/49 PIDs) while core and approval authority were
+frozen. Both worker units had real fork-limit rejections. Live grants were invalidated,
+pointer input removed, six actor signal/socket routes denied per stop, and authenticated
+TTY recovery remained usable. Fresh PAM rearm was required between stops. Fixture
+cleanup locked the account and removed core. Physical provenance remains unmeasured.
+Recovered suite: 34 pass, zero fail, one pending full original-spec Phase0 audit.
+The fixed CI authority is not a production broker. Architecture remains NO-GO.
+
+Pressure diagnostics found guest progress stalls around serial kernel info output.
+The fixture saves/restores printk settings and keeps warning/error output on UART;
+info and real fork rejections remain in the kernel journal. The accepted journal
+contains no RCU stall, BUG or soft-lockup message. KVM uses explicit host CPU and
+TCG uses max. The VM still has two vCPUs/4 GiB and requires both task units saturated.

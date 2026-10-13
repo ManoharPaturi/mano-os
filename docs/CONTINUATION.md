@@ -1,70 +1,54 @@
 # Continuation after compaction
 
-Goal remains the complete original mano-OS v2.1 specification in docs/spec-v2.1.md.
-Repo: https://github.com/ManoharPaturi/mano-os (private). Local checkout: work/mano-os.
-User authorized implementation, PRs and mostly carrying them through to merge.
-Merge only after every current-head CI passes; main protection is enforced for admins.
-User explicitly chose CI VM development for now. No agents have been delegated.
+Goal: complete original mano-OS v2.1 in docs/spec-v2.1.md, not just the lab.
+Private repo: https://github.com/ManoharPaturi/mano-os. Checkout: work/mano-os.
+User authorized implementation and mostly merges, only after ALL final-head CI
+passes. Strict main protection includes admins. User chose CI VMs for now.
+No agents delegated. No direct agent /compact tool; automatic compaction uses notes.
 
-Verified merged work PRs #1-15. Main 9523f9430f6aacce604fc7ed5cb86d93781dad47.
-PR15 accepted CI 38322815062, post-merge main 38323225953 all passed.
-Recovered report 33 pass, 0 fail, 1 pending P0-10; architecture NO-GO.
-Original full spec/goal remains active; no model execution or arbitrary root API.
+Accepted merged baseline PRs #1-15: main 9523f9430f6aacce604fc7ed5cb86d93781dad47.
+Current PR16 https://github.com/ManoharPaturi/mano-os/pull/16, branch
+feat/phase0-independent-stop. Implementation head 45d2070997c76451c42404fc0101d1dd9d684815
+passed all three jobs in CI38328405772. Documentation update still needs final-head
+CI before merge. Do not confuse that implementation run with approval to merge a
+new head. Use scripts/merge_checked.py, then verify post-merge main CI.
 
-Current branch feat/phase0-independent-stop. Native C stopd with systemd watchdog,
-human-only kernel-credential socket, fixed cgroup.kill path, durable latch/epoch,
-root-lock of raw agent input runtime. Root C restart fails closed after watchdog hang.
-Real bounded fork storms in two task units plus live Wayland pointer-pulse service.
-Core and approval authority frozen throughout each stop. First force native stopd
-hang -> systemd watchdog restart -> auto stop. Resume authority; old grant denied.
-Fresh request-bound PAM rearm restores input and new scoped grant. Then real ttyS0
-STOP trigger independently kills/revokes again; grant denied and TTY still usable.
-Live grants are real checks/counter effects bound to approved fixture-session scope,
-not production general execution. Root cgroup/epoch/input and actor denial evidence
-must pass both boots. Full Phase0 audit is explicitly pending before any promotion.
-Candidate unverified until final-head CI; merge only all-success current head.
+P0-10 evidence: both normal and recovered btrfs boots independently run native C
+stopd, systemd watchdog, human-only kernel-peer socket, durable latch/grant epoch,
+fixed cgroup.kill and input-runtime root lock. Core and approval authority remain
+actually SIGSTOP-frozen while watchdog and human ttyS0 stop execute. Two worker
+units reach real TasksMax (nonzero pids.events max each), plus pointer input.
+Watchdog kills 50 PIDs, manual kills 49. Epochs increase 0->1->2, grants change
+valid->revoked->fresh PAM rearm valid->revoked, use counter stays unchanged on
+denials. Pointer capability and pulses stop. Six actor socket/signal denials per
+phase. Authenticated TTY remains usable; fixture account locked and core removed.
+Hashes checked for all referenced artifacts in both reports. Recovered suite:
+34 pass, 0 fail, 1 pending P0-12 original-spec architecture audit; still NO-GO.
+Physical input provenance is null. This is a fixed CI spike, not production broker.
 
-Physical performance remains a Phase 6 gate. Installer/firmware boot remains Phase 7.
-No production broker, core/model execution, coding delegate, .deb or ISO exists yet.
+Earlier pressure runs stalled around serial kernel info messages (RCU warnings).
+Pacing forks and explicit KVM host CPU alone did not resolve readiness. Current
+fixture saves/restores console printk, retains warnings/errors on UART, sends info
+to kernel journal. Accepted kernel journal has four actual fork rejections and no
+RCU stall/BUG/soft-lockup messages. Linux RCU documentation identifies slow serial
+console as possible stall cause; evidence supports that diagnosis, not a universal
+kernel fix. Full guest diagnostics retained after serial tests, preserving newer
+runner report; pulse logs cleared between boots. VM still 4 GiB, two vCPUs.
 
-Continue with remaining Phase 0 GUI and authority experiments, then audit every
-Phase 0 requirement before enabling runtime execution. Do not narrow the full goal.
-Mutation guest scripts are disposable-VM-only and refuse already formatted targets.
-Never rerun setup on a prepared/recovered guest. Every boot grants scoped runner KVM
-access; kernel/initramfs are matching files under /boot (cloud root links are absent).
+Next: merge PR16 only after final-head CI; audit every original Phase0 requirement
+and stale ADR before any model-facing executor. Full later phases remain broker,
+core/model runtime, coding delegates, durable workflows, devices, physical 8 GB
+Phase6, .deb/ISO and firmware/installer Phase7. Never shrink the goal or invent
+physical results. Do not rerun fresh-disk setup on a prepared/recovered guest.
+
+Disk last ~17 GiB free, 92% used; warn below20GiB/above90%, stop large downloads
+below10GiB. Repo+diagnostics ~100MiB. No local VM/model images, no user-data deletion.
 
 ```sh
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -q
 .venv/bin/ruff check .
 bash -n scripts/*.sh
-gh pr checks PR_NUMBER --repo ManoharPaturi/mano-os
-python3 scripts/merge_checked.py PR_URL
+gh pr checks 16 --repo ManoharPaturi/mano-os
+python3 scripts/merge_checked.py https://github.com/ManoharPaturi/mano-os/pull/16
 PYTHONPATH=src python3 -m mano_lab.cli disk .
 ```
-
-Disk: ~15.7 GiB free on Mac, above 90% used. Warn below 20 GiB; stop new large
-local downloads below 10 GiB. Avoid local VM/model images and never delete user data.
-No direct agent /compact tool is exposed; preserve concise notes across automatic
-compaction. Goal remains active until the full specification is actually verified.
-
-PR16 run 38326217996 failed before stop trigger. Guest kernel 6.12.111 logged
-RCU starvation and two CPUs waiting in smp_call_function_many_cond after pids
-limit rejection; setup stalled launching pointer service. No merge/evidence promotion.
-Next candidate paces successful forks at 10ms, retains sustained rejected attempts,
-and requires nonzero pids.events max counters in both worker units before stop.
-This is a diagnostic change, not proof the underlying guest stall is resolved.
-
-PR16 diagnostics run 38327438447: native daemon active, latch false, 50 task PIDs,
-pointer pulses 1-7, worker1 max=100, worker2 max=0; pressure readiness failed.
-Pacing alone did not resolve loss of guest progress. Candidate now explicitly uses
-QEMU -cpu host under KVM (QEMU recommended for non-migrating guests), max for TCG,
-and records the selection. Keep two vCPUs and both saturated task groups required.
-No stop success or merge is claimed. Reference: https://www.qemu.org/docs/master/system/i386/cpu.html
-
-Host CPU run38327886679 failed readiness, but pointeradvanced200pulses; capture
-truncated beforepids. Next diagnostic preserves console printk settings, routes
-info to journal (consolelevel5 retainswarnings/errors) duringpressure, restores
-settings and saveskerneljournal duringcleanup. LinuxRCUdocs identify slowserial
-console asstallcause; this remains a hypothesis. Postserial guest evidence now
-collected evenwhenprobe fails. Rootstage mustnot hide anykernelerror or relaxPID
-saturation, input, grant orstopassertions.
