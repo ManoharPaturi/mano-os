@@ -26,7 +26,11 @@ Native GTK4 prompt input is tested in the separate CI human session. Real serial
 rescue authentication is verified on the VM serial console with a stopped mock core.
 Concurrent human/agent focus and input isolation is verified in the CI VM. A fixed
 request-bound OS-auth/PAM approval spike is under final CI acceptance. The trusted
-stop/grant-revocation route remains pending; the architecture stays NO-GO.
+stop/grant-revocation route passed the CI fixture on normal and recovered roots:
+native watchdog and human TTY stop kill all fixture tasks, invalidate live grants,
+disable input and preserve recovery while core and approval authority are frozen.
+Recovered suite: 34 pass, zero fail, one pending full Phase 0 architecture audit.
+The architecture stays NO-GO until that original-spec audit is complete.
 
 ## Development
 

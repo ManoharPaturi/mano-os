@@ -17,7 +17,10 @@ UNIT = "mano-rescue-core.service"
 
 
 def run(argv, **kwargs):
-    return subprocess.run(argv, text=True, capture_output=True, check=True, timeout=20, **kwargs)
+    timeout = kwargs.pop("timeout", 20)
+    return subprocess.run(
+        argv, text=True, capture_output=True, check=True, timeout=timeout, **kwargs
+    )
 
 
 def status():
@@ -74,6 +77,7 @@ def main():
         )
         return
     if operation == "cleanup":
+        run(["python3", "/opt/mano-lab/scripts/stop_fixture.py", "cleanup"], timeout=45)
         for command in (
             ["systemctl", "kill", "--signal=KILL", "--kill-whom=all", UNIT],
             ["systemctl", "stop", UNIT],
@@ -93,6 +97,10 @@ def main():
             "/var/lib/mano-broker/approval-journal.jsonl",
             "/var/lib/mano-broker/approval-fixture",
             "/run/mano-approval-fixture/human.sock",
+            "/var/lib/mano-broker/grant-epoch",
+            "/var/lib/mano-broker/stop-latched",
+            "/var/lib/mano-broker/live-grant.json",
+            "/var/lib/mano-broker/grant-use-count",
         ):
             Path(name).unlink(missing_ok=True)
         run(["/usr/sbin/usermod", "-L", "mano-human"])

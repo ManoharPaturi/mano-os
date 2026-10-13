@@ -45,8 +45,10 @@ local-hostname: mano-phase0
 ' > "$lab_dir/meta-data"
 cloud-localds "$lab_dir/seed.img" "$lab_dir/user-data" "$lab_dir/meta-data"
 accel=tcg
-if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then accel=kvm; fi
+cpu_model=max
+if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then accel=kvm; cpu_model=host; fi
 printf 'QEMU accelerator: %s\n' "$accel" | tee "$repo_root/evidence/accelerator.txt"
+printf '%s\n' "$cpu_model" > "$repo_root/evidence/cpu-model.txt"
 start_vm() {
   local stage=$1
   shift
@@ -57,7 +59,7 @@ start_vm() {
     getfacl /dev/kvm > "$repo_root/evidence/kvm-$stage-after.acl"
     test -r /dev/kvm && test -w /dev/kvm
   fi
-  qemu-system-x86_64 -accel "$accel" -m 4096 -smp 2 -display none \
+  qemu-system-x86_64 -accel "$accel" -cpu "$cpu_model" -m 4096 -smp 2 -display none \
     -chardev "socket,id=console,path=$lab_dir/serial-$stage.sock,server=on,wait=off,logfile=$repo_root/evidence/serial-$stage.log" \
     -serial chardev:console \
     -drive "file=$lab_dir/$image,format=qcow2,if=virtio$bootstrap_readonly" \
@@ -131,9 +133,15 @@ set -e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
 if [ "$result" != 0 ]; then exit "$result"; fi
+set +e
 PYTHONPATH="$repo_root/src" python3 "$repo_root/scripts/serial_rescue.py" \
   --socket "$lab_dir/serial-btrfs.sock" --key "$lab_dir/key" \
   --known-hosts "$lab_dir/known_hosts" --out "$repo_root/evidence"
+serial_result=$?
+set -e
+ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+  'sudo tar --exclude=./report.json -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+if [ "$serial_result" != 0 ]; then exit "$serial_result"; fi
 # Preserve first-root report separately; recovered-root observations are a new run.
 python3 - "$repo_root/evidence" <<'PY_COPY'
 import shutil,sys
@@ -165,6 +173,8 @@ if [ "$result" = 0 ]; then
     --known-hosts "$lab_dir/known_hosts" --out "$repo_root/evidence"
   result=$?
   set -e
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo tar --exclude=./report.json -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
 fi
 sha256sum "$lab_dir/$image" > "$repo_root/evidence/bootstrap-preserved-after.sha256"
 cmp "$repo_root/evidence/bootstrap-preserved-before.sha256" \

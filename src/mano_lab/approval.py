@@ -20,14 +20,15 @@ class Request:
     consumed: bool = False
 
     @classmethod
-    def create(cls, now, expired=False):
+    def create(cls, now, expired=False, rearm=False):
         return cls(
             {
                 "request_id": secrets.token_hex(16),
                 "task_id": secrets.token_hex(16),
-                "operation": "record_fixture_approval",
+                "operation": "rearm_fixture_session" if rearm else "authorize_fixture_session",
+                "scope": ["fixed-marker", "CI-agent-input", "grant-check"],
                 "target": TARGET,
-                "risk": "low; disposable CI marker only",
+                "risk": "low; fixed CI marker and isolated agent input only",
                 "nonce": secrets.token_hex(32),
                 "expires_at_monotonic": now - 1 if expired else now + 90,
             }
@@ -63,3 +64,22 @@ class Request:
             return "expired-denied"
         self.consumed = True
         return "approved"
+
+
+def grant_decision(request, body, issued_epoch, current_epoch, latched, clock):
+    if set(body) != {"action", "request_id", "nonce", "operation_digest"}:
+        return "schema-denied"
+    if latched or issued_epoch != current_epoch:
+        return "revoked-denied"
+    if not request.consumed:
+        return "grant-denied"
+    if clock() >= request.view["expires_at_monotonic"]:
+        return "expired-denied"
+    if (
+        body["action"] != "use_grant"
+        or body["request_id"] != request.view["request_id"]
+        or body["nonce"] != request.view["nonce"]
+        or body["operation_digest"] != digest(request.view)
+    ):
+        return "binding-denied"
+    return "grant-valid"
