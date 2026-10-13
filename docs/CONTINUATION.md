@@ -2,7 +2,7 @@
 
 Full original mano-OS v2.1 goal remains active. Original spec hash
 6d320e79ad62a44afea04fcf305432ec56dcdc5061e6cfcef55d113b7101eace matches supplied README.
-Private repo https://github.com/ManoharPaturi/mano-os; checkout work/mano-os.
+Public repo https://github.com/ManoharPaturi/mano-os; checkout work/mano-os.
 User authorized mostly merges, only after all final-head checks pass. Strict main
 protection includes admins. CI VMs for now, no local VM/model images. No subagents.
 Direct agent /compact unavailable; keep this note for automatic compaction.
@@ -242,3 +242,15 @@ Admissioncwd pin read-only asfixedbroker EUID in singlethread thenfinallyrootres
 noDACoverride. Tests secondpin whilejobrunning toverifychilddeathflag unaffected.
 Local82tests10MacLinuxskips pass; realtransport proofpending. No productionmodel/
 hostlistener or journalgrant/epoch integration claimed. Allfullversiongates remain.
+
+# Reusable launcher client continuation
+
+PR40 merged1cc222f6c1d46b9703ba72f0d42bba4fd2a7d9f5 after all3 current-head
+checksSUCCESS run38403286626. Accepted real persistent broker transport/root
+message credentials/minimum-capability cwd pin/second pin while running evidence.
+Post-main run38404236483 still in progress at this writing. Current branch
+feat/phase1-launch-client replaces ad hoc fixture RPC with reusable private Client,
+fixed paths, bounded messages, rights closure, root creator and message credentials,
+pidfd lifetime identity and no implicit launch retry/recovery. Grant journal,
+epoch/Stop coupling and production daemon remain required. Linux credential
+response tests run in CI, not macOS. Full original version remains incomplete.
