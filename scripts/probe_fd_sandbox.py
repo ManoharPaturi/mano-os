@@ -52,6 +52,7 @@ if len(sys.argv) == 1:
     )
     sys.exit(0)
 assert sys.argv[1:] == ["--bounded"]
+assert "mano-fd-sandbox-ci.scope" in Path("/proc/self/cgroup").read_text()
 assert not BASE.exists() and not LOCK.exists()
 assert "mano-broker" not in {p.pw_name for p in pwd.getpwall()}
 assert "mano-request" not in {g.gr_name for g in grp.getgrall()}
@@ -101,6 +102,7 @@ try:
             os.setgroups([grp.getgrnam("mano-request").gr_gid])
             os.setgid(identity.gid)
             os.setuid(identity.uid)
+            assert "mano-fd-sandbox-ci.scope" in Path("/proc/self/cgroup").read_text()
             payload = """import errno,json,os,socket,sys
 from pathlib import Path
 assert Path('/workspace').stat().st_ino==int(sys.argv[1])
@@ -172,6 +174,7 @@ print(json.dumps({'workspace_fd_identity':True,'cwd_fd_identity':True,
                 protected_host_hash_unchanged=True,
                 workspace_output_verified=True,
                 cgroup_limits=limits,
+            current_process_and_task_in_scope=True,
                 seccomp_profile_enforced=None,
                 landlock_enforced=None,
                 model_connected=False,
