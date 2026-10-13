@@ -30,3 +30,9 @@ adapter in the persistent broker process, real completion/output and Stop cancel
 Its grant originates from an operator fixture; no PAM approval or public Runtime
 execution integration is claimed. Production daemon/Runtime wiring and frozen-broker
 Stop acceptance remain required.
+
+The first VM run rejected a journal created under the setgid/ACL task workspace.
+The fixture now provisions a separate broker-owned mode0700 journal root under
+/run/mano-journal-ci before starting the root service. Task-visible workspace
+inheritance cannot affect journal permissions. Existing State ownership/mode
+checks remain unchanged; no task workspace contains the broker journal.
