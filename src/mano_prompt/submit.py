@@ -21,10 +21,14 @@ def status_packet(prompt_id):
 def submit_prompt(prompt, *, request_key=None):
     key = request_key or secrets.token_hex(16)
     result = rpc(prompt_packet(prompt, key))
-    if (result.get('ok') is not True or result['prompt']['state'] != 'received'
-            or result['prompt']['task_id'] is not None):
+    accepted = {'received', 'creating_task', 'task_created', 'unknown_task_creation'}
+    if result.get('ok') is not True or result['prompt']['state'] not in accepted:
         raise ValueError('Prompt service did not acknowledge this request')
     identifier(result['prompt']['id'])
+    if result['prompt']['state'] == 'task_created':
+        identifier(result['prompt']['task_id'])
+    elif result['prompt']['task_id'] is not None:
+        raise ValueError('Inconsistent queued prompt state')
     return result['prompt']
 
 

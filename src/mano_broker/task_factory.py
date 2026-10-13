@@ -84,6 +84,54 @@ def create_task(prompt):
     # or recursively delete data that another trusted observer may already have received.
 
 
+def control_request(operation, body):
+    if os.geteuid() != 0 or sys.platform != 'linux':
+        raise PermissionError('Trusted Linux root operator required')
+    broker = pwd.getpwnam('mano-broker')
+    packet = canonical(dict(schema_version='1.0', operation=operation, body=body)).encode()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as connection:
+        connection.settimeout(3)
+        connection.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+        connection.connect('/run/mano-broker/control.sock')
+        creator = Peer(*CREDENTIALS.unpack(connection.getsockopt(
+            socket.SOL_SOCKET, socket.SO_PEERCRED, CREDENTIALS.size)))
+        if creator.uid != 0 or creator.gid != 0:
+            raise ValueError('Control listener must be root activated')
+        if connection.send(packet) != len(packet):
+            raise ValueError('Incomplete control request; no implicit retry')
+        _, result = reply(connection, expected_uid=broker.pw_uid, expected_gid=broker.pw_gid)
+    if result.get('ok') is not True:
+        raise ValueError('Protected prompt transition denied')
+    return result
+
+
+def create_from_prompt(prompt_id):
+    if os.geteuid() != 0 or sys.platform != 'linux':
+        raise PermissionError('Trusted Linux root operator required')
+    identifier(prompt_id)
+    human = human_uid()
+    binding = dict(prompt_id=prompt_id, human_uid=human)
+    try:
+        claimed = control_request('claim_prompt', binding)['prompt']
+        if claimed['id'] != prompt_id:
+            raise ValueError('Prompt claim identity changed')
+        result = create_task(claimed['prompt'])
+        result['context']['operation_key'] = prompt_id
+        attached = control_request('attach_prompt_task', binding | {
+            'task_id': result['context']['task_id']})['prompt']
+        if (attached['id'] != prompt_id or attached['state'] != 'task_created'
+                or attached['task_id'] != result['context']['task_id']):
+            raise ValueError('Uncertain prompt/task attachment')
+        result['prompt_id'] = prompt_id
+        return result
+    except BaseException:
+        try:
+            control_request('uncertain_prompt_creation', binding)
+        except (OSError, ValueError, KeyError, TypeError):
+            pass  # Recovery also makes an outstanding claim uncertain on broker restart.
+        raise
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Trusted operator: provision a managed task')
     parser.parse_args(argv)
@@ -94,9 +142,10 @@ def main(argv=None):
         if not 1 <= len(packet) <= MAX_PACKET:
             raise ValueError('Invalid bounded task input')
         value = json.loads(packet.decode('utf8'), object_pairs_hook=unique_object)
-        if not isinstance(value, dict) or set(value) != {'prompt'}:
+        if not isinstance(value, dict) or set(value) not in ({'prompt'}, {'prompt_id'}):
             raise ValueError('Task input accepts only human prompt text')
-        result = create_task(value['prompt'])
+        result = (create_from_prompt(value['prompt_id']) if 'prompt_id' in value
+                  else create_task(value['prompt']))
         print(canonical(dict(schema_version='1.0', ok=True, task=result)))
         return 0
     except (OSError, ValueError, KeyError, TypeError):

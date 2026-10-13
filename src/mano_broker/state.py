@@ -384,6 +384,8 @@ class State:
             self.db.execute("UPDATE grants SET revoked=1")
             self.db.execute("UPDATE actions SET state='unknown' WHERE state='executing'")
             self.db.execute("UPDATE actions SET state='failed' WHERE state='intent'")
+            self.db.execute("UPDATE human_prompts SET state='unknown_task_creation' "
+                            "WHERE state='creating_task'")
             self.event(None, "emergency-stop", {"epoch": self.meta("epoch")})
 
     def recover(self):
@@ -391,5 +393,7 @@ class State:
             changed = self.db.execute(
                 "UPDATE actions SET state='unknown' WHERE state='executing'"
             ).rowcount
-            self.event(None, "recovery", {"unknown_actions": changed})
+            prompts = self.db.execute("UPDATE human_prompts SET state='unknown_task_creation' "
+                                      "WHERE state='creating_task'").rowcount
+            self.event(None, "recovery", {"unknown_actions": changed, "unknown_prompts": prompts})
         return changed
