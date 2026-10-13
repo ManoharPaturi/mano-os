@@ -292,3 +292,16 @@ PR42 merged7258a6406e6df9ab1d73b36de81af9522b71a8d5 after exactheadbe8ed3a
 all3SUCCESS run38406670474. Artifact11818304235 accepted realjournalexecutor/
 Stopcancelunknown, PAMfalse. PR43 mergescurrentmain; onlydocscontinuationconflict
 resolvedpreservingbothnotes. Fresh final-head CI required before ready/merge.
+
+# Runtime scheduling draft continuation
+
+Currentfeat/phase1-runtime-execution adds Runtime optionaltrustedClient/Executor,
+freshRUN-onlyqueuedactionID, tickpoll+onependinglaunch/max2active, closecancel/
+unknown/lease/clientclosure. ServicepassesClient, ticksafterrequests/control and
+WATCHDOGnotify. No newpublicStart/grantendpoint. Replaynoenqueue. SynchronousRPC
+bounded8secs can triggerunchanged6secondbrokerwatchdog; no latency/frozenStopclaim.
+Portable96tests12MacLinuxskips pass. Standalone daemonprobe uses Runtime.dispatch
+withEXPLICITsynthetic callerPeer(operatorfixture) andoperatorgrant, actualscheduler/
+Registry/executor/rootservice. Not actualkernelbrokerrequest/PAMacceptance.
+PR42merged7258a64 acceptedjournalVM. PR43freshhead6482552 CI38407737065 LIVE;
+old38407162561 auto-supersededcancelled, notaccepted. Postmain42 38407624336 LIVE.
