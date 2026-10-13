@@ -668,11 +668,17 @@ finally:client.close()
         plan_args = dict(argv=["/usr/bin/python3", "-c", agent_program],
                          cwd=".", timeout_seconds=10)
         if persistent:
-            entry = ["-m", "mano_core.cli", "--mock",
-                     "--checkpoint-directory", checkpoint_directory]
-            payload = dict(context={key: state[key] for key in
-                ("task_id", "resource_id", "operation_key", "prompt")},
-                plan=dict(args=plan_args, reason="Create and run golden project unit test"))
+            context = {key: state[key] for key in
+                       ("task_id", "resource_id", "operation_key", "prompt")}
+            lifecycle = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+                "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.lifecycle", "--mock"],
+                input=json.dumps(dict(managed=managed | {"context": context},
+                    plan=dict(args=plan_args, reason="Create and run golden project unit test"))),
+                capture_output=True, text=True, timeout=15, check=False)
+            assert lifecycle.returncode == 0, lifecycle.stderr
+            decoded = json.loads(lifecycle.stdout)
+            assert decoded["ok"]
+            return decoded["task"]
         else:
             entry = ["-c", agent_step_code]
             payload = dict(state=state, persistent=False, checkpoint_directory=checkpoint_directory,
@@ -765,6 +771,7 @@ finally:client.close()
         mock_agent_replay_no_effect=True,
         sqlite_agent_checkpoint_new_process_recovery=True,
         installed_core_cli_entrypoint=True,
+        installed_bounded_lifecycle_controller=True,
         installed_root_task_factory=True,
         authenticated_native_human_prompt_queue=True,
         human_prompt_claim_to_actual_task=True,
