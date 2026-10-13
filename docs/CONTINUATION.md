@@ -391,3 +391,21 @@ PR48currentcdfadb7 CI38417737884 FAILED publicproposeafterStop returnscompleted
 idempotentreplay (noexecution). Added explicitRuntime latchedproposaldenial BEFORE
 Registry.prepare; historyremainsavailableviaStatus. UnitNativeStoptripnowrequires
 replayDenied. No Stopguardweakened. Atomicgenerationdraftstashedon49branch.
+
+# Atomic native generation draft
+
+PR47merged791c702ce9b9994c15361328afb5711739e45873 afterhead64373b5/allchecksPASS.
+PR48 VMcdfadb7 failed latchedproposeidempotentdonehistory (noexecution); fixedpublic
+Runtime.propose guard0894c04. Current48CI38420979972 all3SUCCESS; merged
+fc83b3c66633d6bc3c9c60e995a793a1ecc4358c. Artifact11826488550 acceptednativekill/
+latchcoupling/pendingrevoke/privateRootpreparedeny/restartnoautorearm, reportupdated.
+Currentfeat/phase1-stop-generations newCcanonical v1:gen:armed/latched record,
+Rootstate.pending exclusivewrites/fsyncfile+dir/rename/fsyncdir; consumersdenyany
+pendingwritebefore+afterread. EachStopgen+1. Legacyvalidrecords migrate preserving
+latch, committedcorruptdeny. Interruptedpending alwaysrecoverNEWlatchedgeneration;
+partial useslastvalidcommittedgen, fullarmedpendingalsoforcedlatched. Recovery
+retains pendingintent untilatomicpublish. Persistencefailure stillattemptskill,
+reportsfailure/exitsrestart. NativeS remainsfixedhuman-only, no newrearmroute yet.
+105tests12MacLinuxskips/Ruff/diffpass; nativecompile/actualfaultinjectionVMpending.
+VMcheckspartialv1:2:arm→v1:2:latched, fullpendingv1:3:armed→v1:4:latched,
+oldproposalsremainDenied. PAMboundrearm andfulloriginalscope stillrequired.

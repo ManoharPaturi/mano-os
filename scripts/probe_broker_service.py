@@ -625,7 +625,7 @@ assert reply==sys.argv[2].encode()
     subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
         stop_client, "SS", "denied", str(stop_pid)], check=True, capture_output=True,
         text=True, timeout=5)
-    assert (STOP_STATE / "state").read_text() == "armed\n"
+    assert (STOP_STATE / "state").read_text() == "v1:0:armed\n"
     denied_client = """import errno,socket
 s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
 try:s.connect('/run/mano-stopd/human.sock')
@@ -651,7 +651,7 @@ else:raise AssertionError('task reached native Stop')
                and "populated 1" in (group / "cgroup.events").read_text()):
             time.sleep(0.05)
         assert "populated 0" in (group / "cgroup.events").read_text()
-        assert (STOP_STATE / "state").read_text() == "latched\n"
+        assert (STOP_STATE / "state").read_text() == "v1:1:latched\n"
         for frozen in (broker_pid, launcher_pid):
             assert "T" in next(line for line in Path(f"/proc/{frozen}/status").read_text()
                                .splitlines() if line.startswith("State:"))
@@ -690,11 +690,33 @@ finally:
     ready(broker_pid)
     assert rpc("request", dict(schema_version="1.0", operation="propose",
         body=terminal_body), actor=identity.name) == denied
-    assert (STOP_STATE / "state").read_text() == "latched\n"
+    assert (STOP_STATE / "state").read_text() == "v1:1:latched\n"
     terminal_report["native_stop_grant_latch_integrated"] = True
     terminal_report["native_stop_pending_revoked"] = True
     terminal_report["native_stop_root_preparation_denied"] = True
     terminal_report["native_stop_restart_no_rearm"] = True
+    # Fault-inject an interrupted native state write while its daemon is stopped.
+    subprocess.run(["systemctl", "stop", "mano-stopd.service"], check=True)
+    pending_file = STOP_STATE / "state.pending"
+    pending_file.write_text("v1:2:arm")
+    pending_file.chmod(0o644)
+    subprocess.run(["systemctl", "start", "mano-stopd.service"], check=True)
+    assert not pending_file.exists()
+    assert (STOP_STATE / "state").read_text() == "v1:2:latched\n"
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=terminal_body), actor=identity.name) == denied
+    terminal_report["native_stop_interrupted_write_recovers_latched"] = True
+    subprocess.run(["systemctl", "stop", "mano-stopd.service"], check=True)
+    pending_file.write_text("v1:3:armed\n")
+    pending_file.chmod(0o644)
+    subprocess.run(["systemctl", "start", "mano-stopd.service"], check=True)
+    assert not pending_file.exists()
+    assert (STOP_STATE / "state").read_text() == "v1:4:latched\n"
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=terminal_body), actor=identity.name) == denied
+    terminal_report["native_stop_interrupted_arm_recovers_latched"] = True
+    terminal_report["native_stop_generation"] = 4
+
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
