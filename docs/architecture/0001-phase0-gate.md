@@ -1,23 +1,20 @@
-# ADR 0001: keep production execution disabled until Phase 0 proof
+# ADR 0001: keep production execution disabled until boundary proof
 
-Status: accepted for development; compositor architecture remains unapproved.
+Status: superseded for Phase0 feasibility by ADR0008; production restriction retained.
 
-The supplied v2.1 README explicitly orders feasibility/security before runtime.
-The current host is an ARM Mac with low spare disk capacity, not Debian hardware.
-Run real Linux probes in a disposable remote QEMU guest instead of weakening
-sandbox boundaries or downloading local multi-gigabyte VM images.
+The original specification orders feasibility/security before runtime. The ARM Mac
+has low spare disk capacity, so Linux integration runs in disposable remote QEMU
+without local VM/model downloads. Root setup helpers are guest fixtures, not agent APIs.
 
-The lab profile is not a production broker: it has no grants, authoritative
-journal, seccomp/Landlock stack, resource-authorized execution API or model route.
-The lab uses separate task identities, no inherited host sockets and no network.
-Its workspace resolver rejects symlinks but is not race-proof; a production
-broker must pin resources with file descriptors and broker-owned mount topology.
+PRs1–16 proved actual btrfs root/recovery, native human prompt, restricted agent
+Wayland/XWayland, real Chromium/Writer contracts, concurrent focus isolation,
+request-bound OS-authenticated approval and native independent stop/revocation.
+Read ADR0008 and current run artifacts for the full original-spec review and limits.
+Physical provenance remains unmeasured; the specification's authenticated fallback
+is the chosen strategy. Physical8GB/installer/firmware gates remain later requirements.
 
-The cloud image currently has ext4 root. A btrfs data-volume experiment does not
-prove root rollback. A root-installed prompt, approval authentication, restricted
-Wayland globals and real physical stop/input provenance remain mandatory.
-Systemd cgroup stop is a verified primitive only after its VM probe succeeds.
-
-No phase promotion or unrestricted delegate execution occurs until all Phase 0
-proofs pass. Root privileges in setup are confined to the throwaway guest and do
-not represent agent authority. Do not install the guest script on a real host.
+The lab is not a production broker. Its workspace resolver is not race-proof;
+production must pin resources by descriptors and use broker-owned topology. Typed
+IPC/grants/journal, production cgroups, seccomp/Landlock, network and credential
+mediation are Phase1/later gates before tools can be exposed to a model. Phase0 GO
+permits their development; it never authorizes arbitrary or unrestricted execution.

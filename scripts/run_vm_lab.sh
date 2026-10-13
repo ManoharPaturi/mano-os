@@ -179,4 +179,8 @@ fi
 sha256sum "$lab_dir/$image" > "$repo_root/evidence/bootstrap-preserved-after.sha256"
 cmp "$repo_root/evidence/bootstrap-preserved-before.sha256" \
   "$repo_root/evidence/bootstrap-preserved-after.sha256"
+if [ "$result" = 0 ]; then
+  PYTHONPATH="$repo_root/src" python3 "$repo_root/scripts/audit_phase0.py" \
+    --evidence "$repo_root/evidence"
+fi
 exit "$result"
