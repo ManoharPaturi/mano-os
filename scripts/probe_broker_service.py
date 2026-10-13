@@ -631,6 +631,19 @@ finally:client.close()
 """
 
     def agent_step(state, *, persistent=True):
+        checkpoint_directory = str(terminal_workspace / ".mano-agent")
+        plan_args = dict(argv=["/usr/bin/python3", "-c", agent_program],
+                         cwd=".", timeout_seconds=10)
+        if persistent:
+            entry = ["-m", "mano_core.cli", "--mock",
+                     "--checkpoint-directory", checkpoint_directory]
+            payload = dict(context={key: state[key] for key in
+                ("task_id", "resource_id", "operation_key", "prompt")},
+                plan=dict(args=plan_args, reason="Create and run golden project unit test"))
+        else:
+            entry = ["-c", agent_step_code]
+            payload = dict(state=state, persistent=False, checkpoint_directory=checkpoint_directory,
+                           args=plan_args)
         result = subprocess.run(["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
             "--unit=mano-agent-step-" + str(time.monotonic_ns()), "--uid=" + identity.name,
             "--slice=mano-core.slice",
@@ -645,15 +658,16 @@ finally:client.close()
             "--property=SystemCallFilter=@system-service", "--property=SystemCallErrorNumber=EPERM",
             "--property=MemoryDenyWriteExecute=yes", "env",
             "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1",
-            "/usr/local/lib/mano-core/bin/python", "-c", agent_step_code],
-            input=json.dumps(dict(state=state, persistent=persistent,
-                checkpoint_directory=str(terminal_workspace / ".mano-agent"),
-                args=dict(argv=["/usr/bin/python3", "-c",
-                agent_program], cwd=".", timeout_seconds=10))), capture_output=True,
+            "/usr/local/lib/mano-core/bin/python", *entry],
+            input=json.dumps(payload), capture_output=True,
             text=True, timeout=10, check=False)
         if result.returncode != 0:
             raise AssertionError("Fixed CI mock core step failed: " + result.stderr[-4096:])
-        return json.loads(result.stdout)
+        decoded = json.loads(result.stdout)
+        if persistent:
+            assert decoded["ok"] is True
+            return decoded["task"]
+        return decoded
 
     agent_state = agent_step(dict(task_id=terminal_task["task_id"],
         resource_id=terminal_task["resource_id"], operation_key="agent-golden-project",
@@ -717,6 +731,7 @@ finally:client.close()
         mock_agent_pam_grant=True, mock_agent_replay_same_action=True,
         mock_agent_replay_no_effect=True,
         sqlite_agent_checkpoint_new_process_recovery=True,
+        installed_core_cli_entrypoint=True,
         core_step_cgroup_and_capability_limits_verified=True,
         mock_agent_exit_alone_unverified=True, preapproval_exact_file_predicate=True,
         verifier_public_and_wrong_action_denied=True,
@@ -818,7 +833,7 @@ else:raise AssertionError('task reached native Stop')
                 state_line = next(line for line in Path(f"/proc/{pid}/status").read_text()
                                   .splitlines() if line.startswith("State:"))
                 return "Z" in state_line
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 return True
 
         while time.monotonic() < deadline:
