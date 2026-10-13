@@ -71,3 +71,30 @@ class CoreLifecycleGuards(unittest.TestCase):
             action['proposal_digest'] = 'f' * 64
             with self.assertRaises(ValueError):
                 run_mock_step(self.managed, plan)
+
+    def test_dispatcher_reuses_created_context_and_refuses_uncertain_allocation(self):
+        from mano_broker.lifecycle import dispatch_prompt
+
+        prompt = 'a' * 32
+        managed = self.managed | {'prompt_id': prompt}
+        with patch('mano_broker.lifecycle.os.geteuid', return_value=0), \
+             patch('mano_broker.lifecycle.sys.platform', 'linux'), \
+             patch('mano_broker.lifecycle.human_uid', return_value=1002), \
+             patch('mano_broker.lifecycle.control_request', side_effect=[
+                 dict(prompt=dict(id=prompt, state='task_created')),
+                 dict(managed=managed)]) as control, \
+             patch('mano_broker.lifecycle.create_from_prompt') as create, \
+             patch('mano_broker.lifecycle.run_mock_step', return_value={'status': 'verifying'}):
+            self.assertEqual(dispatch_prompt(prompt, {})['status'], 'verifying')
+            create.assert_not_called()
+            self.assertEqual([call.args[0] for call in control.call_args_list],
+                             ['prompt_status', 'prompt_context'])
+        with patch('mano_broker.lifecycle.os.geteuid', return_value=0), \
+             patch('mano_broker.lifecycle.sys.platform', 'linux'), \
+             patch('mano_broker.lifecycle.human_uid', return_value=1002), \
+             patch('mano_broker.lifecycle.control_request', return_value=dict(
+                 prompt=dict(id=prompt, state='unknown_task_creation'))), \
+             patch('mano_broker.lifecycle.create_from_prompt') as create:
+            with self.assertRaises(ValueError):
+                dispatch_prompt(prompt, {})
+            create.assert_not_called()
