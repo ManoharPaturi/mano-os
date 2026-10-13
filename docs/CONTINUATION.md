@@ -183,3 +183,13 @@ Current feat/phase1-bounded-runner adds unprivileged bounded-output/deadline/
 revocation ProcessResult runner and actualcgroupcleanup VMcases. Local75tests
 pass10MacLinuxskips; real runnerVMtests pending. No brokerexecutor/modelendpoint.
 Use connected GitHub tools while CLI API DNS fails; gittransport still works.
+# Launch admission continuation
+
+PR34 merged a081e5fc4fc2d3f8d412ac55925cc34e43c5eddc after run38360737222 all3SUCCESS,
+exactheadb53c1dc checks/commitstatusesempty/cleanbase verified throughGitHubconnector.
+Actualrunnerreport accepted:64KiB bothstreams, fork andclosedpipe timeout cleanup,
+active revocation reaped, beforelaunchnoeffect, baselinecgrouprestored. No verified
+taskeffects inferred. Currentfeat/phase1-launch-admission adds privatebroker→root
+kernelpeer/twoFD admission library and14case real VM test. Local76tests10Linux
+Macskips pass; admissionVMproof pending. No rootexecutionservice/listener installed.
+Nextactualroot lifecycle/cgroup/drop/one-shotaction+livegrant/stopintegration.

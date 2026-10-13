@@ -203,5 +203,8 @@ if [ "$result" = 0 ]; then
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_fd_sandbox.py' \
     > "$repo_root/evidence/fd-sandbox.json"
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_launch_admission.py' \
+    > "$repo_root/evidence/launch-admission.json"
 fi
 exit "$result"
