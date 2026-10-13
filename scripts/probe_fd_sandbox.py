@@ -204,10 +204,31 @@ print(json.dumps({'workspace_fd_identity':True,'cwd_fd_identity':True,
             def reaped():
                 deadline = time.monotonic() + 5
                 while time.monotonic() < deadline:
-                    if set(cgroup.read_text().split()) == baseline:
+                    current = set(cgroup.read_text().split())
+                    if current == baseline:
                         return
                     time.sleep(0.05)
-                raise AssertionError("Sandbox descendants remain in cgroup")
+                details = {}
+                for pid in current | baseline:
+                    try:
+                        lines = Path(f"/proc/{pid}/status").read_text().splitlines()
+                        details[pid] = [
+                            line
+                            for line in lines
+                            if line.startswith(("Name:", "State:", "Pid:", "PPid:", "Uid:"))
+                        ]
+                    except (FileNotFoundError, ProcessLookupError):
+                        details[pid] = "reaped"
+                raise AssertionError(
+                    dict(
+                        message="Cgroup baseline not restored",
+                        baseline=sorted(baseline),
+                        current=sorted(current),
+                        removed=sorted(baseline - current),
+                        added=sorted(current - baseline),
+                        processes=details,
+                    )
+                )
 
             def execute(source, timeout=5, observer=lambda: False):
                 started = time.monotonic()
