@@ -77,3 +77,15 @@ explicitcontrol_pam_authenticated=false. ADR0014. NeednewPR/allCI beforemerge.
 Disk7.4GiBfree97%: no newlarge localdownloads, no userdata deletion.
 Earlier optionalGitindexwrite timedout; read-only status succeeded, no stale lock
 remained; source/controlfiles preserved, no lock deletion was necessary.
+
+Latest PR24 merged314232044517d351be59ef9060b5cb3b87d3053f after accepted
+CI38341706730 all3success; correctedcreator/reply credentials,10kerneldenials,
+4confirmationbindings/single-use verified. Post-main38342328797 pendinglastcheck.
+Current feat/phase1-native-pam includes native/mano_approve.c + rootunit/humansocket/
+PAM config + TTYclient+binaryv1codec(34view/164confirmheader).60localtests pass
+1MacLinuxskip. NativecompileUNVERIFIED on Mac; CIqualityandDebianstrictcompile
+added libjson-c-dev onlyincloud. ActualnativePAMfixture root/humanUIDmapping,
+wrongpass/nonce/replay/validexactgrant/zeroCapsNNPSeccomp+hash added.
+NeednativewarningsfixifCIrejects; neverdisableWerror/tests. Nativehelperownbuffer
+wipeonly, PAM/Pythoncopies notguaranteederased. ADR0015 documentspending scopes.
+No hostservices/models installed, fullPhase1goldengate/alllateroriginalscope active.
