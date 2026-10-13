@@ -292,3 +292,29 @@ PR42 merged7258a6406e6df9ab1d73b36de81af9522b71a8d5 after exactheadbe8ed3a
 all3SUCCESS run38406670474. Artifact11818304235 accepted realjournalexecutor/
 Stopcancelunknown, PAMfalse. PR43 mergescurrentmain; onlydocscontinuationconflict
 resolvedpreservingbothnotes. Fresh final-head CI required before ready/merge.
+
+# Runtime scheduling draft continuation
+
+Currentfeat/phase1-runtime-execution adds Runtime optionaltrustedClient/Executor,
+freshRUN-onlyqueuedactionID, tickpoll+onependinglaunch/max2active, closecancel/
+unknown/lease/clientclosure. ServicepassesClient, ticksafterrequests/control and
+WATCHDOGnotify. No newpublicStart/grantendpoint. Replaynoenqueue. SynchronousRPC
+bounded8secs can triggerunchanged6secondbrokerwatchdog; no latency/frozenStopclaim.
+Portable96tests12MacLinuxskips pass. Standalone daemonprobe uses Runtime.dispatch
+withEXPLICITsynthetic callerPeer(operatorfixture) andoperatorgrant, actualscheduler/
+Registry/executor/rootservice. Not actualkernelbrokerrequest/PAMacceptance.
+PR42merged7258a64 acceptedjournalVM. PR43freshhead6482552 CI38407737065 LIVE;
+old38407162561 auto-supersededcancelled, notaccepted. Postmain42 38407624336 LIVE.
+
+PR44 fresh38409320590 failedinstalledclient; subprocesscapture hidinnerstderr,
+exactinitialfailureunknown. Added bounded error-type/errno journalevents andstderr
+exposure. Sourceinspectionalsofoundobserverrace: Rootstatus couldfinishafter
+Runtime.tick poll but beforesecondcontrolRPC, so testbroke beforeSQLitebecamedone.
+Fixture nowawaits BOTHRootfinishedANDjournal(done,0) withinSAME5seconddeadline,
+thenassertsboth. No productionexit/grantchecksweakened. NewCIrequired.
+
+PR44diagnosticrun38410509463 FAILED clientline72 recvmsg ECONNRESET whileRoot
+servicehealthy. Sourcepoll2controlRPCs/0.01secs exceedsfixed10/secbudget. Fixprobe
+0.25sec(<=8/sec), SAME5secdeadline/bothRootfinish+journaldone. Broker service now
+pacesRuntime.tick>=0.5sec independentofrequestbursts; Root10/secbudgetunchanged.
+Rootrate-deniedevent added withoutarguments. Resource-limitsWIPstashed.

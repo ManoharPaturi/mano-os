@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from .control import serve_control
+from .launch_client import Client
 from .provision import serve_provision
 from .runtime import Runtime, serve_runtime
 from .state import State
@@ -105,7 +106,7 @@ def verify_mutation_filters():
 
 def run(listeners, state, boot_id):
     verify_mutation_filters()
-    runtime = Runtime(state, boot_id=boot_id)
+    runtime = Runtime(state, boot_id=boot_id, launcher=Client())
     # Independent admission budgets; give protected control priority when both ready.
     budgets = {name: Admission(time.monotonic()) for name in listeners}
     with selectors.DefaultSelector() as selector:
@@ -119,6 +120,7 @@ def run(listeners, state, boot_id):
 
 
 def serve_loop(selector, budgets, state, runtime, boot_id):
+    next_tick = time.monotonic()
     while True:
         notify("WATCHDOG=1")
         events = sorted(selector.select(0.5), key=lambda item: item[0].data != "control")
@@ -135,6 +137,11 @@ def serve_loop(selector, budgets, state, runtime, boot_id):
                         serve_provision(state, runtime.registry, connection, boot_id=boot_id)
                     else:
                         serve_runtime(runtime, connection)
+        notify("WATCHDOG=1")
+        now = time.monotonic()
+        if now >= next_tick:
+            next_tick = now + 0.5
+            runtime.tick()  # Request bursts cannot turn into launcher polling bursts.
 
 
 def main():

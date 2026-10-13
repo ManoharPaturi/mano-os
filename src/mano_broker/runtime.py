@@ -1,20 +1,27 @@
-"""Broker request facade coupled to live resource descriptors; no executor."""
+"""Broker request facade, descriptor custody and trusted terminal scheduling."""
 
 import json
 import sys
 import time
+from collections import deque
 
+from .executor import Executor
 from .ipc import dispatch, public_action, receive
-from .protocol import ActionRequest, canonical, identifier, unique_object
+from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
 from .registry import Registry
 from .state import Denied
 
 
 class Runtime:
-    def __init__(self, state, *, boot_id):
+    def __init__(self, state, *, boot_id, launcher=None):
         self.state = state
         self.boot_id = boot_id
         self.registry = Registry()
+        self.pending = deque()
+        self.launcher = launcher
+        self.executor = (
+            Executor(state, self.registry, launcher, boot_id=boot_id) if launcher else None
+        )
         # Process-local FD authority cannot survive daemon restart. Keep history,
         # reconcile executing state and revoke old intent/grant/pending epoch.
         with state.transaction():
@@ -58,6 +65,8 @@ class Runtime:
             row, prepared = self.registry.prepare(
                 self.state, request, caller_uid=peer.uid, now=now, boot_id=self.boot_id
             )
+            if prepared is not None and request.capability == Capability.RUN and self.executor:
+                self.pending.append(row["id"])
             return {
                 "schema_version": "1.0",
                 "ok": True,
@@ -66,8 +75,42 @@ class Runtime:
             }
         return dispatch(self.state, packet, peer=peer, now=now, boot_id=self.boot_id)
 
+    def tick(self):
+        if self.executor is None:
+            return
+        for action_id in list(self.executor.jobs):
+            try:
+                self.executor.poll(action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.state.event(action_id, "terminal-poll-denied", {
+                    "error_type": type(error).__name__, "errno": getattr(error, "errno", None)
+                })  # No arguments, paths, grants or secrets in diagnostics.
+        if self.pending and len(self.executor.jobs) < 2:
+            action_id = self.pending.popleft()
+            try:
+                self.executor.launch(action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.state.event(action_id, "terminal-dispatch-denied", {
+                    "error_type": type(error).__name__, "errno": getattr(error, "errno", None)
+                })  # Failed/unknown intent is durable; never reschedule it.
+
     def close(self):
-        self.registry.close()
+        try:
+            if self.executor:
+                for action_id, handle in list(self.executor.jobs.items()):
+                    try:
+                        self.executor.control("cancel", handle)
+                    except (OSError, ValueError, KeyError, TypeError):
+                        pass
+                    self.executor.settle_unknown(action_id)
+                for action_id in self.pending:
+                    self.executor.settle_unknown(action_id)
+                self.executor.jobs.clear()
+            self.pending.clear()
+        finally:
+            self.registry.close()
+            if self.launcher:
+                self.launcher.close()
 
 
 def serve_runtime(runtime, connection):
