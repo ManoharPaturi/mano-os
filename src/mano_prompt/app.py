@@ -4,15 +4,18 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
+from mano_prompt.dispatch import SubmissionWorker  # noqa: E402
 from mano_prompt.submit import Submission  # noqa: E402
+from mano_protocol.actions import text  # noqa: E402
 
 
 class Prompt(Gtk.Application):
     def __init__(self, *, submit=None):
         super().__init__(application_id="org.mano.Prompt")
         self.submit = submit if submit is not None else Submission().submit
+        self.worker = SubmissionWorker(self.submit, GLib.idle_add)
         self.connect("activate", self.activate_window)
 
     def activate_window(self, _app):
@@ -40,13 +43,29 @@ class Prompt(Gtk.Application):
         status.add_css_class("status")
 
         def submit(_widget):
-            try:
-                self.submit(entry.get_text())
-                status.set_text("Request received")
-                entry.set_text("")
+            if self.worker.busy:
+                return
+
+            def finished(_result, error):
+                entry.set_sensitive(True)
+                send.set_sensitive(True)
+                if error:
+                    status.set_text("Acknowledgement uncertain. Retry the same request to check.")
+                else:
+                    status.set_text("Request received")
+                    entry.set_text("")
                 entry.grab_focus()
-            except (ValueError, OSError) as error:
-                status.set_text(str(error))
+
+            try:
+                text(entry.get_text(), 8192)
+                if self.worker.start(entry.get_text(), finished):
+                    entry.set_sensitive(False)
+                    send.set_sensitive(False)
+                    status.set_text("Sending…")
+            except ValueError:
+                status.set_text("Enter a request of up to 8192 UTF-8 bytes.")
+            except RuntimeError:
+                status.set_text("Submission could not start. Please retry.")
 
         entry.connect("activate", submit)
         send.connect("clicked", submit)

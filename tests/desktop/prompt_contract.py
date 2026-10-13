@@ -66,6 +66,12 @@ def main():
     value = json.loads(receipt.read_text().splitlines()[-1])
     assert value["text"] == EXPECTED and value["uid"] == os.getuid()
     assert value["kind"] == "prompt_request"
+    response_path = ROOT / 'submission-response.json'
+    deadline = time.monotonic() + 5
+    while not response_path.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    response = json.loads(response_path.read_text())
+    assert response['responsive_during_slow_ack'] is True and response['ui_ticks'] >= 2
     result = {
         "gtk_version": ".".join(
             str(value)
@@ -76,6 +82,7 @@ def main():
         "input_route": "private human AT-SPI test driver",
         "physical_input_provenance": None,
         "model_connected": False,
+        "submission_responsiveness": response,
     }
     (ROOT / "prompt-test.json").write_text(json.dumps(result, indent=2) + "\n")
 
