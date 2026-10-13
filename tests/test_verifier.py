@@ -54,6 +54,12 @@ class ExactFileVerifierTests(unittest.TestCase):
             declare(self.state, self.approval, **self.expected)
         with self.assertRaises(Denied):
             check(self.state, self.action, self.artifact, boot_id='other')
+        altered = dict(relative_path='other', size=len(self.data), sha256=self.digest)
+        self.state.db.execute('UPDATE artifacts SET metadata_json=?', (canonical(altered),))
+        with self.assertRaises(Denied):
+            check(self.state, self.action, self.artifact, boot_id='boot')
+        altered['relative_path'] = 'result'
+        self.state.db.execute('UPDATE artifacts SET metadata_json=?', (canonical(altered),))
         self.state.db.execute('UPDATE artifacts SET data=?', (b'wrong',))
         with self.assertRaises(Denied):
             check(self.state, self.action, self.artifact, boot_id='boot')

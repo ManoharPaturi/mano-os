@@ -47,6 +47,7 @@ def check(state, action_id, artifact_id, *, boot_id):
     identifier(action_id)
     identifier(artifact_id)
     with state.transaction():
+        Approvals(state)  # Unknown IDs must deny even before the first approval request.
         row = state.db.execute(
             'SELECT c.*,ar.metadata_json,ar.data,a.state,a.verified,t.boot_id AS task_boot '
             'FROM actions a JOIN approvals ap ON a.grant_id=ap.grant_id AND a.task_id=ap.task_id '
