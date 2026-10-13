@@ -13,6 +13,7 @@ import struct
 import time
 from dataclasses import dataclass
 
+from .approvals import Approvals
 from .protocol import MAX_PACKET, ActionRequest, canonical, identifier, unique_object
 from .state import Denied
 
@@ -78,6 +79,19 @@ def dispatch(state, packet, *, peer, now, boot_id):
         raise Denied("Unknown request envelope")
     if value["schema_version"] != "1.0":
         raise Denied("Unknown IPC version")
+    if value["operation"] == "request_approval":
+        pending = Approvals(state).request(
+            value["body"], caller_uid=peer.uid, now=now, boot_id=boot_id
+        )
+        return {"schema_version": "1.0", "ok": True, "approval": pending}
+    if value["operation"] == "approval_status":
+        body = value["body"]
+        if not isinstance(body, dict) or set(body) != {"approval_id"}:
+            raise Denied("Unknown approval status fields")
+        status = Approvals(state).status(
+            body["approval_id"], caller_uid=peer.uid, now=now, boot_id=boot_id
+        )
+        return {"schema_version": "1.0", "ok": True, "approval": status}
     if value["operation"] == "propose":
         request = ActionRequest.parse(canonical(value["body"]).encode())
         row, fresh = state.authorize(request, caller_uid=peer.uid, now=now, boot_id=boot_id)

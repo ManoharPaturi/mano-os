@@ -105,3 +105,17 @@ class BrokerIPCTests(unittest.TestCase):
             finally:
                 a.close()
                 b.close()
+
+    def test_public_pending_request_has_no_nonce_and_cannot_self_approve(self):
+        proposal = {key: value for key, value in self.body.items() if key != "grant_id"}
+        pending = self.call("request_approval", proposal)
+        self.assertTrue(pending["ok"])
+        self.assertEqual(set(pending["approval"]), {"approval_id", "state", "grant_id"})
+        self.assertIsNone(pending["approval"]["grant_id"])
+        query = {"approval_id": pending["approval"]["approval_id"]}
+        self.assertEqual(self.call("approval_status", query), pending)
+        with self.assertRaises(Denied):
+            self.call("approve", query)
+        with self.assertRaises(Denied):
+            self.call("approval_status", query, uid=1001)
+        self.assertEqual(self.state.db.execute("SELECT count(*) FROM grants").fetchone()[0], 1)

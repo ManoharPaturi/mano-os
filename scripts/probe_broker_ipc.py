@@ -131,6 +131,7 @@ print(s.recv(65536).decode());s.close()
         ("forged-uid", "mano-worker", proposal | {"caller_uid": 1004}, "normal"),
         ("grant-mint", "mano-worker", proposal | {"operation": "issue_grant"}, "normal"),
         ("self-verify", "mano-worker", proposal | {"operation": "verify"}, "normal"),
+        ("self-approve", "mano-worker", proposal | {"operation": "approve"}, "normal"),
         ("stop-control", "mano-worker", proposal | {"operation": "emergency_stop"}, "normal"),
         ("inherited-connection", "mano-worker", proposal, "handoff"),
         ("passed-fd", "mano-worker", proposal, "fd"),

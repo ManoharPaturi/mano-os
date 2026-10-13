@@ -87,12 +87,19 @@ class State:
 
     @contextmanager
     def transaction(self):
-        self.db.execute("BEGIN IMMEDIATE")
+        # Trusted composed mutations (approval + grant) share one outer commit.
+        nested = self.db.in_transaction
+        name = "trusted_" + secrets.token_hex(8)
+        self.db.execute(f"SAVEPOINT {name}" if nested else "BEGIN IMMEDIATE")
         try:
             yield
-            self.db.execute("COMMIT")
+            self.db.execute(f"RELEASE {name}" if nested else "COMMIT")
         except BaseException:
-            self.db.execute("ROLLBACK")
+            if nested:
+                self.db.execute(f"ROLLBACK TO {name}")
+                self.db.execute(f"RELEASE {name}")
+            else:
+                self.db.execute("ROLLBACK")
             raise
 
     def event(self, action_id, event, details):
