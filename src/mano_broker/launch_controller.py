@@ -60,9 +60,11 @@ class Controller:
             child = Child(self.manager, admission)
             self.stop_check()  # Stop may have tripped while the child was being prepared.
         except BaseException:
-            if child is not None:
-                child.cancel()
-            os.close(owner_fd)
+            try:
+                if child is not None:
+                    child.cancel()
+            finally:
+                os.close(owner_fd)
             raise
         job_id = secrets.token_hex(16)
         self.records[job_id] = Record(admission.action_id, admission.owner, owner_fd, child)
