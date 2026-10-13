@@ -1,5 +1,6 @@
 """One bounded LangGraph cycle; no shell, grant creation or verification authority."""
 
+import hashlib
 from typing import TypedDict
 
 from mano_broker.protocol import ActionRequest, canonical, identifier, text
@@ -73,6 +74,10 @@ class AgentRuntime:
         # Always query the broker, even if a checkpoint previously claimed completion.
         action = self.request('status', dict(task_id=state['task_id'],
                                              action_id=action_id))['action']
+        expected = hashlib.sha256(canonical(proposal).encode()).hexdigest()
+        if (action.get('proposal_digest') != expected or action.get('id') != action_id
+                or action.get('task_id') != state['task_id']):
+            raise ValueError('Journal action does not match the original proposal')
         status = action['state']
         if status == 'done':
             update['status'] = 'completed' if action['verified'] else 'verifying'

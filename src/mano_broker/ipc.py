@@ -7,6 +7,7 @@ Systemd/socket provisioning and PAM control are separate work.
 
 import array
 import base64
+import hashlib
 import json
 import os
 import socket
@@ -72,7 +73,11 @@ def receive(connection):
 
 
 def public_action(row):
-    return {key: row[key] for key in ("id", "task_id", "state", "exit_code", "verified")}
+    proposal = json.loads(row["request_json"])
+    del proposal["grant_id"]
+    result = {key: row[key] for key in ("id", "task_id", "state", "exit_code", "verified")}
+    result["proposal_digest"] = hashlib.sha256(canonical(proposal).encode()).hexdigest()
+    return result
 
 
 def dispatch(state, packet, *, peer, now, boot_id):
