@@ -5,6 +5,7 @@ import sys
 import time
 from collections import deque
 
+from .artifacts import Store
 from .executor import Executor
 from .ipc import dispatch, public_action, receive
 from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
@@ -18,6 +19,7 @@ class Runtime:
         self.state = state
         self.boot_id = boot_id
         self.registry = Registry()
+        self.artifacts = Store()
         self.pending = deque()
         self.launcher = launcher
         self.stop_reader = stop_reader or (snapshot if launcher else None)
@@ -152,6 +154,7 @@ class Runtime:
             self.pending.clear()
         finally:
             self.registry.close()
+            self.artifacts.close()
             if self.launcher:
                 self.launcher.close()
 

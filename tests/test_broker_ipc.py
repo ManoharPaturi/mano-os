@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import os
 import socket
 import tempfile
@@ -73,7 +75,8 @@ class BrokerIPCTests(unittest.TestCase):
             self.call("status", query | {"task_id": "b" * 32})
 
     def test_no_wire_control_methods_or_caller_identity(self):
-        for operation in ("issue_grant", "verify", "start", "emergency_stop", "rearm", "exec"):
+        for operation in ("issue_grant", "verify", "start", "emergency_stop", "rearm", "exec",
+                          "capture_artifact"):
             with self.subTest(operation=operation), self.assertRaises(Denied):
                 self.call(operation)
         with self.assertRaises(Denied):
@@ -86,6 +89,26 @@ class BrokerIPCTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 dispatch(self.state, packet, peer=Peer(1, 1004, 1004), now=10, boot_id="boot-a")
         self.assertEqual(self.state.db.execute("SELECT count(*) FROM actions").fetchone()[0], 0)
+
+    def test_artifact_read_binds_actual_peer_and_rejects_forged_identity_and_ranges(self):
+        action = self.call()["action"]["id"]
+        artifact = "c" * 32
+        data = b"captured"
+        metadata = dict(size=len(data), sha256=hashlib.sha256(data).hexdigest(),
+                        effect_verified=False)
+        self.state.db.execute("INSERT INTO artifacts VALUES(?,?,?,?)",
+                              (artifact, action, canonical(metadata), data))
+        query = dict(task_id=self.task, artifact_id=artifact, offset=0, length=4096)
+        result = self.call("artifact_read", query)
+        self.assertEqual(base64.b64decode(result["data"]), data)
+        self.assertTrue(result["eof"])
+        self.assertFalse(result["artifact"]["effect_verified"])
+        with self.assertRaises(Denied):
+            self.call("artifact_read", query, uid=1002)
+        for change in (dict(caller_uid=1004), dict(length=4097), dict(offset=True),
+                       dict(task_id="d" * 32), dict(path="/tmp/result")):
+            with self.subTest(change=change), self.assertRaises(Denied):
+                self.call("artifact_read", query | change)
 
     @unittest.skipUnless(hasattr(socket, "SO_PASSCRED"), "Linux kernel credentials only")
     def test_linux_transport_reads_actual_credentials_and_rejects_oversize(self):

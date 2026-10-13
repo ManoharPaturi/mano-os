@@ -133,7 +133,7 @@ def serve_loop(selector, budgets, state, runtime, boot_id):
             with connection:
                 if budgets[key.data].admit(time.monotonic()):
                     if key.data == "control":
-                        serve_control(state, connection, boot_id=boot_id)
+                        serve_control(state, connection, boot_id=boot_id, runtime=runtime)
                     elif key.data == "provision":
                         serve_provision(state, runtime.registry, connection, boot_id=boot_id)
                     else:
