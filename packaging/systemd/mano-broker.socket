@@ -1,0 +1,15 @@
+[Unit]
+Description=mano broker request-only socket
+
+[Socket]
+ListenSequentialPacket=/run/mano-broker/request.sock
+SocketUser=root
+SocketGroup=mano-request
+SocketMode=0660
+DirectoryMode=0755
+PassCredentials=yes
+Backlog=32
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

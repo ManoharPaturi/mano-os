@@ -139,6 +139,10 @@ def phase_start(phase):
 
 
 def observe(phase):
+    # Serial root fixture starts with a cleared environment; source path is fixed.
+    sys.path.insert(0, "/opt/mano-lab/src")
+    from mano_lab.processes import exited_or_zombie
+
     before = json.loads((BASE / f"{phase}-before.json").read_text())
     group = Path(before["cgroup"])
     deadline = time.monotonic() + 15
@@ -179,9 +183,7 @@ def observe(phase):
     epoch = int(Path("/var/lib/mano-broker/grant-epoch").read_text())
     assert epoch > before["grant"]["epoch"]
     for pid in before["task_pids"]:
-        status = Path(f"/proc/{pid}/status")
-        if status.is_file():
-            assert "\nState:\tZ" in status.read_text(), f"Task {pid} survived"
+        assert exited_or_zombie(pid), f"Task {pid} survived"
     assert DISPLAY.stat().st_uid == 0 and stat.S_IMODE(DISPLAY.stat().st_mode) == 0o700
     seats = query_seat()
     assert all(not (seat["capabilities"] & 1) for seat in seats)

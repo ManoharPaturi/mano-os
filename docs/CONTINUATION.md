@@ -34,3 +34,14 @@ Phase6, signed firmware/installer/ISO Phase7. Never narrow full goal to lab subs
 Disk last13GiB free94% used: warn below20GiB or>=90%; stop new large downloads
 below10GiB. Never delete user data or reformat prepared/recovered guest disks.
 Outputs contain accepted PR19 broker-state evidence; no unverified IPC proof.
+
+Latest: PR20 merged27d3e3a7b6b4be705e277cf6d6b56edb8d3b7797 after accepted
+CI38334308001 all3success, actual13IPCattacks denied and42Ubuntu tests no skip.
+Post-main38334806117 FAILED in stop observer ProcessLookupError reading vanished
+/proc PID after cgroup emptied. Current feat/phase1-broker-service includes narrow
+ESRCH/ENOENT observer fix (live/permission errors stillfail) and regressiontest.
+Also non-root systemd request-only service, fixed activation listener, hardening/
+limits, bounded client/global admission, actual guest start/UID/DAC/slow/SIGKILL
+restart fixture. ADR0011. Local44tests pass with1MacLinuxskip. No CI yet.
+Need PR with full real VM checks; no merge before allfinalheadSUCCESS. Fullscopeactive.
+Disk11-12GiB free94-95%, no newlarge downloads below10GiB.
