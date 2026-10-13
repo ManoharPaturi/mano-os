@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install/start/restart the real non-root broker in a fixed disposable guest."""
+"""Actual provision/PAM/descriptor preparation service flow in disposable Debian."""
 
 import hashlib
 import json
@@ -14,95 +14,83 @@ from pathlib import Path
 
 ROOT = Path("/opt/mano-lab")
 STATE = Path("/var/lib/mano-broker/runtime")
-PARENT = STATE.parent
 CODE = Path("/usr/lib/mano-os")
-SOCKET = Path("/run/mano-broker/request.sock")
-CONTROL = Path("/run/mano-broker/control.sock")
+WORK = Path("/run/mano-live-workspace-ci")
+LIBRARY = Path("/usr/lib/mano-broker/libmano-resources.so")
+NATIVE = Path("/usr/libexec/mano-approve")
+POLICY = Path("/etc/mano/human.uid")
+PAM = Path("/etc/pam.d/mano-approve")
+SOCKETS = {
+    name: Path("/run/mano-broker") / (name + ".sock")
+    for name in ("request", "control", "provision")
+}
 UNITS = (
     "mano-broker.service",
     "mano-broker.socket",
     "mano-broker-control.socket",
+    "mano-broker-provision.socket",
     "mano-approve.service",
     "mano-approve.socket",
 )
-NATIVE = Path("/usr/libexec/mano-approve")
-HUMAN_POLICY = Path("/etc/mano/human.uid")
-PAM_CONFIG = Path("/etc/pam.d/mano-approve")
-assert not NATIVE.exists() and not HUMAN_POLICY.exists() and not PAM_CONFIG.exists()
-assert os.geteuid() == 0
-assert Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
+assert (
+    os.geteuid() == 0 and Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
+)
 assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip() in {
     "kvm",
     "qemu",
 }
-assert not STATE.exists() and not CODE.exists() and not SOCKET.exists() and not CONTROL.exists()
-assert all(not (Path("/etc/systemd/system") / unit).exists() for unit in UNITS)
-old_mode = PARENT.stat().st_mode & 0o777
+assert all(
+    not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, *SOCKETS.values())
+)
+assert all(not (Path("/etc/systemd/system") / u).exists() for u in UNITS)
+old_mode = STATE.parent.stat().st_mode & 0o777
 installed = []
 created_user = False
 created_group = False
-worker_joined = False
+joined = False
 
 
 def command(*args):
     return subprocess.check_output(args, text=True).strip()
 
 
-def wait_service(previous=None):
+def ready(previous=None):
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         pid = int(
             command("systemctl", "show", "mano-broker.service", "--property=MainPID", "--value")
         )
-        active = command(
+        status = command(
             "systemctl", "show", "mano-broker.service", "--property=ActiveState", "--value"
         )
-        if pid and active == "active" and pid != previous:
+        if pid and pid != previous and status == "active":
             return pid
         time.sleep(0.2)
-    raise AssertionError("Service not ready")
+    raise AssertionError("Broker service not ready")
 
 
-client = """import errno,json,socket,sys
-s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);s.settimeout(5)
-try:s.connect(sys.argv[1])
-except PermissionError as e:
- assert e.errno==errno.EACCES;print(json.dumps({'kernel_errno':'EACCES'}));sys.exit(0)
-s.sendall(sys.stdin.buffer.read());print(s.recv(65536).decode())
-"""
-
-
-def request(actor, body):
-    result = subprocess.run(
-        ["/usr/sbin/runuser", "-u", actor, "--", "python3", "-c", client, str(SOCKET)],
-        input=json.dumps(body),
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=True,
-    )
-    return json.loads(result.stdout)
-
-
-control_client = """import errno,json,socket,struct,sys
+client = """import array,errno,json,os,socket,struct,sys
 s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);s.settimeout(5)
 s.setsockopt(socket.SOL_SOCKET,socket.SO_PASSCRED,1)
 try:s.connect(sys.argv[1])
 except PermissionError as e:
  assert e.errno==errno.EACCES;print(json.dumps({'kernel_errno':'EACCES'}));sys.exit(0)
-_,creator_uid,_=struct.unpack('3i',s.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
-assert creator_uid==0,('unexpected socket creator',creator_uid)
-s.sendall(sys.stdin.buffer.read())
-packet,ancillary,flags,_=s.recvmsg(131072,socket.CMSG_SPACE(12))
-assert not flags & (socket.MSG_TRUNC|socket.MSG_CTRUNC)
+_,creator,_=struct.unpack('3i',s.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
+assert creator==0
+packet=sys.stdin.buffer.read()
+if sys.argv[3]!='-':
+ fd=os.open(sys.argv[3],os.O_PATH|os.O_DIRECTORY|os.O_CLOEXEC)
+ s.sendmsg([packet],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))]);os.close(fd)
+else:s.sendall(packet)
+reply,ancillary,flags,_=s.recvmsg(131072,socket.CMSG_SPACE(12))
+assert not flags&(socket.MSG_TRUNC|socket.MSG_CTRUNC)
 assert len(ancillary)==1 and ancillary[0][:2]==(socket.SOL_SOCKET,socket.SCM_CREDENTIALS)
-pid,uid,_=struct.unpack('3i',ancillary[0][2])
-assert uid==int(sys.argv[2]) and pid==int(sys.argv[3]),('unexpected reply sender',pid,uid)
-print(packet.decode())
+pid,uid,_=struct.unpack('3i',ancillary[0][2]);assert uid==int(sys.argv[2])
+print(json.dumps({'payload':json.loads(reply),'sender_pid':pid,'sender_uid':uid,'creator_uid':creator}))
 """
 
 
-def control_rpc(body, actor="root"):
+def rpc(channel, body, actor="mano-worker", directory=None):
     result = subprocess.run(
         [
             "/usr/sbin/runuser",
@@ -111,15 +99,58 @@ def control_rpc(body, actor="root"):
             "--",
             "python3",
             "-c",
-            control_client,
-            str(CONTROL),
+            client,
+            str(SOCKETS[channel]),
             str(broker_uid),
-            str(replacement),
+            str(directory) if directory else "-",
         ],
         input=json.dumps(body),
         capture_output=True,
         text=True,
         timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    decoded = json.loads(result.stdout)
+    if "kernel_errno" in decoded:
+        return decoded
+    actual_pid = int(
+        command("systemctl", "show", "mano-broker.service", "--property=MainPID", "--value")
+    )
+    assert decoded["sender_pid"] == actual_pid and decoded["sender_uid"] == broker_uid
+    assert decoded["creator_uid"] == 0
+    return decoded["payload"]
+
+
+native_client = """import json,sys
+from mano_prompt.approve import rpc,view_packet,confirmation_packet
+body=json.loads(sys.stdin.read())
+try:
+ if body['mode']=='view':result=rpc(view_packet(body['id']))
+ else:result=rpc(confirmation_packet(body['view'],body['password']))
+except (PermissionError,ValueError):result={'ok':False}
+print(json.dumps(result))
+"""
+
+
+def human(body, actor="mano-human"):
+    result = subprocess.run(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            actor,
+            "--",
+            "env",
+            "PYTHONPATH=/usr/lib/mano-os",
+            "PYTHONDONTWRITEBYTECODE=1",
+            "python3",
+            "-c",
+            native_client,
+        ],
+        input=json.dumps(body),
+        capture_output=True,
+        text=True,
+        timeout=20,
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -134,212 +165,39 @@ try:
         check=True,
     )
     created_user = True
-    subprocess.run(["usermod", "-a", "-G", "mano-request", "mano-worker"], check=True)
-    worker_joined = True
-    broker_uid = pwd.getpwnam("mano-broker").pw_uid
-    broker_gid = pwd.getpwnam("mano-broker").pw_gid
+    account = pwd.getpwnam("mano-broker")
+    broker_uid = account.pw_uid
     assert broker_uid not in {0, 1001, 1002, 1003, 1004}
+    subprocess.run(["usermod", "-a", "-G", "mano-request", "mano-worker"], check=True)
+    joined = True
     CODE.mkdir(mode=0o755)
-    shutil.copytree(
-        ROOT / "src/mano_broker", CODE / "mano_broker", ignore=shutil.ignore_patterns("__pycache__")
-    )
-    for file in (CODE / "mano_broker").rglob("*.py"):
-        file.chmod(0o444)
-    (CODE / "mano_broker").chmod(0o555)
-    PARENT.chmod(0o711)
-    STATE.mkdir(mode=0o700)
-    os.chown(STATE, broker_uid, broker_gid)
-    seed = """import json,time;from pathlib import Path
-from mano_broker.state import State
-from mano_broker.protocol import ActionRequest
-s=State(Path('/var/lib/mano-broker/runtime'));boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
-t=s.create_task(human_uid=1002,caller_uid=1004,mode='supervised',resource_id='a'*32,classification='internal',boot_id=boot)
-g=s.issue_grant(t,approved_human_uid=1002,approved_args={'path':'file'},capability='files.read',resource_id='a'*32,expires=time.monotonic()+300,max_count=2,memory_bytes=1048576,pids=4,cpu_percent=10,max_timeout_seconds=10)
-b=dict(schema_version='1.0',task_id=t,grant_id=g,capability='files.read',
- resource_id='a'*32,args={'path':'file'},idempotency_key='pre-restart',reason='fixed CI seed')
-a,_=s.authorize(ActionRequest.parse(json.dumps(b).encode()),caller_uid=1004,now=time.monotonic(),boot_id=boot)
-s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b))
-"""
-    seed_body = json.loads(
-        command(
-            "/usr/sbin/runuser",
-            "-u",
-            "mano-broker",
-            "--",
-            "env",
-            "PYTHONPATH=/usr/lib/mano-os",
-            "PYTHONDONTWRITEBYTECODE=1",
-            "python3",
-            "-c",
-            seed,
+    for package in ("mano_broker", "mano_prompt"):
+        shutil.copytree(
+            ROOT / "src" / package, CODE / package, ignore=shutil.ignore_patterns("__pycache__")
         )
-    )
-    for unit in UNITS:
-        dest = Path("/etc/systemd/system") / unit
-        shutil.copyfile(ROOT / "packaging/systemd" / unit, dest)
-        installed.append(dest)
-    subprocess.run(["systemctl", "daemon-reload"], check=True)
-    subprocess.run(["systemctl", "start", "mano-broker.socket"], check=True)
-    packet = dict(schema_version="1.0", operation="propose", body=seed_body)
-    recovered = request("mano-worker", packet)
-    assert recovered["ok"] and not recovered["fresh"] and recovered["action"]["state"] == "unknown"
-    pid = wait_service()
-    fields = dict(
-        line.split(":", 1)
-        for line in Path(f"/proc/{pid}/status").read_text().splitlines()
-        if ":" in line
-    )
-    assert set(map(int, fields["Uid"].split())) == {broker_uid}
-    assert fields["NoNewPrivs"].strip() == "1" and fields["Seccomp"].strip() == "2"
-    assert int(fields["CapEff"].strip(), 16) == 0
-    stat = SOCKET.stat()
-    assert stat.st_uid == 0 and stat.st_mode & 0o777 == 0o660
-    assert CONTROL.stat().st_uid == 0 and CONTROL.stat().st_mode & 0o777 == 0o600
-    assert STATE.stat().st_uid == broker_uid and STATE.stat().st_mode & 0o777 == 0o700
-    assert (STATE / "state.sqlite3").stat().st_mode & 0o777 == 0o600
-    properties = {
-        name: command("systemctl", "show", "mano-broker.service", f"--property={name}", "--value")
-        for name in (
-            "TasksMax",
-            "MemoryMax",
-            "CPUQuotaPerSecUSec",
-            "LimitNOFILE",
-            "ProtectSystem",
-            "ProtectHome",
-            "PrivateDevices",
-            "RestrictNamespaces",
-        )
-    }
-    assert properties["TasksMax"] == "16" and properties["MemoryMax"] == "134217728"
-    assert properties["ProtectSystem"] == "strict" and properties["ProtectHome"] == "yes"
-    denials = []
-    for actor in ("mano-agent", "mano-core", "mano-human"):
-        assert request(actor, packet) == {"kernel_errno": "EACCES"}
-        denials.append({"actor": actor, "target": "request-socket", "kernel_errno": "EACCES"})
-    for actor in ("mano-agent", "mano-core", "mano-worker"):
-        result = subprocess.run(
-            [
-                "/usr/sbin/runuser",
-                "-u",
-                actor,
-                "--",
-                "python3",
-                "-c",
-                "import errno;from pathlib import Path\n"
-                "try:Path('/var/lib/mano-broker/runtime/state.sqlite3').read_bytes()\n"
-                "except PermissionError as e:assert e.errno==errno.EACCES\n"
-                "else:raise AssertionError('private journal read')",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        assert result.returncode == 0, result.stderr
-        denials.append({"actor": actor, "target": "private-journal", "kernel_errno": "EACCES"})
-    altered = request(
-        "mano-worker",
-        packet
-        | {"body": seed_body | {"args": {"path": "other"}, "idempotency_key": "changed-target"}},
-    )
-    assert altered == {"schema_version": "1.0", "ok": False, "error": "denied"}
-    # One incomplete client cannot stall the watchdog or the next valid request indefinitely.
-    slow = subprocess.Popen(
-        [
-            "/usr/sbin/runuser",
-            "-u",
-            "mano-worker",
-            "--",
-            "python3",
-            "-c",
-            "import socket,time;s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);"
-            "s.connect('/run/mano-broker/request.sock');time.sleep(4)",
-        ]
-    )
-    time.sleep(0.2)
-    body = seed_body | {"idempotency_key": "new-request"}
-    started = time.monotonic()
-    fresh = request("mano-worker", packet | {"body": body})
-    elapsed = time.monotonic() - started
-    slow.wait(timeout=6)
-    assert fresh["ok"] and fresh["fresh"] and elapsed < 5
-    approval_proposal = {key: value for key, value in seed_body.items() if key != "grant_id"}
-    pending = request(
-        "mano-worker",
-        {
-            "schema_version": "1.0",
-            "operation": "request_approval",
-            "body": approval_proposal | {"idempotency_key": "pending-human"},
-        },
-    )
-    assert pending["ok"] and pending["approval"]["state"] == "pending"
-    assert pending["approval"]["grant_id"] is None
-    assert set(pending["approval"]) == {"approval_id", "state", "grant_id"}
-    approval_query = {
-        "schema_version": "1.0",
-        "operation": "approval_status",
-        "body": {"approval_id": pending["approval"]["approval_id"]},
-    }
-    assert request("mano-worker", approval_query) == pending
-    assert request("mano-worker", approval_query | {"operation": "approve"}) == {
-        "schema_version": "1.0",
-        "ok": False,
-        "error": "denied",
-    }
-    # Real process kill triggers systemd restart; journal identity and unknown state persist.
-    subprocess.run(["systemctl", "kill", "--signal=SIGKILL", "mano-broker.service"], check=True)
-    replacement = wait_service(pid)
-    again = request("mano-worker", packet)
-    assert again["ok"] and not again["fresh"] and again["action"] == recovered["action"]
-    assert request("mano-worker", approval_query) == pending
-    view_request = {
-        "schema_version": "1.0",
-        "operation": "approval_view",
-        "body": {"approval_id": pending["approval"]["approval_id"], "human_uid": 1002},
-    }
-    for actor in ("mano-agent", "mano-core", "mano-worker", "mano-human"):
-        assert control_rpc(view_request, actor) == {"kernel_errno": "EACCES"}
-        denials.append(
-            {"actor": actor, "target": "approval-control-socket", "kernel_errno": "EACCES"}
-        )
-    view = control_rpc(view_request)["view"]
-    confirmation = {
-        "schema_version": "1.0",
-        "operation": "confirm_approval",
-        "body": {
-            "approval_id": view["approval_id"],
-            "human_uid": 1002,
-            "nonce": view["nonce"],
-            "operation_digest": view["operation_digest"],
-        },
-    }
-    denied = {"schema_version": "1.0", "ok": False, "error": "denied"}
-    for change in (
-        {"human_uid": 1004},
-        {"nonce": "0" * 64},
-        {"operation_digest": "0" * 64},
-        {"password": "not-a-control-field"},
-    ):
-        assert control_rpc(confirmation | {"body": confirmation["body"] | change}) == denied
-    approved = control_rpc(confirmation)
-    assert approved["ok"]
-    assert control_rpc(confirmation) == denied
-    status = request("mano-worker", approval_query)
-    assert status["approval"]["state"] == "approved"
-    assert status["approval"]["grant_id"] == approved["grant_id"]
-    new_body = approval_proposal | {
-        "idempotency_key": "pending-human",
-        "grant_id": approved["grant_id"],
-    }
-    assert (
-        request("mano-worker", packet | {"body": new_body | {"args": {"path": "other"}}}) == denied
-    )
-    accepted = request("mano-worker", packet | {"body": new_body})
-    assert accepted["ok"] and accepted["fresh"] and accepted["action"]["verified"] == 0
-    # Real native PAM adapter: synthetic CI account only, never a host password.
-    shutil.copytree(
-        ROOT / "src/mano_prompt", CODE / "mano_prompt", ignore=shutil.ignore_patterns("__pycache__")
-    )
+        for file in (CODE / package).rglob("*.py"):
+            file.chmod(0o444)
+        (CODE / package).chmod(0o555)
+    LIBRARY.parent.mkdir(mode=0o755, exist_ok=True)
     NATIVE.parent.mkdir(mode=0o755, exist_ok=True)
+    subprocess.run(
+        [
+            "cc",
+            "-std=c11",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fPIC",
+            "-shared",
+            str(ROOT / "native/mano_resources.c"),
+            "-Wl,-z,relro,-z,now",
+            "-o",
+            str(LIBRARY),
+        ],
+        check=True,
+    )
+    LIBRARY.chmod(0o644)
     flags = command("pkg-config", "--cflags", "--libs", "json-c", "libsystemd").split()
     subprocess.run(
         [
@@ -361,9 +219,17 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
         check=True,
     )
     NATIVE.chmod(0o755)
-    HUMAN_POLICY.write_text("1002\n")
-    HUMAN_POLICY.chmod(0o600)
-    shutil.copyfile(ROOT / "packaging/pam/mano-approve", PAM_CONFIG)
+    STATE.parent.chmod(0o711)
+    WORK.mkdir()
+    os.chown(WORK, broker_uid, 1004)
+    WORK.chmod(0o2770)
+    target = WORK / "file"
+    target.write_text("approved-target")
+    os.chown(target, broker_uid, 1004)
+    target.chmod(0o660)
+    POLICY.write_text("1002\n")
+    POLICY.chmod(0o600)
+    shutil.copyfile(ROOT / "packaging/pam/mano-approve", PAM)
     password = secrets.token_hex(24)
     subprocess.run(
         ["chpasswd"],
@@ -372,77 +238,222 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
         capture_output=True,
         check=True,
     )
-    subprocess.run(["systemctl", "start", "mano-approve.socket"], check=True)
-    native_proposal = approval_proposal | {"idempotency_key": "native-pam"}
-    native_pending = request(
-        "mano-worker",
-        {"schema_version": "1.0", "operation": "request_approval", "body": native_proposal},
+    for unit in UNITS:
+        dest = Path("/etc/systemd/system") / unit
+        shutil.copyfile(ROOT / "packaging/systemd" / unit, dest)
+        installed.append(dest)
+    subprocess.run(["systemctl", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "start", "mano-broker.socket", "mano-approve.socket"], check=True)
+    envelope = {
+        "schema_version": "1.0",
+        "operation": "provision_task",
+        "body": dict(human_uid=1002, caller_uid=1004, mode="supervised", classification="internal"),
+    }
+    provision = rpc("provision", envelope, actor="root", directory=WORK)
+    assert provision["ok"]
+    pid = ready()
+    fields = dict(
+        line.split(":", 1)
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines()
+        if ":" in line
     )
-    native_id = native_pending["approval"]["approval_id"]
-    native_client = """import json,sys
-from mano_prompt.approve import rpc,view_packet,confirmation_packet
-body=json.loads(sys.stdin.read())
-try:
- if body['mode']=='view':result=rpc(view_packet(body['id']))
- else:result=rpc(confirmation_packet(body['view'],body['password']))
-except (PermissionError,ValueError):result={'ok':False}
-print(json.dumps(result))
-"""
-
-    def native_rpc(actor, body):
+    assert set(map(int, fields["Uid"].split())) == {broker_uid}
+    assert fields["NoNewPrivs"].strip() == "1" and fields["Seccomp"].strip() == "2"
+    assert int(fields["CapEff"].strip(), 16) == 0
+    for name, mode in (("request", 0o660), ("control", 0o600), ("provision", 0o600)):
+        info = SOCKETS[name].stat()
+        assert info.st_uid == 0 and info.st_mode & 0o777 == mode
+    assert STATE.stat().st_uid == broker_uid and STATE.stat().st_mode & 0o777 == 0o700
+    assert (STATE / "state.sqlite3").stat().st_mode & 0o777 == 0o600
+    limits = {
+        name: command("systemctl", "show", "mano-broker.service", f"--property={name}", "--value")
+        for name in (
+            "TasksMax",
+            "MemoryMax",
+            "CPUQuotaPerSecUSec",
+            "LimitNOFILE",
+            "ProtectSystem",
+            "ProtectHome",
+            "PrivateDevices",
+            "RestrictNamespaces",
+        )
+    }
+    assert limits["TasksMax"] == "16" and limits["MemoryMax"] == "134217728"
+    assert limits["CPUQuotaPerSecUSec"] == "200ms" and limits["LimitNOFILE"] == "128"
+    denials = []
+    for channel, actors in (
+        ("request", ("mano-agent", "mano-core", "mano-human")),
+        ("control", ("mano-agent", "mano-core", "mano-worker", "mano-human")),
+        ("provision", ("mano-agent", "mano-core", "mano-worker", "mano-human")),
+    ):
+        for actor in actors:
+            assert rpc(
+                channel, {"schema_version": "1.0", "operation": "invalid", "body": {}}, actor
+            ) == {"kernel_errno": "EACCES"}
+            denials.append(
+                {"actor": actor, "target": channel + "-socket", "kernel_errno": "EACCES"}
+            )
+    for actor in ("mano-agent", "mano-core", "mano-worker"):
         result = subprocess.run(
             [
                 "/usr/sbin/runuser",
                 "-u",
                 actor,
                 "--",
-                "env",
-                "PYTHONPATH=/usr/lib/mano-os",
-                "PYTHONDONTWRITEBYTECODE=1",
                 "python3",
                 "-c",
-                native_client,
+                "import errno;from pathlib import Path\n"
+                "try:Path('/var/lib/mano-broker/runtime/state.sqlite3').read_bytes()\n"
+                "except PermissionError as e:assert e.errno==errno.EACCES\n"
+                "else:raise AssertionError('journal read')",
             ],
-            input=json.dumps(body),
             capture_output=True,
             text=True,
-            timeout=20,
-            check=False,
+            timeout=5,
         )
         assert result.returncode == 0, result.stderr
-        return json.loads(result.stdout)
-
-    native_denials = []
-    for actor in ("mano-agent", "mano-core", "mano-worker"):
-        assert native_rpc(actor, {"mode": "view", "id": native_id}) == {"ok": False}
-        native_denials.append(actor)
-    human_view = native_rpc("mano-human", {"mode": "view", "id": native_id})["view"]
-    assert human_view["human_uid"] == 1002 and human_view["approval_id"] == native_id
-    wrong = native_rpc(
-        "mano-human", {"mode": "confirm", "view": human_view, "password": "wrong-ci-password"}
+        denials.append({"actor": actor, "target": "private-journal", "kernel_errno": "EACCES"})
+    proposal = dict(
+        schema_version="1.0",
+        task_id=provision["task_id"],
+        resource_id=provision["resource_id"],
+        capability="files.read",
+        args={"path": "file"},
+        idempotency_key="read",
+        reason="fixed live CI",
     )
-    assert wrong == {"ok": False}
-    native_query = {
-        "schema_version": "1.0",
-        "operation": "approval_status",
-        "body": {"approval_id": native_id},
-    }
-    assert request("mano-worker", native_query)["approval"]["grant_id"] is None
-    changed = human_view | {"nonce": "0" * 64}
-    assert native_rpc("mano-human", {"mode": "confirm", "view": changed, "password": password}) == {
+    denied = {"schema_version": "1.0", "ok": False, "error": "denied"}
+    assert (
+        rpc(
+            "request",
+            dict(
+                schema_version="1.0",
+                operation="request_approval",
+                body=proposal | {"resource_id": "a" * 32},
+            ),
+        )
+        == denied
+    )
+    pending = rpc(
+        "request", dict(schema_version="1.0", operation="request_approval", body=proposal)
+    )["approval"]
+    assert pending["state"] == "pending" and pending["grant_id"] is None
+    assert set(pending) == {"approval_id", "state", "grant_id"}
+    query = dict(
+        schema_version="1.0",
+        operation="approval_status",
+        body={"approval_id": pending["approval_id"]},
+    )
+    assert rpc("request", query)["approval"] == pending
+    assert rpc("request", query | {"operation": "approve"}) == denied
+    view = human({"mode": "view", "id": pending["approval_id"]})["view"]
+    assert view["human_uid"] == 1002
+    for actor in ("mano-agent", "mano-core", "mano-worker"):
+        assert human({"mode": "view", "id": pending["approval_id"]}, actor) == {"ok": False}
+    assert human({"mode": "confirm", "view": view, "password": "wrong-ci-password"}) == {
         "ok": False
     }
-    authorized = native_rpc(
-        "mano-human", {"mode": "confirm", "view": human_view, "password": password}
+    assert rpc("request", query)["approval"]["grant_id"] is None
+    assert human({"mode": "confirm", "view": view | {"nonce": "0" * 64}, "password": password}) == {
+        "ok": False
+    }
+    # Keep root control schema/binding negatives without treating root as PAM consent.
+    confirm = dict(
+        schema_version="1.0",
+        operation="confirm_approval",
+        body=dict(
+            approval_id=view["approval_id"],
+            human_uid=1002,
+            nonce=view["nonce"],
+            operation_digest=view["operation_digest"],
+        ),
     )
-    assert authorized["ok"]
-    assert native_rpc(
-        "mano-human", {"mode": "confirm", "view": human_view, "password": password}
-    ) == {"ok": False}
-    native_status = request("mano-worker", native_query)
-    assert native_status["approval"]["grant_id"] == authorized["grant_id"]
-    native_body = native_proposal | {"grant_id": authorized["grant_id"]}
-    assert request("mano-worker", packet | {"body": native_body})["fresh"]
+    for update in (
+        {"human_uid": 1004},
+        {"nonce": "0" * 64},
+        {"operation_digest": "0" * 64},
+        {"password": "invalid-field"},
+    ):
+        assert rpc("control", confirm | {"body": confirm["body"] | update}, actor="root") == denied
+    approved = human({"mode": "confirm", "view": view, "password": password})
+    assert approved["ok"]
+    assert human({"mode": "confirm", "view": view, "password": password}) == {"ok": False}
+    body = proposal | {"grant_id": approved["grant_id"]}
+    assert (
+        rpc(
+            "request",
+            dict(
+                schema_version="1.0", operation="propose", body=body | {"args": {"path": "other"}}
+            ),
+        )
+        == denied
+    )
+    accepted = rpc("request", dict(schema_version="1.0", operation="propose", body=body))
+    assert accepted["ok"] and accepted["fresh"] and accepted["action"]["state"] == "intent"
+    assert accepted["action"]["verified"] == 0
+    inode = target.stat().st_ino
+    held = []
+    for file in Path(f"/proc/{pid}/fd").iterdir():
+        try:
+            info = file.stat()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        if info.st_ino == inode and info.st_dev == target.stat().st_dev:
+            held.append(int(file.name))
+    assert held, "Broker did not retain the actual target descriptor"
+    target.rename(WORK / "retained")
+    target.symlink_to("/etc/mano/sentinel")
+    assert all(Path(f"/proc/{pid}/fd/{fd}").stat().st_ino == inode for fd in held)
+    replay = rpc("request", dict(schema_version="1.0", operation="propose", body=body))
+    assert not replay["fresh"] and replay["action"]["id"] == accepted["action"]["id"]
+    # Pending approval and executing-state recovery are independent of real effects.
+    pending2 = rpc(
+        "request",
+        dict(
+            schema_version="1.0",
+            operation="request_approval",
+            body=proposal | {"idempotency_key": "pending-restart"},
+        ),
+    )["approval"]
+    seed = """import sys,time;from pathlib import Path;from mano_broker.state import State
+s=State(Path('/var/lib/mano-broker/runtime'))
+s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip());s.close()
+"""
+    subprocess.run(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            "mano-broker",
+            "--",
+            "env",
+            "PYTHONPATH=/usr/lib/mano-os",
+            "python3",
+            "-c",
+            seed,
+            accepted["action"]["id"],
+        ],
+        check=True,
+    )
+    subprocess.run(["systemctl", "kill", "--signal=SIGKILL", "mano-broker.service"], check=True)
+    replacement = ready(pid)
+    status = rpc(
+        "request",
+        dict(
+            schema_version="1.0",
+            operation="status",
+            body=dict(task_id=proposal["task_id"], action_id=accepted["action"]["id"]),
+        ),
+    )
+    assert status["action"]["state"] == "unknown" and status["action"]["verified"] == 0
+    assert rpc("request", dict(schema_version="1.0", operation="propose", body=body)) == denied
+    pending_query = query | {"body": {"approval_id": pending2["approval_id"]}}
+    assert rpc("request", pending_query)["approval"]["state"] == "revoked"
+    reprovision = rpc("provision", envelope, actor="root", directory=WORK)
+    assert (
+        reprovision["resource_id"] != provision["resource_id"]
+        and reprovision["task_id"] != provision["task_id"]
+    )
+    assert rpc("request", dict(schema_version="1.0", operation="propose", body=body)) == denied
     native_pid = int(
         command("systemctl", "show", "mano-approve.service", "--property=MainPID", "--value")
     )
@@ -451,16 +462,36 @@ print(json.dumps(result))
         for line in Path(f"/proc/{native_pid}/status").read_text().splitlines()
         if ":" in line
     )
-    assert set(map(int, native_fields["Uid"].split())) == {0}
-    assert int(native_fields["CapEff"].strip(), 16) == 0
+    assert (
+        set(map(int, native_fields["Uid"].split())) == {0}
+        and int(native_fields["CapEff"].strip(), 16) == 0
+    )
     assert native_fields["NoNewPrivs"].strip() == "1" and native_fields["Seccomp"].strip() == "2"
+    slow = subprocess.Popen(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            "mano-worker",
+            "--",
+            "python3",
+            "-c",
+            "import socket,time;s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);"
+            "s.connect('/run/mano-broker/request.sock');time.sleep(4)",
+        ]
+    )
+    time.sleep(0.2)
+    started = time.monotonic()
+    assert rpc("request", pending_query)["ok"]
+    elapsed = time.monotonic() - started
+    slow.wait(timeout=6)
+    assert elapsed < 5
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
         changed_nonce_denied=True,
         replay_denied=True,
         grant_consumed_by_exact_request=True,
-        unauthorized_human_socket_actors=native_denials,
+        unauthorized_human_socket_actors=["mano-agent", "mano-core", "mano-worker"],
         native_uid=0,
         effective_capabilities=0,
         no_new_privs=True,
@@ -470,33 +501,32 @@ print(json.dumps(result))
         scope="synthetic CI OS authentication; physical TTY UI not exercised",
     )
     del password
-
-    assert command("systemctl", "is-active", "mano-broker.socket") == "active"
     print(
         json.dumps(
             dict(
-                scope="non-root broker with native PAM adapter; executor not integrated",
+                scope="live descriptor-provisioned request runtime; executor not integrated",
                 broker_uid=broker_uid,
                 no_new_privs=True,
                 seccomp_filter=True,
                 effective_capabilities=0,
-                root_socket_mode="0660",
-                private_state_mode="0700",
-                private_database_mode="0600",
-                service_limits=properties,
+                service_limits=limits,
                 kernel_denials=denials,
-                slow_client_bounded_seconds=elapsed,
+                native_pam=native_report,
+                real_root_fd_provisioned=True,
+                prepared_target_fd_verified=True,
+                root_control_reply_credentials_verified=True,
+                confirmation_binding_denials=4,
+                target_inode_retained_after_replacement=True,
+                replay_no_new_preparation=True,
                 actual_sigkill_restart=True,
                 restart_pid_changed=pid != replacement,
                 unknown_preserved_no_replay=True,
-                approved_target_change_denied=True,
-                durable_pending_approval=True,
-                self_approval_wire_denied=True,
-                root_control_single_confirmation=True,
-                confirmation_binding_denials=4,
-                control_pam_authenticated=False,
-                root_control_reply_credentials_verified=True,
-                native_pam=native_report,
+                pending_authority_revoked_on_restart=True,
+                lost_resource_denied=True,
+                fresh_provisioning_required=True,
+                slow_client_bounded_seconds=elapsed,
+                no_operation_executed=True,
+                execution_state_seeded_for_recovery=True,
                 model_connected=False,
                 production_execution_authorized=False,
             ),
@@ -505,7 +535,16 @@ print(json.dumps(result))
     )
 except BaseException:
     subprocess.run(
-        ["journalctl", "-u", "mano-broker.service", "--no-pager", "-n", "60"],
+        [
+            "journalctl",
+            "-u",
+            "mano-broker.service",
+            "-u",
+            "mano-approve.service",
+            "--no-pager",
+            "-n",
+            "80",
+        ],
         stdout=sys.stderr,
         stderr=sys.stderr,
         check=False,
@@ -515,20 +554,19 @@ except BaseException:
 finally:
     subprocess.run(["systemctl", "stop", *UNITS], check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
-    for file in (NATIVE, HUMAN_POLICY, PAM_CONFIG):
-        file.unlink(missing_ok=True)
-    for file in installed:
+    for file in (LIBRARY, NATIVE, POLICY, PAM, *installed):
         file.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     subprocess.run(
-        ["systemctl", "reset-failed", "mano-broker.service"], check=False, capture_output=True
+        ["systemctl", "reset-failed", "mano-broker.service", "mano-approve.service"],
+        check=False,
+        capture_output=True,
     )
-    if STATE.exists():
-        shutil.rmtree(STATE)
-    if CODE.exists():
-        shutil.rmtree(CODE)
-    PARENT.chmod(old_mode)
-    if worker_joined:
+    for directory in (STATE, CODE, WORK):
+        if directory.exists():
+            shutil.rmtree(directory)
+    STATE.parent.chmod(old_mode)
+    if joined:
         subprocess.run(
             ["gpasswd", "-d", "mano-worker", "mano-request"], check=False, capture_output=True
         )
