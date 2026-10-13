@@ -14,7 +14,8 @@ class PublicClientGuards(unittest.TestCase):
         with patch('mano_core.broker.pwd.getpwnam', return_value=account):
             client = BrokerClient()
         with patch('mano_core.broker.socket.socket') as connect:
-            for operation in ('capture_artifact', 'confirm_approval', 'verify', 'rearm'):
+            for operation in ('capture_artifact', 'confirm_approval', 'verify', 'rearm',
+                              'declare_artifact_contract', 'check_artifact_contract'):
                 with self.subTest(operation=operation), self.assertRaises(ValueError):
                     client(dict(operation=operation))
             with self.assertRaises(ValueError):

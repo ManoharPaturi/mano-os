@@ -625,6 +625,12 @@ finally:client.close()
         prompt="Create and test a small addition project"))
     assert agent_state["status"] == "awaiting_grant"
     assert not (terminal_workspace / "calc.py").exists()
+    expected_source = b"def add(a,b): return a+b\n"
+    declared = rpc("control", dict(schema_version="1.0", operation="declare_artifact_contract",
+        body=dict(approval_id=agent_state["approval_id"], path="calc.py",
+                  sha256=hashlib.sha256(expected_source).hexdigest(), size=len(expected_source))),
+        actor="root")
+    assert declared["ok"]
     agent_view = human(dict(mode="view", id=agent_state["approval_id"]))["view"]
     assert human(dict(mode="confirm", view=agent_view, password=password))["ok"]
     agent_pending = dict(agent_state)
@@ -642,6 +648,18 @@ finally:client.close()
     assert agent_replay["action_id"] == agent_action_id
     assert agent_replay["status"] == "verifying"
     assert (terminal_workspace / "golden-result").read_text() == "replay-canary"
+    source_artifact = rpc("control", dict(schema_version="1.0", operation="capture_artifact",
+        body=dict(action_id=agent_action_id, path="calc.py")), actor="root")["artifact"]
+    verifier_body = dict(action_id=agent_action_id, artifact_id=source_artifact["artifact_id"])
+    assert rpc("request", dict(schema_version="1.0", operation="check_artifact_contract",
+        body=verifier_body), actor=identity.name) == denied
+    assert rpc("control", dict(schema_version="1.0", operation="check_artifact_contract",
+        body=verifier_body | {"artifact_id": captured["artifact"]["artifact_id"]}),
+        actor="root") == denied
+    checked = rpc("control", dict(schema_version="1.0", operation="check_artifact_contract",
+        body=verifier_body), actor="root")
+    assert checked["ok"] and checked["verification"]["predicate"] == "exact-file-v1"
+    assert agent_step(agent_state)["status"] == "completed"
     assert rpc("request", artifact_query) == denied
     assert rpc("request", artifact_query | {"body": artifact_query["body"] | {"length": 4097}},
         actor=identity.name) == denied
@@ -663,7 +681,8 @@ finally:client.close()
         langgraph_actual_task_peer=True, mock_agent_golden_project_tests=True,
         mock_agent_pam_grant=True, mock_agent_replay_same_action=True,
         mock_agent_replay_no_effect=True,
-        mock_agent_done_remains_unverified=True,
+        mock_agent_exit_alone_unverified=True, preapproval_exact_file_predicate=True,
+        verifier_public_and_wrong_action_denied=True,
         artifact_capture_request_denied=True, artifact_wrong_caller_and_range_denied=True)
     subprocess.run(["systemctl", "start", "mano-stopd.socket", "mano-stopd.service"], check=True)
     stop_pid = int(command(
