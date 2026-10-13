@@ -648,7 +648,9 @@ finally:client.close()
                 checkpoint_directory=str(terminal_workspace / ".mano-agent"),
                 args=dict(argv=["/usr/bin/python3", "-c",
                 agent_program], cwd=".", timeout_seconds=10))), capture_output=True,
-            text=True, timeout=10, check=True)
+            text=True, timeout=10, check=False)
+        if result.returncode != 0:
+            raise AssertionError("Fixed CI mock core step failed: " + result.stderr[-4096:])
         return json.loads(result.stdout)
 
     agent_state = agent_step(dict(task_id=terminal_task["task_id"],
