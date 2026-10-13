@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real delegated service cgroup custody in the disposable VM, no task argv."""
 
+import base64
 import ctypes
 import grp
 import json
@@ -15,11 +16,12 @@ from pathlib import Path
 from mano_broker.cgroups import ROOT, Manager
 from mano_broker.credentials import drop
 from mano_broker.identities import LOCK, allocate_identity
+from mano_broker.ipc import Peer
 from mano_broker.launch_admission import LaunchAdmission
+from mano_broker.launch_controller import Controller
 from mano_broker.protocol import ActionRequest, canonical
 from mano_broker.sandbox import GUARD
 from mano_broker.state import Denied
-from mano_broker.supervisor import Child
 from mano_broker.workspaces import BASE, create_workspace
 
 STATE = Path("/run/mano-delegation-ci")
@@ -163,6 +165,22 @@ if sys.argv[1:] == ["--inner"]:
         root_fd = os.open(workspace, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
         cwd_fd = os.dup(root_fd)
         sequence = 0
+        controller = Controller(manager)
+        broker_account = pwd.getpwnam("mano-broker")
+        operator_peer = Peer(os.getpid(), broker_account.pw_uid, broker_account.pw_gid)
+        handles = {}
+
+        def control(operation, job, **extra):
+            return controller.dispatch(
+                canonical(
+                    dict(
+                        schema_version="1.0",
+                        operation=operation,
+                        body=handles[job] | extra,
+                    )
+                ).encode(),
+                peer=operator_peer,
+            )
 
         def observe(name, *, contents=False):
             # Observe as the directory owner in a separate fixed-code process;
@@ -215,15 +233,26 @@ if sys.argv[1:] == ["--inner"]:
                     )
                 ).encode()
             )
-            return Child(
-                manager,
-                LaunchAdmission(f"{sequence:032x}", account["uid"], request, root_fd, cwd_fd),
+            reply = controller.prepare(
+                LaunchAdmission(
+                    f"{sequence:032x}",
+                    account["uid"],
+                    request,
+                    root_fd,
+                    cwd_fd,
+                    owner=operator_peer,
+                )
             )
+            job = controller.records[reply["job_id"]].child
+            handles[job] = {name: reply[name] for name in ("instance_id", "job_id", "action_id")}
+            return job
 
         def completed(job):
             deadline = time.monotonic() + 15
             while time.monotonic() < deadline:
-                result = job.poll()
+                status = control("status", job)
+                assert status["effect_verified"] is False
+                result = job.result
                 if job.closed:
                     assert job.state == "finished" and result is not None
                     return result
@@ -235,9 +264,24 @@ if sys.argv[1:] == ["--inner"]:
             "from pathlib import Path;Path('/workspace/started').write_text('1');print(42)"
         )
         assert normal.state == "prepared" and not observe("started")
-        normal.start(lambda: True)  # Operator fixture authority, not a broker journal grant.
         try:
-            normal.start(lambda: True)
+            controller.dispatch(
+                canonical(
+                    dict(
+                        schema_version="1.0",
+                        operation="start",
+                        body=handles[normal] | {"instance_id": "f" * 32},
+                    )
+                ).encode(),
+                peer=operator_peer,
+            )
+        except Denied:
+            pass
+        else:
+            raise AssertionError("Wrong controller instance accepted")
+        control("start", normal)  # Synthetic operator peer, not a broker journal grant.
+        try:
+            control("start", normal)
         except Denied:
             pass
         else:
@@ -263,19 +307,22 @@ if sys.argv[1:] == ["--inner"]:
             raise AssertionError("Expired prepared child started")
         assert expired.state == "not-started" and not observe("expired")
         large = prepare("import os;os.write(1,b'x'*65536);os.write(2,b'y'*65536)")
-        large.start(lambda: True)
+        control("start", large)
         big = completed(large)
         assert big.return_code == 0 and len(big.stdout) == len(big.stderr) == 65536
+        piece = control("read_output", large, stream="stdout", offset=4096, length=4096)
+        assert base64.b64decode(piece["data"]) == b"x" * 4096
+        assert piece["eof"] is False and piece["effect_verified"] is False
         active = prepare(
             "import time;from pathlib import Path;"
             "Path('/workspace/active').write_text('1');time.sleep(60)"
         )
-        active.start(lambda: True)
+        control("start", active)
         deadline = time.monotonic() + 5
         while not observe("active") and time.monotonic() < deadline:
             time.sleep(0.01)
         assert observe("active")
-        active.cancel()
+        control("cancel", active)
         assert active.state == "unknown" and active.result is None
         before_fds = len(list(Path("/proc/self/fd").iterdir()))
         sequence += 1
@@ -294,9 +341,10 @@ if sys.argv[1:] == ["--inner"]:
             ).encode()
         )
         try:
-            Child(
-                manager,
-                LaunchAdmission(f"{sequence:032x}", account["uid"], bad_request, -1, cwd_fd),
+            controller.prepare(
+                LaunchAdmission(
+                    f"{sequence:032x}", account["uid"], bad_request, -1, cwd_fd, owner=operator_peer
+                )
             )
         except OSError:
             pass
@@ -307,6 +355,7 @@ if sys.argv[1:] == ["--inner"]:
         os.close(root_fd)
         os.close(cwd_fd)
         assert not manager.jobs
+        controller.close()
         manager.close()
         assert not (ROOT / "control").exists()
         (STATE / "report.json").write_text(
@@ -339,6 +388,11 @@ if sys.argv[1:] == ["--inner"]:
                         active_cancel_unknown=True,
                         all_groups_removed=True,
                         broker_grant_integrated=False,
+                        private_controller_instance_guard=True,
+                        private_controller_start_once=True,
+                        output_chunk_bounded=True,
+                        controller_verified_flag_false=True,
+                        operator_peer_metadata_synthetic=True,
                     ),
                     no_task_argv_executed=False,
                     model_connected=False,

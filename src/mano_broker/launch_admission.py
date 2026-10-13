@@ -28,6 +28,7 @@ class LaunchAdmission:
     request: ActionRequest
     workspace_fd: int
     cwd_fd: int
+    owner: Peer | None = None
 
     def close(self):
         for name in ("workspace_fd", "cwd_fd"):
@@ -115,7 +116,7 @@ def admit(packet, descriptors, *, peer):
         with workspace.pin(args["cwd"], directory=True) as cwd:
             if (cwd.device, cwd.inode) != (infos[1].st_dev, infos[1].st_ino):
                 raise Denied("Working directory does not match workspace request")
-    return LaunchAdmission(action, account.pw_uid, request, *descriptors)
+    return LaunchAdmission(action, account.pw_uid, request, *descriptors, owner=peer)
 
 
 def receive(connection):

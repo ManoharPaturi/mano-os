@@ -192,6 +192,7 @@ class Child:
             if len(stdout) > OUTPUT_LIMIT or len(stderr) > OUTPUT_LIMIT:
                 raise Denied("Child stream budget exceeded")
             self.result = ProcessResult(value["reason"], value["return_code"], stdout, stderr)
+            self.buffer.clear()  # Retain bounded decoded streams, not duplicate base64 copies.
             self._close()
             self.state = "finished"  # Observed process result, never independently verified effect.
             return self.result
@@ -215,6 +216,7 @@ class Child:
         if self.closed:
             return
         self._close()
+        self.buffer.clear()
         self.state = "unknown" if self.started else "not-started"
 
     def _close(self):
