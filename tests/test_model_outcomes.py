@@ -106,3 +106,14 @@ class ModelOutcomeTests(unittest.TestCase):
                 dispatch(self.state, packet, peer=Peer(42, 1005, 1005), now=12, boot_id='boot')
         self.assertEqual(self.state.db.execute(
             'SELECT count(*) FROM model_attempts').fetchone()[0], 0)
+
+    def test_corrupted_task_binding_cannot_disclose_original_plan_to_another_caller(self):
+        self.store.begin(self.action, now=12, boot_id='boot')
+        self.store.finish(self.action, self.packet, boot_id='boot')
+        other = self.state.create_task(human_uid=1003, caller_uid=1006, mode='supervised',
+            resource_id='b' * 32, classification='sensitive', boot_id='boot')
+        self.state.db.execute('UPDATE actions SET task_id=? WHERE id=?', (other, self.action))
+        packet = canonical(dict(schema_version='1.0', operation='model_result',
+                                body=dict(task_id=other, action_id=self.action))).encode()
+        with self.assertRaises(Denied):
+            dispatch(self.state, packet, peer=Peer(42, 1006, 1006), now=15, boot_id='boot')

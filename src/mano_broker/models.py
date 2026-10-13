@@ -17,12 +17,21 @@ class ModelStore:
 
     def action(self, action_id, boot_id):
         identifier(action_id)
-        row = self.state.db.execute('SELECT a.*,t.boot_id FROM actions a JOIN tasks t '
-            'ON a.task_id=t.id WHERE a.id=? AND t.boot_id=?', (action_id, boot_id)).fetchone()
+        row = self.state.db.execute('SELECT a.*,t.boot_id,t.resource_id AS task_resource,'
+            't.human_uid AS task_human,g.task_id AS grant_task,g.capability AS grant_capability,'
+            'g.resource_id AS grant_resource,g.human_uid AS grant_human,g.approved_args_json '
+            'FROM actions a JOIN tasks t ON a.task_id=t.id JOIN grants g ON a.grant_id=g.id '
+            'WHERE a.id=? AND t.boot_id=?', (action_id, boot_id)).fetchone()
         if row is None:
             raise Denied('Model action unavailable')
         request = ActionRequest.parse(row['request_json'].encode())
-        if request.capability != Capability.PLAN or request.digest != row['request_digest']:
+        if (request.capability != Capability.PLAN or request.digest != row['request_digest']
+                or request.task_id != row['task_id'] or request.grant_id != row['grant_id']
+                or row['grant_task'] != request.task_id or row['grant_capability'] != 'model.plan'
+                or request.resource_id != row['task_resource']
+                or request.resource_id != row['grant_resource']
+                or row['grant_human'] != row['task_human']
+                or row['approved_args_json'] != request.args_json):
             raise Denied('No exact model action')
         return row, request
 
