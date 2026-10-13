@@ -17,6 +17,7 @@ SLICE = "mano-stop-tasks.slice"
 
 
 def run(argv, check=True):
+    print(json.dumps({"command": argv}), file=sys.stderr, flush=True)
     return subprocess.run(argv, text=True, capture_output=True, timeout=20, check=check)
 
 
@@ -252,7 +253,17 @@ def main():
             assert time.monotonic() < deadline
             time.sleep(0.1)
         run(["systemctl", "set-property", SLICE, "TasksMax=64", "MemoryMax=160M", "CPUQuota=60%"])
-        phase_start("watchdog")
+        run(
+            [
+                "systemd-run",
+                "--unit=mano-stop-anchor",
+                f"--slice={SLICE}",
+                "--property=Type=exec",
+                "--uid=mano-worker",
+                "/bin/sleep",
+                "600",
+            ]
+        )
         path = "/sys/fs/cgroup" + prop(SLICE, "ControlGroup")
         (BASE / "cgroup-path").write_text(path + "\n")
         os.chmod(BASE / "cgroup-path", 0o600)
@@ -281,6 +292,7 @@ def main():
                 (OUT / "stopd-startup.txt").write_text(diagnostic)
                 raise RuntimeError("Native stopd startup failed: " + diagnostic)
             time.sleep(0.1)
+        phase_start("watchdog")
         run(
             [
                 "systemctl",

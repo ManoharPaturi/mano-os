@@ -68,13 +68,19 @@ def main():
         return json.loads(result.stdout) if result.stdout.strip() else None
 
     def stop_fixture(action):
-        result = subprocess.run(
-            [*ssh, f"sudo python3 /opt/mano-lab/scripts/stop_fixture.py {action}"],
-            text=True,
-            capture_output=True,
-            timeout=45,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [*ssh, f"sudo python3 /opt/mano-lab/scripts/stop_fixture.py {action}"],
+                text=True,
+                capture_output=True,
+                timeout=45,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            details = error.stderr or b""
+            if isinstance(details, bytes):
+                details = details.decode(errors="replace")
+            raise RuntimeError(f"Stop fixture {action} timed out: {details[-5000:]}") from None
         if result.returncode:
             raise RuntimeError(f"Stop fixture {action} failed: {result.stderr[-3000:]}")
         return json.loads(result.stdout) if result.stdout.strip() else None
