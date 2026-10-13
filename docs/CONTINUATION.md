@@ -500,3 +500,13 @@ private SQLite persistence. Public artifact_read exposes only bounded base64 byt
 bound to kernel peer UID, task and boot. No public capture or verified-outcome claim.
 Actual broker filter/memfd capture, caller/range denials and broker-restart retrieval
 are CI acceptance requirements. All original later version gates remain required.
+
+## Verification evidence guard
+
+Trusted record_verification now requires each evidence ID to exist in durable
+custody for the same done action, rejects duplicate IDs and mismatched digest,
+size or bytes inside the same journal transaction. Unit tests cover fabricated,
+wrong-action, duplicate, wrong-hash and corrupted evidence. This closes the old
+library acceptance of arbitrary IDs/hash strings; it does not implement a semantic
+outcome verifier. No public verification route is added. Trusted independent
+checks and original minimal-agent/golden gates remain pending.
