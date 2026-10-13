@@ -399,7 +399,9 @@ try:
         == denied
     )
     accepted = rpc("request", dict(schema_version="1.0", operation="propose", body=body))
-    assert accepted["ok"] and accepted["fresh"] and accepted["action"]["state"] == "intent"
+    assert accepted["ok"] and accepted["fresh"] and accepted["action"]["state"] == "intent", (
+        accepted
+    )
     assert accepted["action"]["verified"] == 0
     inode = target.stat().st_ino
     held = []

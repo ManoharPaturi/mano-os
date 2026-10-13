@@ -1,6 +1,7 @@
 """Broker request facade coupled to live resource descriptors; no executor."""
 
 import json
+import sys
 import time
 
 from .ipc import dispatch, public_action, receive
@@ -74,7 +75,18 @@ def serve_runtime(runtime, connection):
     try:
         peer, packet = receive(connection)
         result = runtime.dispatch(packet, peer=peer, now=time.monotonic())
-    except (ValueError, TypeError, KeyError, RecursionError, OSError):
+    except (ValueError, TypeError, KeyError, RecursionError, OSError) as error:
+        print(
+            canonical(
+                {
+                    "event": "runtime-request-denied",
+                    "error_type": type(error).__name__,
+                    "errno": getattr(error, "errno", None),
+                }
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
         result = {"schema_version": "1.0", "ok": False, "error": "denied"}
     try:
         connection.sendall(canonical(result).encode())
