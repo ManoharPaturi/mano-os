@@ -45,3 +45,13 @@ limits, bounded client/global admission, actual guest start/UID/DAC/slow/SIGKILL
 restart fixture. ADR0011. Local44tests pass with1MacLinuxskip. No CI yet.
 Need PR with full real VM checks; no merge before allfinalheadSUCCESS. Fullscopeactive.
 Disk11-12GiB free94-95%, no newlarge downloads below10GiB.
+
+Latest PR21 mergedc631672d3aef0b0ce59728c644ecadba66035243 after accepted
+CI38335723301 all3success. ActualUID999/NNP/seccomp/zero caps,6DACdenials,
+slowclient1.836s,SIGKILLrestartunknown proved. Post-main38336185993 stillpending
+when lastchecked; inspect authoritative state. Current feat/phase1-exact-grants
+requires canonical approved_args at every grant issuance and reservation/dispatch.
+Legacy journals upgrade revokeall/unknownexecuting/failedintent without deletion.
+Unit48tests pass1MacLinuxskip; actualmigration and changed-target IPC/service probes
+added. ADR0012. TrustedPAMcontrol not integrated yet; nextwork. Need freshCI/PR
+all-current-head checks beforemerge, then postmain. Disk13GiB94%last.

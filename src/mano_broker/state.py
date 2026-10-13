@@ -59,7 +59,7 @@ class State:
                 capability TEXT NOT NULL,resource_id TEXT NOT NULL,human_uid INTEGER NOT NULL,
                 epoch INTEGER NOT NULL,expires REAL NOT NULL,max_count INTEGER NOT NULL,
                 used INTEGER NOT NULL DEFAULT 0,budget_json TEXT NOT NULL,
-                revoked INTEGER NOT NULL DEFAULT 0);
+                revoked INTEGER NOT NULL DEFAULT 0,approved_args_json TEXT);
             CREATE TABLE IF NOT EXISTS actions(
                 id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES tasks(id),
                 grant_id TEXT NOT NULL REFERENCES grants(id),request_digest TEXT NOT NULL,
@@ -71,6 +71,16 @@ class State:
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,action_id TEXT REFERENCES actions(id),
                 event TEXT NOT NULL,details_json TEXT NOT NULL);
         """)
+
+        # Upgrade pre-binding journals without silently retaining broad authority.
+        with self.transaction():
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(grants)")}
+            if "approved_args_json" not in columns:
+                self.db.execute("ALTER TABLE grants ADD COLUMN approved_args_json TEXT")
+                self.db.execute("UPDATE grants SET revoked=1")
+                self.db.execute("UPDATE actions SET state='unknown' WHERE state='executing'")
+                self.db.execute("UPDATE actions SET state='failed' WHERE state='intent'")
+                self.event(None, "exact-grant-migration", {"legacy_authority_revoked": True})
 
     def close(self):
         self.db.close()
@@ -125,6 +135,7 @@ class State:
         task_id,
         *,
         approved_human_uid,
+        approved_args,
         capability,
         resource_id,
         expires,
@@ -163,13 +174,31 @@ class State:
             or max_timeout_seconds > 300
         ):
             raise ValueError("Invalid bounded resource/count grant")
+        # Reuse the strict operation parser; trusted approval cannot smuggle extra
+        # fields, environment variables, malformed paths or unbounded commands.
+        approved = ActionRequest.parse(
+            canonical(
+                {
+                    "schema_version": "1.0",
+                    "task_id": task_id,
+                    "grant_id": "0" * 32,
+                    "capability": capability.value,
+                    "resource_id": resource_id,
+                    "args": approved_args,
+                    "idempotency_key": "approval-template",
+                    "reason": "trusted exact operation",
+                }
+            ).encode()
+        )
+        if capability == Capability.RUN and approved_args["timeout_seconds"] > max_timeout_seconds:
+            raise ValueError("Approved timeout exceeds grant budget")
         grant_id = secrets.token_hex(16)
         with self.transaction():
             if self.meta("latched"):
                 raise Denied("Emergency stop latched")
             self.db.execute(
                 "INSERT INTO grants(id,task_id,capability,resource_id,human_uid,epoch,expires,"
-                "max_count,budget_json) VALUES(?,?,?,?,?,?,?,?,?)",
+                "max_count,budget_json,approved_args_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     grant_id,
                     task_id,
@@ -180,6 +209,7 @@ class State:
                     expires,
                     max_count,
                     canonical(budgets),
+                    approved.args_json,
                 ),
             )
             self.event(None, "grant-issued", {"grant_id": grant_id, "task_id": task_id})
@@ -212,6 +242,7 @@ class State:
                 or grant["task_id"] != request.task_id
                 or grant["capability"] != request.capability.value
                 or grant["resource_id"] != request.resource_id
+                or grant["approved_args_json"] != request.args_json
             ):
                 raise Denied("Capability/resource grant mismatch")
             if self.meta("latched") or grant["revoked"] or grant["epoch"] != self.meta("epoch"):
@@ -251,13 +282,16 @@ class State:
             raise Denied("Invalid trusted monotonic time")
         with self.transaction():
             row = self.db.execute(
-                "SELECT a.state,g.expires,g.epoch,g.revoked,t.boot_id FROM actions a "
+                "SELECT a.state,a.request_json,g.approved_args_json,g.expires,g.epoch,g.revoked,"
+                "t.boot_id "
+                "FROM actions a "
                 "JOIN grants g ON a.grant_id=g.id JOIN tasks t ON a.task_id=t.id WHERE a.id=?",
                 (action_id,),
             ).fetchone()
             if (
                 row is None
                 or row["state"] != "intent"
+                or row["approved_args_json"] != canonical(json.loads(row["request_json"])["args"])
                 or row["revoked"]
                 or self.meta("latched")
                 or row["epoch"] != self.meta("epoch")
