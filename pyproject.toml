@@ -16,6 +16,7 @@ agent = ["langgraph==1.2.15", "langgraph-checkpoint-sqlite==3.1.2"]
 mano-lab = "mano_lab.cli:main"
 mano-prompt = "mano_prompt.app:main"
 mano-approve = "mano_prompt.approve:main"
+mano-core = "mano_core.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
