@@ -78,6 +78,14 @@ def dispatch(state, packet, *, peer, now, boot_id):
         raise Denied("Unknown request envelope")
     if value["schema_version"] != "1.0":
         raise Denied("Unknown IPC version")
+    if value["operation"] == "model_result":
+        from .models import ModelStore
+
+        body = value["body"]
+        if not isinstance(body, dict) or set(body) != {"task_id", "action_id"}:
+            raise Denied("Unknown model result fields")
+        result = ModelStore(state).read(**body, caller_uid=peer.uid, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, result=result)
     if value["operation"] == "artifact_read":
         body = value["body"]
         if (not isinstance(body, dict)

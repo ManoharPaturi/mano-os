@@ -9,7 +9,8 @@ from mano_protocol.actions import MAX_PACKET, canonical
 from mano_protocol.transport import CREDENTIALS, Peer, reply
 
 PATH = '/run/mano-broker/request.sock'
-OPERATIONS = {'request_approval', 'approval_status', 'propose', 'status', 'artifact_read'}
+OPERATIONS = {'request_approval', 'approval_status', 'propose', 'status', 'artifact_read',
+              'model_result'}
 
 
 class BrokerClient:
