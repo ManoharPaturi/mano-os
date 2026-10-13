@@ -56,3 +56,16 @@ document readiness. Fresh process, not cold-cache/physical performance. Resource
 include both, audit requires finite positive values and matching summary on both
 boot stages; old PR17 artifacts now fail this stronger audit. Local30tests pass.
 Need fresh CI, PR merge only all-success final head, then post-main verification.
+
+PR18 merged b22ec91631f817abda548c4a82a25ce238af54a3. Accepted CI38331286546,
+post-main CI38331698197 allsuccess. Startup gap closed with real both-boot metrics;
+recovered Chromium control/page0.629/0.966s, Writer UNOdocument1.436s. Phase0 audit
+35pass/0fail/0pending, GO-for-Phase1-development only. Outputs updated/hashed.
+Current Phase1 branch feat/phase1-broker-state: strict typed action proposal parser,
+private SQLite task/grant/action/event store, atomic count/intent, dispatch recheck,
+replay binding, unknown after recovery, explicit verification metadata and durable
+stop epoch/latch. No executor/socket/PAM integration or model route yet. Local39tests
+pass incl two-connection single-use race. New recovered-guest probe forks an abrupt
+writer, recovers unknown and tests six actual journal EACCES denials + unchangedhash.
+Need fresh CI, create/attach PR, all-final-head checks, merge and post-main CI.
+ADR0009 documents gaps and exact next work; do not claim Phase1 complete.
