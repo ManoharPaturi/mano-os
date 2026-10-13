@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-agent = ["langgraph==1.2.15"]
+agent = ["langgraph==1.2.15", "langgraph-checkpoint-sqlite==3.1.2"]
 
 [project.scripts]
 mano-lab = "mano_lab.cli:main"

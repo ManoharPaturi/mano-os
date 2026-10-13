@@ -19,7 +19,7 @@ python3 -m venv /usr/local/lib/mano-browser
 /usr/local/lib/mano-browser/bin/pip install playwright==1.63.0
 /usr/local/lib/mano-browser/bin/pip freeze > evidence/browser-python-packages.txt
 python3 -m venv /usr/local/lib/mano-core
-/usr/local/lib/mano-core/bin/pip install langgraph==1.2.15
+/usr/local/lib/mano-core/bin/pip install langgraph==1.2.15 langgraph-checkpoint-sqlite==3.1.2
 /usr/local/lib/mano-core/bin/pip freeze > evidence/agent-python-packages.txt
 printf '# Task-local launcher configuration; no host policy or credential data.\n' \
   > /usr/local/lib/mano-browser/launcher-config

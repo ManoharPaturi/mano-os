@@ -598,24 +598,55 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
         "else 'tests-failed');sys.exit(p.returncode)"
     )
     agent_step_code = """import json,sys
+from pathlib import Path
 from mano_core.broker import BrokerClient
 from mano_core.runtime import AgentRuntime
+from mano_core.checkpoints import Session
 body=json.load(sys.stdin)
+fields=dict(line.split(':',1) for line in Path('/proc/self/status').read_text().splitlines()
+            if ':' in line)
+assert all(int(fields[k].strip(),16)==0 for k in ('CapEff','CapBnd','CapAmb'))
+assert fields['NoNewPrivs'].strip()=='1' and fields['Seccomp'].strip()=='2'
+group=Path('/sys/fs/cgroup')/next(line.split('::',1)[1].lstrip('/')
+    for line in Path('/proc/self/cgroup').read_text().splitlines() if line.startswith('0::'))
+assert (group/'memory.max').read_text().strip()=='268435456'
+assert (group/'pids.max').read_text().strip()=='32'
+assert (group/'cpu.max').read_text().strip()=='50000 100000'
 def mock_model(prompt):
  assert prompt=='Create and test a small addition project'
  return dict(args=body['args'],reason='Create and run golden project unit test')
 client=BrokerClient()
 try:
- result=AgentRuntime(mock_model,client).step(body['state'],thread_id=body['state']['task_id'])
+ if body['persistent']:
+  session=Session(body['checkpoint_directory'],mock_model,client)
+  try:
+   context={k:body['state'][k] for k in ('task_id','resource_id','operation_key','prompt')}
+   result=session.step(context)
+  finally:session.close()
+ else:
+  result=AgentRuntime(mock_model,client).step(body['state'],thread_id=body['state']['task_id'])
  print(json.dumps(result))
 finally:client.close()
 """
 
-    def agent_step(state):
-        result = subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--", "env",
+    def agent_step(state, *, persistent=True):
+        result = subprocess.run(["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
+            "--unit=mano-agent-step-" + str(time.monotonic_ns()), "--uid=" + identity.name,
+            "--property=MemoryMax=256M", "--property=TasksMax=32", "--property=CPUQuota=50%",
+            "--property=RuntimeMaxSec=8", "--property=TimeoutStopSec=1",
+            "--property=LimitNOFILE=128", "--property=SystemCallArchitectures=native",
+            "--property=NoNewPrivileges=yes", "--property=CapabilityBoundingSet=",
+            "--property=AmbientCapabilities=", "--property=ProtectSystem=strict",
+            "--property=ReadWritePaths=" + str(terminal_workspace),
+            "--property=ProtectHome=yes", "--property=PrivateTmp=yes",
+            "--property=RestrictNamespaces=yes", "--property=RestrictAddressFamilies=AF_UNIX",
+            "--property=SystemCallFilter=@system-service", "--property=SystemCallErrorNumber=EPERM",
+            "--property=MemoryDenyWriteExecute=yes", "env",
             "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1",
             "/usr/local/lib/mano-core/bin/python", "-c", agent_step_code],
-            input=json.dumps(dict(state=state, args=dict(argv=["/usr/bin/python3", "-c",
+            input=json.dumps(dict(state=state, persistent=persistent,
+                checkpoint_directory=str(terminal_workspace / ".mano-agent"),
+                args=dict(argv=["/usr/bin/python3", "-c",
                 agent_program], cwd=".", timeout_seconds=10))), capture_output=True,
             text=True, timeout=10, check=True)
         return json.loads(result.stdout)
@@ -644,7 +675,7 @@ finally:client.close()
     assert (terminal_workspace / "golden-result").read_text() == "tests-passed"
     assert (terminal_workspace / "calc.py").exists()
     (terminal_workspace / "golden-result").write_text("replay-canary")
-    agent_replay = agent_step(agent_pending)
+    agent_replay = agent_step(agent_pending, persistent=False)
     assert agent_replay["action_id"] == agent_action_id
     assert agent_replay["status"] == "verifying"
     assert (terminal_workspace / "golden-result").read_text() == "replay-canary"
@@ -681,6 +712,8 @@ finally:client.close()
         langgraph_actual_task_peer=True, mock_agent_golden_project_tests=True,
         mock_agent_pam_grant=True, mock_agent_replay_same_action=True,
         mock_agent_replay_no_effect=True,
+        sqlite_agent_checkpoint_new_process_recovery=True,
+        core_step_cgroup_and_capability_limits_verified=True,
         mock_agent_exit_alone_unverified=True, preapproval_exact_file_predicate=True,
         verifier_public_and_wrong_action_denied=True,
         artifact_capture_request_denied=True, artifact_wrong_caller_and_range_denied=True)
