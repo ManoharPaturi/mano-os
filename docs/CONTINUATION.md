@@ -287,3 +287,8 @@ Standalone daemonproxy uses /run/mano-journal-ci/daemon (not taskworkspace),
 actualjournal/Registry/nativepins/start/completion/output/Stopcancel; operator
 approvalonly, noPAM/publicRuntime/frozenbrokerStop claims. Productionunitreplaces
 fixtureunit ONLYindisposableVM; no host service installation.
+
+PR42 merged7258a6406e6df9ab1d73b36de81af9522b71a8d5 after exactheadbe8ed3a
+all3SUCCESS run38406670474. Artifact11818304235 accepted realjournalexecutor/
+Stopcancelunknown, PAMfalse. PR43 mergescurrentmain; onlydocscontinuationconflict
+resolvedpreservingbothnotes. Fresh final-head CI required before ready/merge.
