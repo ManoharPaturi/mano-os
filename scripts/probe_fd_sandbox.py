@@ -199,7 +199,10 @@ print(json.dumps({'workspace_fd_identity':True,'cwd_fd_identity':True,
                 / Path("/proc/self/cgroup").read_text().strip().split("::", 1)[1].lstrip("/")
                 / "cgroup.procs"
             )
-            baseline = set(cgroup.read_text().split())
+            # These two fixture controllers remain alive until every task test
+            # finishes. An arbitrary snapshot can include a prior bwrap child
+            # that exits a moment later, which must not become a permanent PID.
+            baseline = {str(os.getpid()), str(os.getppid())}
 
             def reaped():
                 deadline = time.monotonic() + 5
@@ -229,6 +232,29 @@ print(json.dumps({'workspace_fd_identity':True,'cwd_fd_identity':True,
                         processes=details,
                     )
                 )
+
+            reaped()  # Prior manual sandbox must also leave no extra processes.
+            gate_reader, gate_writer = os.pipe()
+            transient = os.fork()
+            if transient == 0:
+                os.close(gate_writer)
+                os.read(gate_reader, 1)
+                os._exit(0)
+            os.close(gate_reader)
+            try:
+                sampled = set(cgroup.read_text().split())
+                assert baseline <= sampled and str(transient) in sampled
+                os.write(gate_writer, b"x")
+                os.close(gate_writer)
+                gate_writer = -1
+                reaped()
+                _, transient_status = os.waitpid(transient, 0)
+                assert os.waitstatus_to_exitcode(transient_status) == 0
+            finally:
+                if gate_writer >= 0:
+                    os.close(gate_writer)
+            proof["known_controller_baseline"] = True
+            proof["transient_pid_sample_does_not_become_baseline"] = True
 
             def execute(source, timeout=5, observer=lambda: False):
                 started = time.monotonic()

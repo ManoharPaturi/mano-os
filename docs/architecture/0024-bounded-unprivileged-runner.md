@@ -20,6 +20,15 @@ after normal, noisy, forked, pipe-closing and actively revoked commands. A befor
 launch revocation must have no PID or workspace effect. This establishes the
 tested lifecycle; no generic arbitrary-descendant cleanup guarantee is inferred.
 
+The baseline is the two known live fixture controllers, not an arbitrary PID
+snapshot. Post-main initially failed after a normal command, without recording
+the PID difference. A subsequent diagnostic run passed, so that original failure
+does not establish whether a PID was missing or added. The observer now requires
+all other processes to exit before the first test as well as after each command.
+A synchronized short-lived fixture child proves that a PID sampled before it
+exits is not mistakenly treated as a permanent controller. The same exact PID-set
+comparison, five-second cleanup deadline and actual descendant checks remain.
+
 ProcessResult contains reason, exit code and bounded output bytes. Completed
 means process exit, including nonzero exit codes. It does not mean an effect was
 verified, rolled back or safely retryable. Terminated operations may have changed
