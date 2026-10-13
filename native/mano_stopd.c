@@ -91,26 +91,65 @@ static bool state_file(int fd) {
     return !fstat(fd,&st) && S_ISREG(st.st_mode) && st.st_uid==0 &&
         (st.st_mode&0777)==0644 && st.st_nlink==1;
 }
-static bool initialize(int directory) {
-    int fd=openat(directory,"state",O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0644);
-    if (fd>=0) {
-        bool okay=write(fd,"armed\n",6)==6 && fsync(fd)==0 && fsync(directory)==0;
-        close(fd);return okay;
-    }
-    if (errno!=EEXIST) return false;
-    fd=openat(directory,"state",O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
+static bool read_state(int directory,const char *name,unsigned long long *generation,bool *stopped,
+                       bool *legacy) {
+    int fd=openat(directory,name,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
     if (fd<0) return false;
-    char data[9]={0};ssize_t n=read(fd,data,sizeof(data));
-    bool okay=state_file(fd) && ((n==6 && !memcmp(data,"armed\n",6)) ||
-                              (n==8 && !memcmp(data,"latched\n",8)));
-    close(fd);return okay; /* Never reset a previously latched or corrupt state. */
+    char data[65]={0};ssize_t n=read(fd,data,sizeof(data)-1);
+    bool valid=state_file(fd);close(fd);
+    if (!valid || n<=0 || n>=64) return false;
+    *legacy=false;
+    if (n==6 && !memcmp(data,"armed\n",6)) {*generation=0;*stopped=false;*legacy=true;return true;}
+    if (n==8 && !memcmp(data,"latched\n",8)) {*generation=1;*stopped=true;*legacy=true;return true;}
+    if (memcmp(data,"v1:",3) || data[3]<'0' || data[3]>'9') return false;
+    errno=0;char *end=NULL;unsigned long long value=strtoull(data+3,&end,10);
+    if (errno || value>(unsigned long long)LLONG_MAX || (data[3]=='0' && end!=data+4)) return false;
+    if (!strcmp(end,":armed\n")) *stopped=false;
+    else if (!strcmp(end,":latched\n")) *stopped=true;
+    else return false;
+    *generation=value;return true;
+}
+static bool publish(int directory,unsigned long long generation,bool stopped,bool recovering) {
+    int flags=O_WRONLY|O_NOFOLLOW|O_CLOEXEC;
+    flags|=recovering?0:(O_CREAT|O_EXCL);
+    int fd=openat(directory,"state.pending",flags,0644);
+    if (fd<0) return false;
+    char data[64];int n=snprintf(data,sizeof(data),"v1:%llu:%s\n",generation,
+                               stopped?"latched":"armed");
+    bool okay=state_file(fd) && n>0 && (size_t)n<sizeof(data) && ftruncate(fd,0)==0 &&
+        write(fd,data,(size_t)n)==n && fsync(fd)==0 && fsync(directory)==0;
+    close(fd);
+    if (!okay || renameat(directory,"state.pending",directory,"state")) return false;
+    return fsync(directory)==0;
+}
+static bool initialize(int directory) {
+    unsigned long long generation=0;bool stopped=false,legacy=false;
+    struct stat info;
+    if (fstatat(directory,"state",&info,AT_SYMLINK_NOFOLLOW)==0) {
+        if (!read_state(directory,"state",&generation,&stopped,&legacy)) return false;
+    } else if (errno!=ENOENT) return false;
+    if (fstatat(directory,"state.pending",&info,AT_SYMLINK_NOFOLLOW)==0) {
+        int fd=openat(directory,"state.pending",O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
+        if (fd<0) return false;
+        bool trusted=state_file(fd);close(fd);if (!trusted) return false;
+        unsigned long long pending=0;bool pending_stop=false,pending_legacy=false;
+        if (read_state(directory,"state.pending",&pending,&pending_stop,&pending_legacy) &&
+            pending>generation) generation=pending;
+        if (generation==(unsigned long long)LLONG_MAX) return false;
+        /* An interrupted armed or latched write always recovers to a NEW Stop. */
+        return publish(directory,generation+1,true,true);
+    }
+    if (errno!=ENOENT) return false;
+    if (legacy) return publish(directory,generation,stopped,false);
+    if (fstatat(directory,"state",&info,AT_SYMLINK_NOFOLLOW)<0)
+        return errno==ENOENT && publish(directory,0,false,false);
+    return true;
 }
 static bool latch(int directory) {
-    int fd=openat(directory,"state",O_WRONLY|O_NOFOLLOW|O_CLOEXEC);
-    if (fd<0) return false;
-    bool okay=state_file(fd) && ftruncate(fd,0)==0 &&
-        write(fd,"latched\n",8)==8 && fsync(fd)==0;
-    close(fd);return okay; /* Partial/corrupt writes fail closed in readers. */
+    unsigned long long generation=0;bool stopped=false,legacy=false;
+    if (!read_state(directory,"state",&generation,&stopped,&legacy) ||
+        generation==(unsigned long long)LLONG_MAX) return false;
+    return publish(directory,generation+1,true,false);
 }
 static bool task_name(const char *name) {
     if (strlen(name)!=37 || strncmp(name,"task-",5)) return false;
@@ -161,9 +200,13 @@ int main(int argc,char **argv) {
         setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
         setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout));
         unsigned char packet[2]={0};ssize_t size=0;
-        bool okay=credentials(fd,packet,sizeof(packet),&size,human) &&
-            size==1 && packet[0]=='S' && latch(directory) && kill_tasks();
+        bool valid=credentials(fd,packet,sizeof(packet),&size,human) &&
+            size==1 && packet[0]=='S';
+        bool durable=true,killed=false;
+        if (valid) {durable=latch(directory);killed=kill_tasks();}
+        bool okay=valid && durable && killed;
         const char *response=okay?"stopped":"denied";
         (void)send(fd,response,strlen(response),MSG_NOSIGNAL);close(fd);
+        if (valid && !durable) return 4; /* Restart into fail-closed pending recovery. */
     }
 }
