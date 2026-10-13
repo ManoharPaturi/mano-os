@@ -7,10 +7,13 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
+from mano_broker.protocol import ActionRequest, canonical
+from mano_broker.registry import Registry
 from mano_broker.resources import LIBRARY, Workspace
-from mano_broker.state import Denied
+from mano_broker.state import Denied, State
 
 BASE = Path("/var/lib/mano-broker/resource-pin-probe")
 assert os.geteuid() == 0
@@ -121,6 +124,84 @@ try:
     else:
         raise AssertionError("Replacement root used")
     assert hashlib.sha256(outside.read_bytes()).hexdigest() == sentinel
+    # Bind the actual retained descriptor to a task and grant in the private journal.
+    registry = Registry()
+    state = State(BASE / "registry-state")
+    try:
+        boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+        resource = registry.register(workspace.fd, human_uid=1002, caller_uid=1004, boot_id=boot)
+        task = state.create_task(
+            human_uid=1002,
+            caller_uid=1004,
+            mode="supervised",
+            resource_id=resource,
+            classification="internal",
+            boot_id=boot,
+        )
+        grant = state.issue_grant(
+            task,
+            approved_human_uid=1002,
+            approved_args={"path": "retained"},
+            capability="files.read",
+            resource_id=resource,
+            expires=time.monotonic() + 30,
+            max_count=1,
+            memory_bytes=1048576,
+            pids=4,
+            cpu_percent=10,
+            max_timeout_seconds=10,
+        )
+        request = ActionRequest.parse(
+            canonical(
+                dict(
+                    schema_version="1.0",
+                    task_id=task,
+                    grant_id=grant,
+                    capability="files.read",
+                    resource_id=resource,
+                    args={"path": "retained"},
+                    idempotency_key="registry-read",
+                    reason="fixed CI binding",
+                )
+            ).encode()
+        )
+        try:
+            registry.prepare(state, request, caller_uid=1001, now=time.monotonic(), boot_id=boot)
+        except Denied:
+            pass
+        else:
+            raise AssertionError("Wrong registry caller accepted")
+        row, lease = registry.prepare(
+            state, request, caller_uid=1004, now=time.monotonic(), boot_id=boot
+        )
+        assert lease.descriptors["target"].inode == (moved / "retained").stat().st_ino
+        replay, second = registry.prepare(
+            state, request, caller_uid=1004, now=time.monotonic(), boot_id=boot
+        )
+        assert second is None and replay["id"] == row["id"]
+        registry.start(state, row["id"], now=time.monotonic(), boot_id=boot)
+        try:
+            registry.start(state, row["id"], now=time.monotonic(), boot_id=boot)
+        except Denied:
+            pass
+        else:
+            raise AssertionError("Duplicate descriptor dispatch accepted")
+        state.transition(row["id"], "unknown")  # No operation is executed by this fixture.
+        registry.close()
+        assert lease.closed
+        replacement = Registry()
+        try:
+            replacement.prepare(state, request, caller_uid=1004, now=time.monotonic(), boot_id=boot)
+        except Denied:
+            pass
+        else:
+            raise AssertionError("Lost resource restored implicitly")
+        finally:
+            replacement.close()
+        assert state.db.execute("SELECT used FROM grants WHERE id=?", (grant,)).fetchone()[0] == 1
+    finally:
+        registry.close()
+        state.close()
     print(
         json.dumps(
             dict(
@@ -133,6 +214,12 @@ try:
                 protected_sentinel_hash_preserved=True,
                 binary_sha256=hashlib.sha256(LIBRARY.read_bytes()).hexdigest(),
                 contents_immutable=False,
+                registry_task_identity_bound=True,
+                exact_grant_descriptor_prepared=True,
+                replay_did_not_create_descriptors=True,
+                single_dispatch_state_transition=True,
+                lost_registry_denied=True,
+                no_operation_executed=True,
                 model_connected=False,
                 production_execution_authorized=False,
             ),

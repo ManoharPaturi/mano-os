@@ -68,8 +68,9 @@ and runtime gates; physical 8 GB and installer/firmware requirements remain late
 `mano_broker` provides typed proposals, exact grants, durable action state and a
 kernel-authenticated request channel under a hardened non-root service. A pending
 approval queue supports public request/status without exposing nonce or confirmation.
-Trusted confirmation consumes one challenge and issues one exact grant atomically;
-a protected root control channel carries view/confirmation. Its native PAM adapter
-remains unimplemented. Descriptor-pinned resources,
-sandbox execution, native stop/verifier integration and model routing remain required.
-No model command is executed. See ADR0009–0014 and accepted CI evidence for scope.
+Trusted confirmation consumes one challenge and issues one exact grant atomically.
+Protected root control and native PAM authentication are verified in synthetic CI;
+manual TTY/GUI and physical-input verification remain pending. Descriptor custody
+is verified, with task-bound registry integration in progress. Trusted provisioning,
+sandbox execution, native stop/verifier and model routing remain required.
+No model command is executed. See ADR0009–0017 and accepted CI evidence for scope.
