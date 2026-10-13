@@ -111,10 +111,12 @@ def create_from_prompt(prompt_id):
     identifier(prompt_id)
     human = human_uid()
     binding = dict(prompt_id=prompt_id, human_uid=human)
+    claimed_here = False
     try:
         claimed = control_request('claim_prompt', binding)['prompt']
         if claimed['id'] != prompt_id:
             raise ValueError('Prompt claim identity changed')
+        claimed_here = True
         result = create_task(claimed['prompt'])
         result['context']['operation_key'] = prompt_id
         attached = control_request('attach_prompt_task', binding | {
@@ -126,10 +128,12 @@ def create_from_prompt(prompt_id):
         control_request('store_prompt_context', binding | {'managed': result})
         return result
     except BaseException:
-        try:
-            control_request('uncertain_prompt_creation', binding)
-        except (OSError, ValueError, KeyError, TypeError):
-            pass  # Recovery also makes an outstanding claim uncertain on broker restart.
+        if claimed_here:
+            try:
+                control_request('uncertain_prompt_creation', binding)
+            except (OSError, ValueError, KeyError, TypeError):
+                pass  # Recovery also preserves outstanding claims on broker restart.
+        # A denied/lost claim may belong to another creator. Never mutate it.
         raise
 
 
