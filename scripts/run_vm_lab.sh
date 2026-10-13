@@ -206,5 +206,8 @@ if [ "$result" = 0 ]; then
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_launch_admission.py' \
     > "$repo_root/evidence/launch-admission.json"
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_delegated_cgroups.py' \
+    > "$repo_root/evidence/delegated-cgroups.json"
 fi
 exit "$result"
