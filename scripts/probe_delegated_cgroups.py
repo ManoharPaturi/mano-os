@@ -164,6 +164,38 @@ if sys.argv[1:] == ["--inner"]:
         cwd_fd = os.dup(root_fd)
         sequence = 0
 
+        def observe(name, *, contents=False):
+            # Observe as the directory owner in a separate fixed-code process;
+            # the supervisor has no DAC override and keeps its credentials.
+            observation_r, observation_w = os.pipe()
+            observer = os.fork()
+            if observer == 0:
+                try:
+                    for entry in os.listdir("/proc/self/fd"):
+                        fd = int(entry)
+                        if fd not in {0, 1, 2, observation_w}:
+                            try:
+                                os.close(fd)
+                            except OSError:
+                                pass
+                    broker = pwd.getpwnam("mano-broker")
+                    os.setgroups([])
+                    os.setgid(broker.pw_gid)
+                    os.setuid(broker.pw_uid)
+                    value = (
+                        (workspace / name).read_text() if contents else (workspace / name).exists()
+                    )
+                    os.write(observation_w, json.dumps(value).encode())
+                    os._exit(0)
+                except BaseException:
+                    os._exit(125)
+            os.close(observation_w)
+            packet = os.read(observation_r, 4096)
+            os.close(observation_r)
+            _, observer_status = os.waitpid(observer, 0)
+            assert os.waitstatus_to_exitcode(observer_status) == 0
+            return json.loads(packet)
+
         def prepare(source):
             global sequence
             sequence += 1
@@ -202,7 +234,7 @@ if sys.argv[1:] == ["--inner"]:
         normal = prepare(
             "from pathlib import Path;Path('/workspace/started').write_text('1');print(42)"
         )
-        assert normal.state == "prepared" and not (workspace / "started").exists()
+        assert normal.state == "prepared" and not observe("started")
         normal.start(lambda: True)  # Operator fixture authority, not a broker journal grant.
         try:
             normal.start(lambda: True)
@@ -212,7 +244,7 @@ if sys.argv[1:] == ["--inner"]:
             raise AssertionError("Start replay accepted")
         observed = completed(normal)
         assert observed.return_code == 0 and observed.stdout.strip() == b"42", observed.stderr
-        assert (workspace / "started").read_text() == "1"
+        assert observe("started", contents=True) == "1"
         denied = prepare("from pathlib import Path;Path('/workspace/denied').write_text('bad')")
         try:
             denied.start(lambda: False)
@@ -220,7 +252,7 @@ if sys.argv[1:] == ["--inner"]:
             pass
         else:
             raise AssertionError("False start authority accepted")
-        assert denied.state == "not-started" and not (workspace / "denied").exists()
+        assert denied.state == "not-started" and not observe("denied")
         expired = prepare("from pathlib import Path;Path('/workspace/expired').write_text('bad')")
         time.sleep(5.1)
         try:
@@ -229,7 +261,7 @@ if sys.argv[1:] == ["--inner"]:
             pass
         else:
             raise AssertionError("Expired prepared child started")
-        assert expired.state == "not-started" and not (workspace / "expired").exists()
+        assert expired.state == "not-started" and not observe("expired")
         large = prepare("import os;os.write(1,b'x'*65536);os.write(2,b'y'*65536)")
         large.start(lambda: True)
         big = completed(large)
@@ -240,9 +272,9 @@ if sys.argv[1:] == ["--inner"]:
         )
         active.start(lambda: True)
         deadline = time.monotonic() + 5
-        while not (workspace / "active").exists() and time.monotonic() < deadline:
+        while not observe("active") and time.monotonic() < deadline:
             time.sleep(0.01)
-        assert (workspace / "active").exists()
+        assert observe("active")
         active.cancel()
         assert active.state == "unknown" and active.result is None
         before_fds = len(list(Path("/proc/self/fd").iterdir()))
