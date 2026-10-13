@@ -31,6 +31,17 @@ reject action reuse, concurrency overflow and arbitrary PID migration. There is
 no task argv execution or installed production root launch endpoint. Actual
 service/permission/delegation behavior must pass CI before acceptance.
 
+The initial service had SETUID and SETGID in its bounding set but only SETGID in
+its actual permitted/effective sets. The child therefore failed setuid with EPERM.
+Systemd v257 exec-invoke.c lines 5338–5342 drops SETUID on the seccomp-privilege
+setup path unless it is requested ambient. The fixture now requests ambient
+SETUID only, without expanding its bounding set, and asserts the manager's exact
+effective/permitted/bounding SETUID|SETGID and ambient SETUID masks. After the
+credential drop it explicitly lowers inheritable capabilities and requires all
+four child capability sets to be zero while NNP remains set. No SYS_ADMIN,
+SETPCAP, KILL or DAC privilege is added.
+Primary source: https://github.com/systemd/systemd/blob/v257/src/core/exec-invoke.c
+
 Next: connect admitted allocated identities and held FDs to supervised launch,
 one-shot action/start handshake, independent stop/revoke and crash reconciliation.
 The cgroup library alone does not establish journal authority, artifact verification

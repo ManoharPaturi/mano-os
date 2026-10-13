@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real delegated service cgroup custody in the disposable VM, no task argv."""
 
+import ctypes
 import json
 import os
 import shutil
@@ -54,6 +55,13 @@ if sys.argv[1:] == ["--inner"]:
         )
 
     security_state("manager-start")
+    manager_security = dict(
+        line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines()
+    )
+    assert int(manager_security["CapEff"].strip(), 16) == 0xC0
+    assert int(manager_security["CapPrm"].strip(), 16) == 0xC0
+    assert int(manager_security["CapBnd"].strip(), 16) == 0xC0
+    assert int(manager_security["CapAmb"].strip(), 16) == 0x80
     manager = Manager()
     first = manager.create("a" * 32)
     second = manager.create("b" * 32)
@@ -85,7 +93,34 @@ if sys.argv[1:] == ["--inner"]:
         os.setgid(1004)
         security_state("child-after-group-drop")
         os.setuid(1004)
+
+        # UID change clears permitted/effective/ambient, but an inherited bit
+        # may remain. capset can lower our own sets without CAP_SETPCAP.
+        class Header(ctypes.Structure):
+            _fields_ = [("version", ctypes.c_uint32), ("pid", ctypes.c_int)]
+
+        class Data(ctypes.Structure):
+            _fields_ = [
+                ("effective", ctypes.c_uint32),
+                ("permitted", ctypes.c_uint32),
+                ("inheritable", ctypes.c_uint32),
+            ]
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.capset.argtypes = (ctypes.POINTER(Header), ctypes.POINTER(Data))
+        libc.capset.restype = ctypes.c_int
+        header = Header(0x20080522, 0)
+        data = (Data * 2)()
+        assert libc.capset(ctypes.byref(header), data) == 0, ctypes.get_errno()
         security_state("child-after-user-drop")
+        child_security = dict(
+            line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines()
+        )
+        assert all(
+            int(child_security[name].strip(), 16) == 0
+            for name in ("CapEff", "CapPrm", "CapInh", "CapAmb")
+        )
+        assert child_security["NoNewPrivs"].strip() == "1"
         grandchild = os.fork()
         if grandchild == 0:
             os.setsid()
@@ -137,6 +172,8 @@ if sys.argv[1:] == ["--inner"]:
                     arbitrary_pid_denied=True,
                     action_reuse_denied=True,
                     manager_survived=True,
+                    child_capability_sets_zero=True,
+                    manager_capabilities="SETUID|SETGID; ambient SETUID only",
                     no_task_argv_executed=True,
                     model_connected=False,
                 ),
@@ -173,7 +210,7 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 Delegate=cpu memory pids
 NoNewPrivileges=yes
 CapabilityBoundingSet=CAP_SETUID CAP_SETGID
-AmbientCapabilities=
+AmbientCapabilities=CAP_SETUID
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
