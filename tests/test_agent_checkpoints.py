@@ -53,6 +53,7 @@ class PersistentCheckpointTests(unittest.TestCase):
         self.directory.mkdir(mode=0o755)
         with self.assertRaises(ValueError):
             self.open()
+
         self.directory.chmod(0o700)
         target = self.directory / 'other'
         target.write_bytes(b'')
@@ -65,3 +66,14 @@ class PersistentCheckpointTests(unittest.TestCase):
         os.link(target, database)
         with self.assertRaises(ValueError):
             self.open()
+
+    def test_new_directory_clears_inherited_setgid_without_changing_existing_directories(self):
+        parent = self.directory.parent
+        parent.chmod(0o2700)
+        session = self.open()
+        session.close()
+        self.assertEqual(self.directory.stat().st_mode & 0o7777, 0o700)
+        self.directory.chmod(0o2700)
+        with self.assertRaises(ValueError):
+            self.open()
+        self.assertEqual(self.directory.stat().st_mode & 0o7777, 0o2700)

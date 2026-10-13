@@ -21,7 +21,21 @@ class Session:
         folder = Path(directory).absolute()
         if folder.resolve() != folder:
             raise ValueError('Checkpoint directory must have no symlink components')
-        folder.mkdir(mode=0o700, exist_ok=True)
+        try:
+            folder.mkdir(mode=0o700)
+            created = True
+        except FileExistsError:
+            created = False
+        if created:
+            directory_fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+                                   | os.O_CLOEXEC)
+            try:
+                if os.fstat(directory_fd).st_uid != os.geteuid():
+                    raise ValueError('New checkpoint directory changed owner')
+                # Workspace setgid is inherited by mkdir even with a0700 mode.
+                os.fchmod(directory_fd, 0o700)
+            finally:
+                os.close(directory_fd)
         info = folder.lstat()
         if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid()
                 or stat.S_IMODE(info.st_mode) != 0o700):
