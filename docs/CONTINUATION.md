@@ -232,3 +232,13 @@ Actualrootservicefixture usesexplicitlysyntheticoperatorpeer withrealsupervised
 children fordispatcher/state/chunkchecks; no kernelbrokergranttransportclaimed.
 Local81tests10MacLinuxskips pass. No activationlistener/modelendpoint installed.
 Next privateactivation +realpersistentbrokertransport/grantjournal/epoch integration.
+# Activation transport continuation
+
+PR39 mergeda10e3dbf83c088bff95ecbd1512a4c00d4cfac11 after all3currenthead checks
+SUCCESS run38400943127; controllerdispatcher/chunks againstsyntheticoperatorpeer
+passed. Currentfeat/phase1-private-transport addsfixed2listener activationvalidation
+and realpersistentbrokerUID/PID/socketrights/replycredentials servicefixture.
+Admissioncwd pin read-only asfixedbroker EUID in singlethread thenfinallyrootrestore,
+noDACoverride. Tests secondpin whilejobrunning toverifychilddeathflag unaffected.
+Local82tests10MacLinuxskips pass; realtransport proofpending. No productionmodel/
+hostlistener or journalgrant/epoch integration claimed. Allfullversiongates remain.

@@ -13,6 +13,7 @@ import pwd
 import socket
 import stat
 import subprocess
+import threading
 from dataclasses import dataclass
 
 from .ipc import CREDENTIALS, Peer
@@ -112,10 +113,19 @@ def admit(packet, descriptors, *, peer):
     ):
         raise Denied("Workspace owner/group/privacy mismatch")
     args = json.loads(request.args_json)
-    with Workspace(descriptors[0]) as workspace:
-        with workspace.pin(args["cwd"], directory=True) as cwd:
-            if (cwd.device, cwd.inode) != (infos[1].st_dev, infos[1].st_ino):
-                raise Denied("Working directory does not match workspace request")
+    if threading.active_count() != 1:
+        raise Denied("Metadata identity transition requires a single-threaded service")
+    original_uid = os.geteuid()
+    try:
+        # O_PATH still checks directory search permissions. Resolve only as the
+        # fixed broker owner; do not add a global DAC override to the launcher.
+        os.seteuid(broker.pw_uid)
+        with Workspace(descriptors[0]) as workspace:
+            with workspace.pin(args["cwd"], directory=True) as cwd:
+                if (cwd.device, cwd.inode) != (infos[1].st_dev, infos[1].st_ino):
+                    raise Denied("Working directory does not match workspace request")
+    finally:
+        os.seteuid(original_uid)
     return LaunchAdmission(action, account.pw_uid, request, *descriptors, owner=peer)
 
 
