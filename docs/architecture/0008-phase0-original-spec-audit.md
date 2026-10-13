@@ -24,7 +24,7 @@ external security assessment. The audit runs again on this PR's actual guest evi
 | 7 Stop frozen core/input devices | Section3.9 allows trusted TTY. NativeC stopd with systemd watchdog: hung-daemon restart and human ttyS0 trigger kill all active fixture slice descendants, revoke epoch/grants and shut input while core/authority frozen; bounded process storms saturate both task-unit pids limits. Recovery TTY remains usable. Physical evdev is not available; both input paths are hidden from sandbox. |
 | 8 No inherited IPC | Minimal environment, close_fds, unshare-all, synthetic home, default-deny mounts; poisoned session/auth/display environment and inheritable FD negative probes; host runtime/systemd/device/cgroup paths invisible. GUI receives only restricted agent socket; private office bus/AT-SPI and X11 cookie. No human/session/gpg/SSH/PipeWire tree bind. |
 | 9 Snapper restore and terminal rescue | Exact data restore, changed root preserved, distinct boot from @recovery with restored sentinel and separate@snapshots. Authenticated TTY works with frozen core and after both independent stops. Installer/firmware boot is later, not this direct-kernel lab. |
-| 10 Measurements/logs/compatibility | Kernel meminfo, processRSS/HWM, actual cgroup limits, session/app launch observations, screenshots, hashes, package manifest and failure history. Cold physical boot, model cost, product success rate and physical8GB remain unmeasured. |
+| 10 Measurements/logs/compatibility | Kernel meminfo, processRSS/HWM, actual cgroup limits, session launch, separate monotonic Chromium control/page readiness and Writer UNO document readiness timings, screenshots, hashes, package manifest and failure history. Cold physical boot, model cost, product success rate and physical8GB remain unmeasured. |
 
 The audit maps every backlog issue to explicit passing probes, rejects duplicate or
 missing probes, non-audit pending entries, changed/unhashed/off-directory artifacts,
@@ -71,3 +71,9 @@ vCPUs unchanged. No security assertions were skipped to obtain this decision.
 
 Rollback: revert the audit PR to restore Phase0 NO-GO. No installed host service,
 model connection or protected policy is changed by this audit tool.
+
+Measurement follow-up: the initial audit did not require separate app startup
+fields. The audit now rejects that earlier evidence until actual positive finite
+monotonic timings exist on both boot stages and match the resource summary. These
+are fresh-process readiness measurements; OS disk-cache cold start and physical
+startup performance remain unverified. No startup threshold is invented.

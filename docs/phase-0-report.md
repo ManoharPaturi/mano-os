@@ -101,3 +101,9 @@ GO authorizes Phase1 development only; no production model-facing execution exis
 The stronger request-bound OS-auth fallback is explicitly permitted by spec3.8;
 physical provenance stays null, with physical8GB and installer/firmware gates retained.
 Final-head CI determines acceptance, not the local audit against prior evidence.
+
+Measurement follow-up: separate browser/Writer startup latency was missing from
+the initial Phase0 audit. Actual monotonic process-to-control/page/document
+readiness fields are now recorded and required on both boot stages. The stronger
+audit rejects prior evidence lacking these fields. OS cold-cache and physical
+performance remain unmeasured; final-head CI determines acceptance.

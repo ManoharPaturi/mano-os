@@ -142,6 +142,7 @@ def main():
 
     env = dict(os.environ, SAL_USE_VCLPLUGIN="gtk3", SAL_ACCESSIBILITY_ENABLED="1")
     log = (ROOT / "office-process.txt").open("w")
+    launch_started = time.monotonic()
     proc = subprocess.Popen(
         [
             "/usr/bin/libreoffice",
@@ -178,6 +179,7 @@ def main():
             "com.sun.star.frame.Desktop", remote
         )
         document = desktop.loadComponentFromURL("private:factory/swriter", "_blank", 0, ())
+        document_ready_seconds = time.monotonic() - launch_started
         document.Text.String = BEFORE
         document.storeAsURL("file:///workspace/contract.odt", properties(FilterName="writer8"))
         document.Text.String = AFTER
@@ -238,6 +240,12 @@ def main():
         )
         assert AFTER in pdf_text
         report = {
+            "startup": {
+                "process_launch_to_document_ready_seconds": document_ready_seconds,
+                "clock": "monotonic",
+                "cold_start_verified": False,
+                "scope": "fresh isolated Writer process to UNO document readiness",
+            },
             "version": subprocess.check_output(["libreoffice", "--version"], text=True).strip(),
             "backend": "gtk3 Wayland",
             "uno_transport": "task-private pipe",

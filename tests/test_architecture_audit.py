@@ -55,3 +55,32 @@ class AuditIntegrityTests(unittest.TestCase):
             changed.write_text(spec.read_text() + "changed\n")
             with self.assertRaisesRegex(ValueError, "specification changed"):
                 audit(root, changed, adr)
+
+
+class StartupEvidenceTests(unittest.TestCase):
+    def test_missing_invalid_and_misordered_measurements_fail_closed(self):
+        from mano_lab.architecture import validate_startup
+
+        browser = {
+            "clock": "monotonic",
+            "cold_start_verified": False,
+            "process_launch_to_control_ready_seconds": 1.0,
+            "process_launch_to_page_ready_seconds": 2.0,
+        }
+        office = {
+            "clock": "monotonic",
+            "cold_start_verified": False,
+            "process_launch_to_document_ready_seconds": 3.0,
+        }
+        validate_startup(browser, office)
+        for value in (None, 0, -1, float("nan"), float("inf"), True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_startup(
+                    browser, {**office, "process_launch_to_document_ready_seconds": value}
+                )
+        with self.assertRaises(ValueError):
+            validate_startup(None, office)
+        with self.assertRaises(ValueError):
+            validate_startup({**browser, "process_launch_to_page_ready_seconds": 0.5}, office)
+        with self.assertRaises(ValueError):
+            validate_startup(browser, {**office, "cold_start_verified": True})
