@@ -3,6 +3,7 @@
 
 import errno
 import fcntl
+import grp
 import json
 import os
 import pwd
@@ -10,6 +11,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from mano_broker.identities import LOCK, allocate_identity
 from mano_broker.workspaces import BASE, create_workspace
 
 assert os.geteuid() == 0
@@ -18,22 +20,46 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
     "kvm",
     "qemu",
 }
-assert not BASE.exists()
-assert all(
-    name not in {p.pw_name for p in pwd.getpwall()} for name in ("mano-broker", "mano-task-acl-ci")
-)
+assert not BASE.exists() and not LOCK.exists()
+assert "mano-request" not in {g.gr_name for g in grp.getgrall()}
+assert all(name not in {p.pw_name for p in pwd.getpwall()} for name in ("mano-broker",))
 created = []
 fds = []
+created_group = False
 try:
-    for name in ("mano-broker", "mano-task-acl-ci"):
+    subprocess.run(["groupadd", "mano-request"], check=True)
+    created_group = True
+    for name in ("mano-broker",):
         subprocess.run(
             ["useradd", "--no-create-home", "--shell", "/usr/sbin/nologin", name], check=True
         )
         created.append(name)
     broker = pwd.getpwnam("mano-broker")
     human = pwd.getpwnam("mano-human")
-    worker = pwd.getpwnam("mano-worker")
-    other = pwd.getpwnam("mano-task-acl-ci")
+    identities = []
+    for _ in range(2):
+        identity = allocate_identity()
+        identities.append(identity)
+        created.append(identity.name)
+    assert identities[0].uid != identities[1].uid
+    assert identities[0].gid != identities[1].gid
+    worker = pwd.getpwuid(identities[0].uid)
+    other = pwd.getpwuid(identities[1].uid)
+    for identity in identities:
+        assert not Path(pwd.getpwuid(identity.uid).pw_dir).exists()
+    lock = os.open(LOCK, os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        before = {p.pw_name for p in pwd.getpwall()}
+        try:
+            allocate_identity()
+        except BlockingIOError:
+            pass
+        else:
+            raise AssertionError("Concurrent allocation did not fail closed")
+        assert before == {p.pw_name for p in pwd.getpwall()}
+    finally:
+        os.close(lock)
     first, fd = create_workspace(human_uid=human.pw_uid, caller_uid=worker.pw_uid)
     fds.append(fd)
     second, fd2 = create_workspace(human_uid=human.pw_uid, caller_uid=other.pw_uid)
@@ -57,8 +83,9 @@ try:
     for actor, target in (
         ("mano-agent", first),
         ("mano-core", first),
-        ("mano-task-acl-ci", first),
-        ("mano-worker", second),
+        (other.pw_name, first),
+        (worker.pw_name, second),
+        ("mano-worker", first),
     ):
         observed = run(
             actor,
@@ -74,7 +101,7 @@ else:raise AssertionError('cross identity access')
         denials.append(dict(actor=actor, target="other-workspace", errno=errno.EACCES))
 
     run(
-        "mano-worker",
+        worker.pw_name,
         """import os,sys
 from pathlib import Path
 os.umask(0o077)
@@ -108,7 +135,7 @@ from pathlib import Path
 """,
         first,
     )
-    for actor in ("mano-broker", "mano-worker"):
+    for actor in ("mano-broker", worker.pw_name):
         run(
             actor,
             """import sys
@@ -134,6 +161,12 @@ assert (Path(sys.argv[1])/'human.txt').read_text()=='human-output'
             dict(
                 scope="root administrative workspace creation; sandbox executor not integrated",
                 fresh_distinct_workspaces=True,
+                distinct_task_uids_gids=True,
+                task_passwords_locked=True,
+                task_login_disabled=True,
+                no_task_homes=True,
+                only_request_supplementary_group=True,
+                concurrent_allocation_denied=True,
                 descriptor_noninheritable=True,
                 kernel_cross_identity_denials=denials,
                 inherited_broker_human_access=True,
@@ -154,3 +187,6 @@ finally:
         shutil.rmtree(BASE)
     for name in reversed(created):
         subprocess.run(["userdel", name], check=False, capture_output=True)
+    if created_group:
+        subprocess.run(["groupdel", "mano-request"], check=False, capture_output=True)
+    LOCK.unlink(missing_ok=True)
