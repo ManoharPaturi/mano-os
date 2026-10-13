@@ -53,3 +53,18 @@ class TaskFactoryGuards(unittest.TestCase):
             self.assertEqual((workspace / 'preserve').read_bytes(), b'keep')
             with self.assertRaises(OSError):
                 os.fstat(fd)
+
+    def test_uncertain_claim_never_allocates_and_marks_recovery_without_retry(self):
+        from mano_broker.task_factory import create_from_prompt
+
+        with patch('mano_broker.task_factory.os.geteuid', return_value=0), \
+             patch('mano_broker.task_factory.sys.platform', 'linux'), \
+             patch('mano_broker.task_factory.human_uid', return_value=1002), \
+             patch('mano_broker.task_factory.control_request',
+                   side_effect=[TimeoutError('lost claim'), dict(ok=True)]) as control, \
+             patch('mano_broker.task_factory.create_task') as create:
+            with self.assertRaises(TimeoutError):
+                create_from_prompt('a' * 32)
+            create.assert_not_called()
+            self.assertEqual([call.args[0] for call in control.call_args_list],
+                             ['claim_prompt', 'uncertain_prompt_creation'])

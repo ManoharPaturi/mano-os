@@ -555,7 +555,7 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
         body=dict(human_uid=1002, request_key="b" * 32, prompt="forged human"))) == denied
     factory_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
-        input=json.dumps(dict(prompt="Create and test a small addition project")),
+        input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
         capture_output=True, text=True, timeout=25, check=True)
     managed = json.loads(factory_result.stdout)
     assert managed["ok"]
@@ -566,6 +566,15 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     terminal_workspace = Path(managed["workspace"])
     terminal_task = dict(ok=True, task_id=managed["context"]["task_id"],
                          resource_id=managed["context"]["resource_id"])
+    attached_status = human(dict(mode="prompt_status", id=human_receipt["prompt"]["id"]))
+    assert attached_status["prompt"]["state"] == "task_created"
+    assert attached_status["prompt"]["task_id"] == terminal_task["task_id"]
+    duplicate_creation = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+        "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
+        input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
+        capture_output=True, text=True, timeout=5, check=False)
+    assert duplicate_creation.returncode == 1
+    assert json.loads(duplicate_creation.stdout)["ok"] is False
     terminal_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
         resource_id=terminal_task["resource_id"], capability="terminal.run",
         args=dict(argv=["/usr/bin/python3", "-c",
@@ -758,6 +767,8 @@ finally:client.close()
         installed_core_cli_entrypoint=True,
         installed_root_task_factory=True,
         authenticated_native_human_prompt_queue=True,
+        human_prompt_claim_to_actual_task=True,
+        prompt_creation_replay_denied=True,
         prompt_duplicate_and_malformed_cases_verified=True,
         prompt_untrusted_sender_and_public_route_denied=True,
         core_step_cgroup_and_capability_limits_verified=True,

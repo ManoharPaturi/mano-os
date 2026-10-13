@@ -37,6 +37,21 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
             raise Denied("Unexpected prompt status fields")
         result = Prompts(state).status(**body, boot_id=boot_id)
         return dict(schema_version="1.0", ok=True, prompt=result)
+    if value["operation"] == "claim_prompt":
+        if set(body) != {"human_uid", "prompt_id"}:
+            raise Denied("Unexpected prompt claim fields")
+        result = Prompts(state).claim(**body, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, prompt=result)
+    if value["operation"] == "attach_prompt_task":
+        if set(body) != {"human_uid", "prompt_id", "task_id"}:
+            raise Denied("Unexpected prompt attachment fields")
+        result = Prompts(state).attach(**body, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, prompt=result)
+    if value["operation"] == "uncertain_prompt_creation":
+        if set(body) != {"human_uid", "prompt_id"}:
+            raise Denied("Unexpected uncertain prompt fields")
+        result = Prompts(state).uncertain(**body, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, prompt=result)
     if value["operation"] == "declare_artifact_contract":
         if set(body) != {"approval_id", "path", "sha256", "size"}:
             raise Denied("Unexpected expectation fields")

@@ -47,3 +47,58 @@ class Prompts:
         if row is None or type(human_uid) is not int:
             raise Denied('Human prompt unavailable')
         return public(row)
+
+    def claim(self, prompt_id, *, human_uid, boot_id):
+        identifier(prompt_id)
+        if type(human_uid) is not int or human_uid < 1000:
+            raise ValueError('Trusted human identity required')
+        with self.state.transaction():
+            row = self.state.db.execute(
+                'SELECT * FROM human_prompts WHERE id=? AND human_uid=? AND boot_id=?',
+                (prompt_id, human_uid, boot_id)).fetchone()
+            if row is None or row['state'] != 'received' or self.state.meta('latched'):
+                raise Denied('Prompt creation cannot be claimed or retried')
+            self.state.db.execute("UPDATE human_prompts SET state='creating_task' WHERE id=?",
+                                  (prompt_id,))
+            self.state.event(None, 'human-prompt-claimed', dict(prompt_id=prompt_id))
+            return dict(id=prompt_id, prompt=row['prompt'])
+
+    def attach(self, prompt_id, task_id, *, human_uid, boot_id):
+        identifier(prompt_id)
+        identifier(task_id)
+        if type(human_uid) is not int or human_uid < 1000:
+            raise ValueError('Trusted human identity required')
+        with self.state.transaction():
+            row = self.state.db.execute(
+                'SELECT * FROM human_prompts WHERE id=? AND human_uid=? AND boot_id=?',
+                (prompt_id, human_uid, boot_id)).fetchone()
+            task = self.state.db.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
+            if (row is None or row['state'] != 'creating_task' or task is None
+                    or self.state.meta('latched')
+                    or (task['human_uid'], task['boot_id']) != (human_uid, boot_id)):
+                raise Denied('No matching original prompt and provisioned task')
+            if self.state.db.execute('SELECT 1 FROM human_prompts WHERE task_id=?',
+                                     (task_id,)).fetchone():
+                raise Denied('Task already belongs to a prompt')
+            self.state.db.execute("UPDATE human_prompts SET state='task_created',task_id=? "
+                                  "WHERE id=?",
+                                  (task_id, prompt_id))
+            self.state.event(None, 'human-prompt-task-attached', dict(prompt_id=prompt_id,
+                                                                   task_id=task_id))
+            return dict(id=prompt_id, state='task_created', task_id=task_id)
+
+    def uncertain(self, prompt_id, *, human_uid, boot_id):
+        identifier(prompt_id)
+        if type(human_uid) is not int or human_uid < 1000:
+            raise ValueError('Trusted human identity required')
+        with self.state.transaction():
+            row = self.state.db.execute(
+                'SELECT * FROM human_prompts WHERE id=? AND human_uid=? AND boot_id=?',
+                (prompt_id, human_uid, boot_id)).fetchone()
+            if row is None or row['state'] not in {'creating_task', 'unknown_task_creation'}:
+                raise Denied('No uncertain claimed creation')
+            self.state.db.execute("UPDATE human_prompts SET state='unknown_task_creation' "
+                                  "WHERE id=?",
+                                  (prompt_id,))
+            self.state.event(None, 'human-prompt-creation-uncertain', dict(prompt_id=prompt_id))
+            return dict(id=prompt_id, state='unknown_task_creation', task_id=None)
