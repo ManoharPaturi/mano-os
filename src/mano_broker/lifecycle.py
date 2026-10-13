@@ -11,7 +11,7 @@ import sys
 import time
 from pathlib import Path
 
-from mano_protocol.actions import canonical, identifier, text, unique_object
+from mano_protocol.actions import ActionRequest, canonical, identifier, text, unique_object
 
 from .stop_state import snapshot
 from .task_factory import control_request, create_from_prompt, human_uid
@@ -136,6 +136,36 @@ def dispatch_prompt(prompt_id, plan):
     return run_mock_step(managed, plan)
 
 
+def dispatch_next_mock(plan):
+    if os.geteuid() != 0 or sys.platform != 'linux':
+        raise PermissionError('Trusted Linux root operator required')
+    if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
+        raise ValueError('Explicit mock plan required')
+    # Validate the supplied test plan before claiming or allocating anything.
+    ActionRequest.parse(canonical(dict(schema_version='1.0', task_id='0' * 32,
+        resource_id='0' * 32, grant_id='0' * 32, capability='terminal.run',
+        args=plan['args'], reason=plan['reason'], idempotency_key='mock-validation')).encode())
+    before = snapshot()
+    if before.latched:
+        raise ValueError('Native Stop is latched')
+    queued = control_request('pending_prompts', dict(human_uid=human_uid()))['prompts']
+    if not isinstance(queued, list) or len(queued) > 256:
+        raise ValueError('Invalid bounded prompt queue')
+    for receipt in queued:
+        if (not isinstance(receipt, dict) or set(receipt) != {'id', 'state', 'task_id'}
+                or receipt['state'] != 'received' or receipt['task_id'] is not None):
+            raise ValueError('Invalid queued prompt receipt')
+        identifier(receipt['id'])
+    after = snapshot()
+    if after.latched or after.generation != before.generation:
+        raise ValueError('Stop changed during queue discovery')
+    if not queued:
+        return None
+    # Discovery grants nothing. Existing atomic claim permits one winner; a lost
+    # race or uncertain creation propagates without selecting another prompt.
+    return dispatch_prompt(queued[0]['id'], plan)
+
+
 def main(argv=None):
     import argparse
 
@@ -152,10 +182,15 @@ def main(argv=None):
             raise ValueError('Invalid lifecycle packet size')
         value = json.loads(packet.decode('utf8'), object_pairs_hook=unique_object)
         if not isinstance(value, dict) or set(value) not in (
-                {'managed', 'plan'}, {'prompt_id', 'plan'}):
+                {'managed', 'plan'}, {'prompt_id', 'plan'}, {'next_prompt', 'plan'}):
             raise ValueError('Unknown lifecycle fields')
-        task = (dispatch_prompt(value['prompt_id'], value['plan']) if 'prompt_id' in value
-                else run_mock_step(value['managed'], value['plan']))
+        if 'next_prompt' in value:
+            if value['next_prompt'] is not True:
+                raise ValueError('Explicit bounded discovery required')
+            task = dispatch_next_mock(value['plan'])
+        else:
+            task = (dispatch_prompt(value['prompt_id'], value['plan']) if 'prompt_id' in value
+                    else run_mock_step(value['managed'], value['plan']))
         print(canonical(dict(schema_version='1.0', ok=True, task=task)))
         return 0
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
