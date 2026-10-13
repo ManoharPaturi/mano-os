@@ -1,0 +1,8 @@
+[Unit]
+Description=mano unprivileged reasoning processes
+Before=mano-stopd.service
+
+[Slice]
+MemoryMax=512M
+TasksMax=128
+CPUQuota=50%

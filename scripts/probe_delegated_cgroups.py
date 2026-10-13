@@ -36,7 +36,7 @@ STOP_STATE = Path("/var/lib/mano-stopd")
 STOP_NATIVE = Path("/usr/libexec/mano-stopd")
 STOP_POLICY = Path("/etc/mano/human.uid")
 STOP_UNITS = [Path("/etc/systemd/system") / name for name in (
-    "mano-stopd.service", "mano-stopd.socket", "mano-stopd-control.socket"
+    "mano-stopd.service", "mano-stopd.socket", "mano-stopd-control.socket", "mano-core.slice"
 )]
 CODE = Path("/usr/lib/mano-os")
 UNIT_FILE = Path("/etc/systemd/system/mano-launcher.service")

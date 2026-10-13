@@ -44,6 +44,7 @@ UNITS = (
     "mano-stopd.service",
     "mano-stopd.socket",
     "mano-stopd-control.socket",
+    "mano-core.slice",
 )
 assert (
     os.geteuid() == 0 and Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
@@ -632,6 +633,7 @@ finally:client.close()
     def agent_step(state, *, persistent=True):
         result = subprocess.run(["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
             "--unit=mano-agent-step-" + str(time.monotonic_ns()), "--uid=" + identity.name,
+            "--slice=mano-core.slice",
             "--property=MemoryMax=256M", "--property=TasksMax=32", "--property=CPUQuota=50%",
             "--property=RuntimeMaxSec=8", "--property=TimeoutStopSec=1",
             "--property=LimitNOFILE=128", "--property=SystemCallArchitectures=native",
@@ -778,6 +780,27 @@ else:raise AssertionError('task reached native Stop')
     launcher_pid = int(command(
         "systemctl", "show", "mano-launcher.service", "--property=MainPID", "--value"
     ))
+    core_unit = "mano-core-frozen-ci.service"
+    subprocess.run(["systemd-run", "--quiet", "--collect", "--unit=" + core_unit,
+        "--uid=" + identity.name, "--slice=mano-core.slice", "--property=MemoryMax=256M",
+        "--property=TasksMax=32", "--property=NoNewPrivileges=yes",
+        "--property=CapabilityBoundingSet=", "--property=AmbientCapabilities=",
+        "--property=TimeoutStopSec=1", "--property=RuntimeMaxSec=60",
+        "--property=ProtectHome=yes", "--property=ProtectSystem=strict",
+        "/usr/bin/python3", "-c", "import os,time;child=os.fork();"
+        "os.setsid() if child==0 else None;time.sleep(60)"], check=True,
+        capture_output=True, text=True, timeout=5)
+    core_group = Path("/sys/fs/cgroup/mano.slice/mano-core.slice")
+    core_child_group = core_group / core_unit
+    deadline = time.monotonic() + 3
+    core_pids = []
+    while time.monotonic() < deadline:
+        core_pids = [int(pid) for pid in (core_child_group / "cgroup.procs").read_text().split()]
+        if len(core_pids) == 2:
+            break
+        time.sleep(0.05)
+    assert len(core_pids) == 2
+    subprocess.run(["kill", "-STOP", *(str(pid) for pid in core_pids)], check=True)
     subprocess.run(["kill", "-STOP", str(broker_pid), str(launcher_pid)], check=True)
     try:
         subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
@@ -788,13 +811,33 @@ else:raise AssertionError('task reached native Stop')
                and "populated 1" in (group / "cgroup.events").read_text()):
             time.sleep(0.05)
         assert "populated 0" in (group / "cgroup.events").read_text()
+        deadline = time.monotonic() + 3
+
+        def core_exited(pid):
+            try:
+                state_line = next(line for line in Path(f"/proc/{pid}/status").read_text()
+                                  .splitlines() if line.startswith("State:"))
+                return "Z" in state_line
+            except FileNotFoundError:
+                return True
+
+        while time.monotonic() < deadline:
+            if ("populated 0" in (core_group / "cgroup.events").read_text()
+                    and all(core_exited(pid) for pid in core_pids)):
+                break
+            time.sleep(0.05)
+        assert "populated 0" in (core_group / "cgroup.events").read_text()
+        assert all(core_exited(pid) for pid in core_pids)
         assert (STOP_STATE / "state").read_text() == "v1:1:latched\n"
         for frozen in (broker_pid, launcher_pid):
             assert "T" in next(line for line in Path(f"/proc/{frozen}/status").read_text()
                                .splitlines() if line.startswith("State:"))
     finally:
         subprocess.run(["kill", "-CONT", str(broker_pid), str(launcher_pid)], check=False)
+        subprocess.run(["systemctl", "stop", core_unit], check=False, capture_output=True,
+                       timeout=3)
     terminal_report["native_stop_broker_and_launcher_frozen"] = True
+    terminal_report["native_stop_frozen_core_and_detached_child_drained"] = True
     terminal_report["native_stop_capabilities_zero"] = True
     terminal_report["native_stop_task_cgroup_drained"] = True
     terminal_report["native_stop_latch_written"] = True

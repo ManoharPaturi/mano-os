@@ -26,6 +26,7 @@
 #define CONTROL_SOCKET "/run/mano-stopd/control.sock"
 #define STATE_DIR "/var/lib/mano-stopd"
 #define GROUP "/sys/fs/cgroup/system.slice/mano-launcher.service"
+#define CORE_GROUP "/sys/fs/cgroup/mano.slice/mano-core.slice"
 static bool expected_fd(int fd, const char *path) {
     struct sockaddr_un address={0};socklen_t size=sizeof(address);int type=0,accepting=0,cred=0;
     socklen_t length=sizeof(int);
@@ -195,6 +196,25 @@ static bool task_groups(bool killing) {
     }
     closedir(directory);return okay;
 }
+static bool core_group(bool killing) {
+    int fd=open(CORE_GROUP,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+    if (fd<0) return errno==ENOENT;
+    struct stat st;struct statfs filesystem;
+    if (fstat(fd,&st) || st.st_uid!=0 || (st.st_mode&022) ||
+        fstatfs(fd,&filesystem) || filesystem.f_type!=CGROUP2_SUPER_MAGIC) {
+        close(fd);return false;
+    }
+    int flags=(killing?O_WRONLY:O_RDONLY)|O_NOFOLLOW|O_CLOEXEC;
+    int control=openat(fd,killing?"cgroup.kill":"cgroup.events",flags);close(fd);
+    if (control<0) return false;
+    bool okay;
+    if (killing) okay=write(control,"1",1)==1;
+    else {
+        char values[128]={0};ssize_t n=read(control,values,sizeof(values)-1);
+        okay=n>0 && strstr(values,"populated 0\n") && !strstr(values,"populated 1\n");
+    }
+    close(control);return okay;
+}
 static unsigned long long decode_generation(const unsigned char *data) {
     unsigned long long value=0;
     for (unsigned i=0;i<8;i++) value=(value<<8)|data[i];
@@ -231,7 +251,8 @@ int main(int argc,char **argv) {
             if (!channel && valid && size==1 && packet[0]=='S') {
                 issued=false;explicit_bzero(challenge,sizeof(challenge));
                 durable=latch(directory);bool killed=task_groups(true);
-                okay=durable && killed;response=okay?"stopped":"denied";
+                bool core_killed=core_group(true);
+                okay=durable && killed && core_killed;response=okay?"stopped":"denied";
             } else if (channel && valid) {
                 unsigned long long generation=0;bool stopped=false,legacy=false;
                 if (read_state(directory,"state",&generation,&stopped,&legacy) && stopped && !legacy) {
@@ -258,7 +279,8 @@ int main(int argc,char **argv) {
                             generation==bound && decode_generation(packet+1)==bound &&
                             !memcmp(packet+9,challenge,sizeof(challenge));
                         issued=false;explicit_bzero(challenge,sizeof(challenge));
-                        if (matches && task_groups(false) && generation<(unsigned long long)LLONG_MAX) {
+                        if (matches && task_groups(false) && core_group(false) &&
+                            generation<(unsigned long long)LLONG_MAX) {
                             durable=publish(directory,generation+1,false,false);
                             if (durable) {
                                 char reply[128];int n=snprintf(reply,sizeof(reply),
