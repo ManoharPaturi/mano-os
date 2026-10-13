@@ -34,12 +34,15 @@ ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectClock=yes
-RestrictSUIDSGID=yes
+# systemd v257's RestrictSUIDSGID blocks openat2 with ENOSYS. Broker opens
+# targets only with fixed O_PATH flags; forbid identity/owner/mode mutation,
+# retaining NNP/capability-zero and the rest of the service syscall filter.
 RestrictRealtime=yes
 RestrictNamespaces=yes
 RestrictAddressFamilies=AF_UNIX
 SystemCallArchitectures=native
-SystemCallFilter=@system-service
+SystemCallFilter=@system-service openat2
+SystemCallFilter=~@setuid @chown chmod fchmod fchmodat fchmodat2
 SystemCallErrorNumber=EPERM
 LockPersonality=yes
 MemoryDenyWriteExecute=yes

@@ -39,3 +39,13 @@ Next: controlled workspace provisioner/job UID/DAC/ACL policy, actual sandbox/cg
 seccomp/Landlock executor using held descriptors and live stop leases, independent
 verifier/prompt/minimalmodelLangGraph and originalPhase1goldenOSgate. Full original
 v2.1 later physical/installer/release requirements remain active.
+
+Compatibility evidence: the live pin denial logged errno38 (ENOSYS). systemd v257
+seccomp_restrict_suid_sgid applies an unconditional openat2 ENOSYS filter because
+open_how flags are indirect. Broker replaces that setting with explicit credential/
+chown/chmod syscall denials while retaining NNP,zero capabilities and the service
+allowlist. openat2 is used only by root-installed fixed O_PATH resolver; no creation
+flags are supplied by clients. PAM helper keeps RestrictSUIDSGID. New CI must verify
+actual descriptor pins plus identity/ownership/mode mutation denials.
+Primary source: https://github.com/systemd/systemd/blob/v257/src/shared/seccomp-util.c
+(seccomp_restrict_sxid/openat2 and seccomp_restrict_suid_sgid).
