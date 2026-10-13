@@ -6,7 +6,7 @@ import sqlite3
 import stat
 from pathlib import Path
 
-from mano_broker.protocol import canonical, identifier, text
+from mano_protocol.actions import canonical, identifier, text
 
 from .runtime import AgentRuntime
 

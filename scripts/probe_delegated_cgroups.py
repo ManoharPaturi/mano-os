@@ -708,6 +708,11 @@ try:
         CODE / "mano_lab",
         ignore=shutil.ignore_patterns("__pycache__"),
     )
+    shutil.copytree(
+        "/opt/mano-lab/src/mano_protocol",
+        CODE / "mano_protocol",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
     shutil.copyfile(__file__, CODE / "probe.py")
     for file in CODE.rglob("*.py"):
         file.chmod(0o444)
