@@ -214,3 +214,12 @@ caps added. Currentfeat/phase1-credential-drop sharesrestrictedtaskidentityvalid
 and own-child/cgroup credentialhelper withNNP/capclear/PDEATHSIG afterUIDdrop and
 PPid recheck. Fixtureusesfreshallocatedidentity instead offixedworker1004.
 Local78tests10MacLinuxskips pass; realhelperVMproofpending. No processlaunchendpoint.
+# Supervised child continuation
+
+PR37 mergedc7fff122fd286264fab1592ccece58495b7420df after all3currenthead checks
+SUCCESS run38368015498. ActualfreshUID1005drop/zero4capsets/NNP/PDEATHSIGconfigured/
+detachedcgroupkill/cleanup allpassed. Currentfeat/phase1-supervised-child adds
+one-shotblockedRootchild/cgroupplacement/drop/READY/authority-start/reportdrain/
+cancelunknown lifecycle library. Actualoperatorargvexec fixture pendingCI;
+operatorcallback authority ONLY, notbrokergrant/epoch integration. Local78tests
+10MacLinuxskips/Ruffpass. No productionlistener/modelendpoint orverifiedeffects.
