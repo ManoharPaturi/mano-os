@@ -833,7 +833,7 @@ else:raise AssertionError('task reached native Stop')
                 state_line = next(line for line in Path(f"/proc/{pid}/status").read_text()
                                   .splitlines() if line.startswith("State:"))
                 return "Z" in state_line
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 return True
 
         while time.monotonic() < deadline:
