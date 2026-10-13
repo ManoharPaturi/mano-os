@@ -143,6 +143,15 @@ def observe(phase):
     sys.path.insert(0, "/opt/mano-lab/src")
     from mano_lab.processes import exited_or_zombie
 
+    def task_diagnostic(pid):
+        try:
+            lines = Path(f"/proc/{pid}/status").read_text().splitlines()
+            return {key: value.strip() for key, value in
+                    (line.split(":", 1) for line in lines if ":" in line)
+                    if key in {"State", "Uid", "PPid"}}
+        except (FileNotFoundError, ProcessLookupError):
+            return {"state": "exited"}
+
     before = json.loads((BASE / f"{phase}-before.json").read_text())
     group = Path(before["cgroup"])
     deadline = time.monotonic() + 15
@@ -151,7 +160,8 @@ def observe(phase):
             (group / "cgroup.events").read_text() if (group / "cgroup.events").is_file() else None
         )
         empty = not group.exists() or (events is not None and "populated 0" in events)
-        if empty and Path("/var/lib/mano-broker/stop-latched").exists():
+        surviving = [pid for pid in before["task_pids"] if not exited_or_zombie(pid)]
+        if empty and not surviving and Path("/var/lib/mano-broker/stop-latched").exists():
             break
         if time.monotonic() > deadline:
             diagnostic = {
@@ -159,6 +169,8 @@ def observe(phase):
                 "events": events,
                 "latched": Path("/var/lib/mano-broker/stop-latched").exists(),
                 "epoch": Path("/var/lib/mano-broker/grant-epoch").read_text(),
+                "surviving_pids": surviving,
+                "surviving_pid_status": {str(pid): task_diagnostic(pid) for pid in surviving},
                 "unit": run(
                     [
                         "systemctl",
