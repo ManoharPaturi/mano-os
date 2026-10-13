@@ -1,5 +1,7 @@
 """Fixed-path, non-root, systemd socket-activated request service."""
 
+import ctypes
+import errno
 import os
 import selectors
 import socket
@@ -81,7 +83,28 @@ def notify(message):
         channel.sendto(message.encode(), address)
 
 
+def verify_mutation_filters():
+    """Fail closed unless the actual process filter blocks mode/owner/UID changes."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    checks = (
+        ("fchmod", (ctypes.c_int, ctypes.c_uint), (-1, 0o600)),
+        ("fchown", (ctypes.c_int, ctypes.c_uint, ctypes.c_uint), (-1, -1, -1)),
+        ("setresuid", (ctypes.c_uint, ctypes.c_uint, ctypes.c_uint), (-1, -1, -1)),
+    )
+    for name, types, args in checks:
+        function = getattr(libc, name)
+        function.argtypes = types
+        function.restype = ctypes.c_int
+        ctypes.set_errno(0)
+        result = function(*args)
+        if result != -1 or ctypes.get_errno() != errno.EPERM:
+            raise RuntimeError("Required broker mutation filter absent: " + name)
+    # Invalid FDs and no-change UID arguments ensure probes mutate no state.
+    print('{"event":"broker-mutation-filters-verified","count":3}', file=sys.stderr, flush=True)
+
+
 def run(listeners, state, boot_id):
+    verify_mutation_filters()
     runtime = Runtime(state, boot_id=boot_id)
     # Independent admission budgets; give protected control priority when both ready.
     budgets = {name: Admission(time.monotonic()) for name in listeners}

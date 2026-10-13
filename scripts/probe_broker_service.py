@@ -262,6 +262,9 @@ try:
     provision = rpc("provision", envelope, actor="root", directory=WORK)
     assert provision["ok"]
     pid = ready()
+    assert "broker-mutation-filters-verified" in command(
+        "journalctl", "-u", "mano-broker.service", "--no-pager"
+    )
     fields = dict(
         line.split(":", 1)
         for line in Path(f"/proc/{pid}/status").read_text().splitlines()
@@ -526,6 +529,7 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
                 native_pam=native_report,
                 real_root_fd_provisioned=True,
                 prepared_target_fd_verified=True,
+                mutation_syscalls_kernel_denied=True,
                 root_control_reply_credentials_verified=True,
                 confirmation_binding_denials=4,
                 target_inode_retained_after_replacement=True,
