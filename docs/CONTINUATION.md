@@ -445,6 +445,22 @@ mustdrainreplacement. ReadonlyactualjournalRootBrokerUIDobserver checksoldgrant
 revoked1/nativegeneration6. No productionpolicychanges.108tests12MacLinuxskips
 pass; actualVMacceptancepending. Runtime51fixtureendsnativeg9latched.
 
+# Sealed artifact custody draft
+
+PR51merged5bf1cf1e79cc3e727354f97ae6c024edc1ebd3cb afterhead1045ca0/all3PASS
+38441579346/artifact11837010507 expiry61sec/populateddeny/drainedrearm/replacement
+launcherdrain/actualoldgrantrevokedjournalproof TRUE. outputs/broker-service.json
+updated. Postmain50 38441132329 all3SUCCESS verified.
+Currentfeat/phase1-sealed-artifacts adds Native mano_read_pinned heldO_PATHregular
+fd→ownprocFD reopen/read-only/nonblock/CLOEXEC/sameinode-dev/singlelink, no submitted
+path. PythonPinned.read_fd usesprotectedRootDSO, Store.capture requiresdone/current
+boot/liveboundresource andrelativepin. Copy<=8MiB max8objects memfdCLOEXEC/ALLOWSEAL,
+sourcebefore-aftermeta/sizecheck, all4sealsverify, hashAFTERseal, exactmetadataIDs.
+No record_verification/publicretrieve/persistence/brokerfilter proofyet; effectFalse.
+111localtests15MacLinuxskips/Ruff/shell/diffpass. ActualLinuxseal tests quality and
+actualinstalled-launcherVM taskoutput/nativepin/capture/source-mutation-isolation/
+write+truncateEPERM expected. VMoperatorbrokerproxy, notproductionbrokerfilter;
+acceptancepending. Neednext durablecustody/outcomechecks; originalfullscopeactive.
 # Watchdog drain observer fix
 
 Post-main51 CI38443276815 FAILED P0watchdogobserver afterpopulated0/latch:
@@ -454,3 +470,8 @@ cgroupempty/latch withinUNCHANGED15secs beforebreak; survivorassertionsretained.
 TimeoutState/Uid/PPid diagnostics added, no args/passwords; permissionerrorsfail.
 Local108tests12MacLinuxskips/Ruff/diffpass, actualwatchdogVMpending.
 PR52sealed-artifacts branchcommittede07ae56 preserved; no stashneeded/nonecreated.
+
+PR53 merged42ba32903b8b84e140726200c5a453f31b723fe8 afterheada06314f/all3PASS
+38444304133/artifact11837358440. Watchdogacceptedpop0/allpidexit-Z/core+authority
+stillT/pulseStopped/inputrevoke/6actorDenials/restart1; originalpost51 precisecause
+unknown. PR52 refreshesmain; docappendconflictpreservesbothnotes, no sourceconflict.
