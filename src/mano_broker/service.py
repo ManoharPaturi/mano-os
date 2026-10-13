@@ -120,6 +120,7 @@ def run(listeners, state, boot_id):
 
 
 def serve_loop(selector, budgets, state, runtime, boot_id):
+    next_tick = time.monotonic()
     while True:
         notify("WATCHDOG=1")
         events = sorted(selector.select(0.5), key=lambda item: item[0].data != "control")
@@ -137,7 +138,10 @@ def serve_loop(selector, budgets, state, runtime, boot_id):
                     else:
                         serve_runtime(runtime, connection)
         notify("WATCHDOG=1")
-        runtime.tick()
+        now = time.monotonic()
+        if now >= next_tick:
+            next_tick = now + 0.5
+            runtime.tick()  # Request bursts cannot turn into launcher polling bursts.
 
 
 def main():
