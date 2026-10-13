@@ -107,11 +107,12 @@ class DurableExecutorTests(unittest.TestCase):
         self.assertEqual(self.status(), 'unknown')
         self.assertEqual(self.client.exchange.call_args.args[1]['operation'], 'cancel')
 
-    def test_lower_budget_has_no_private_effect(self):
+    def test_lower_budget_is_sent_without_exceeding_approved_limits(self):
         self.state.db.execute('UPDATE grants SET budget_json=?',
-            (canonical(dict(memory_bytes=64 * 1024**2, pids=16, cpu_percent=20,
+            (canonical(dict(memory_bytes=64 * 1024**2, pids=16, cpu_percent=10,
                             max_timeout_seconds=10)),))
-        with self.assertRaises(Denied):
-            self.executor.launch(self.action)
-        self.client.exchange.assert_not_called()
-        self.assertEqual(self.status(), 'failed')
+        self.executor.launch(self.action)
+        call = self.client.exchange.call_args_list[0]
+        self.assertEqual(call.args[1]['body']['limits'],
+                         dict(memory_bytes=64 * 1024**2, pids=16, cpu_percent=10))
+        self.assertEqual(self.status(), 'executing')

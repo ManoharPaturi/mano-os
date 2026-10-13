@@ -10,6 +10,7 @@ import sys
 import time
 from pathlib import Path
 
+from .limits import Limits
 from .protocol import identifier
 from .state import Denied
 
@@ -108,8 +109,13 @@ class Manager:
         write(control / "pids.max", "8")
         write(control / "cpu.max", "20000 100000")
 
-    def create(self, action_id):
+    def create(self, action_id, limits=None):
         context(initialized=True)
+        if limits is None:
+            limits = Limits()
+        if not isinstance(limits, Limits):
+            raise Denied("Typed kernel limits required")
+        limits = Limits.parse(limits.body())
         identifier(action_id)
         if self.closed or len(self.jobs) >= 2 or len(self.seen) >= 64 or action_id in self.seen:
             raise Denied("Task group quota or one-shot action exhausted")
@@ -117,10 +123,16 @@ class Manager:
         task = TaskGroup(self, action_id)
         task.path.mkdir(mode=0o700)
         try:
-            write(task.path / "memory.max", str(128 * 1024 * 1024))
+            write(task.path / "memory.max", str(limits.memory_bytes))
             write(task.path / "memory.oom.group", "1")
-            write(task.path / "pids.max", "24")
-            write(task.path / "cpu.max", "20000 100000")
+            write(task.path / "pids.max", str(limits.pids))
+            write(task.path / "cpu.max", str(limits.cpu_percent * 1000) + " 100000")
+            memory = int((task.path / "memory.max").read_text())
+            pids = int((task.path / "pids.max").read_text())
+            quota, period = map(int, (task.path / "cpu.max").read_text().split())
+            if (not 0 <= memory <= limits.memory_bytes or pids != limits.pids
+                    or period != 100000 or not 0 < quota <= limits.cpu_percent * 1000):
+                raise Denied("Kernel limits exceed approved resource ceilings")
         except BaseException:
             task.path.rmdir()  # Only the fresh empty cgroup, never a user path.
             raise

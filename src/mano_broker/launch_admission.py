@@ -17,6 +17,7 @@ import threading
 from dataclasses import dataclass
 
 from .ipc import CREDENTIALS, Peer
+from .limits import Limits
 from .protocol import MAX_PACKET, ActionRequest, Capability, canonical, identifier, unique_object
 from .resources import Workspace
 from .state import Denied
@@ -30,6 +31,7 @@ class LaunchAdmission:
     workspace_fd: int
     cwd_fd: int
     owner: Peer | None = None
+    limits: Limits = Limits()
 
     def close(self):
         for name in ("workspace_fd", "cwd_fd"):
@@ -89,8 +91,10 @@ def admit(packet, descriptors, *, peer):
     ):
         raise Denied("Unknown launch envelope")
     body = envelope["body"]
-    if set(body) != {"action_id", "caller_uid", "request"}:
+    required = {"action_id", "caller_uid", "request"}
+    if set(body) not in (required, required | {"limits"}):
         raise Denied("Unknown launch fields")
+    limits = Limits.parse(body["limits"]) if "limits" in body else Limits()
     action = identifier(body["action_id"])
     account = task_account(body["caller_uid"])
     request = ActionRequest.parse(canonical(body["request"]).encode())
@@ -126,7 +130,7 @@ def admit(packet, descriptors, *, peer):
                     raise Denied("Working directory does not match workspace request")
     finally:
         os.seteuid(original_uid)
-    return LaunchAdmission(action, account.pw_uid, request, *descriptors, owner=peer)
+    return LaunchAdmission(action, account.pw_uid, request, *descriptors, owner=peer, limits=limits)
 
 
 def receive(connection):

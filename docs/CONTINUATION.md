@@ -331,3 +331,17 @@ servicehealthy. Sourcepoll2controlRPCs/0.01secs exceedsfixed10/secbudget. Fixpro
 0.25sec(<=8/sec), SAME5secdeadline/bothRootfinish+journaldone. Broker service now
 pacesRuntime.tick>=0.5sec independentofrequestbursts; Root10/secbudgetunchanged.
 Rootrate-deniedevent added withoutarguments. Resource-limitsWIPstashed.
+
+# Approved limits draft continuation
+
+Currentfeat/phase1-grant-resource-limits changes trustedLimits frozen3ints;
+Executor derivesmin(grant,128MiB24pids20CPU) into privatepreparebodylimits.
+RootAdmission strictoptionaltypedlimits (legacyoperatorfixtures defaultceilings),
+ChildpassesLimits toManager.create, writes/readbackchecksactualkernel ceilings
+BEFOREattach/drop. Tinypositivebudgets canOOM/fail but cannotexceedgrant.
+VMsecondgroup actual64MiB16pids10CPU exactreadback; actualjournalwire fixture
+now64MiB16pids10CPU andmustcomplete/Stopcancel. Tests98/12LinuxMacskipspass,
+realenforcementpending. No publiclimits/pathfield or extraRootcapability.
+PR44latestpollpacingfix5163264 andPR45merges8b49b2d pushed; freshCIpending.
+Prior45run38410592981 failedSAMEcontrolECONNRESET inlaterdaemonprobe, no actual
+PAMfailure inferred. Rootbudgetunchanged, probe0.25sec/BrokerTick0.5sec.

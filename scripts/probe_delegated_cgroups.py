@@ -22,6 +22,7 @@ from mano_broker.launch_admission import LaunchAdmission
 from mano_broker.launch_client import Client
 from mano_broker.launch_controller import Controller, serve_control, serve_prepare
 from mano_broker.launch_transport import PATHS, activated_listeners
+from mano_broker.limits import Limits
 from mano_broker.protocol import ActionRequest, Capability, Mode, canonical
 from mano_broker.registry import Registry
 from mano_broker.resources import LIBRARY
@@ -87,7 +88,10 @@ if sys.argv[1:] == ["--inner"]:
     account = json.loads((STATE / "identity.json").read_text())
     manager = Manager()
     first = manager.create("a" * 32)
-    second = manager.create("b" * 32)
+    second = manager.create("b" * 32, Limits(64 * 1024**2, 16, 10))
+    assert (second.path / "memory.max").read_text().strip() == "67108864"
+    assert (second.path / "pids.max").read_text().strip() == "16"
+    assert (second.path / "cpu.max").read_text().strip() == "10000 100000"
     try:
         manager.create("c" * 32)
     except Denied:
@@ -467,8 +471,8 @@ if sys.argv[1:] == ["--inner"]:
                                 timeout_seconds=10)
                     grant = journal.issue_grant(task_id, approved_human_uid=1002,
                         approved_args=args, capability=Capability.RUN, resource_id=resource_id,
-                        expires=time.monotonic() + 30, max_count=1, memory_bytes=128 * 1024**2,
-                        pids=24, cpu_percent=20, max_timeout_seconds=10)
+                        expires=time.monotonic() + 30, max_count=1, memory_bytes=64 * 1024**2,
+                        pids=16, cpu_percent=10, max_timeout_seconds=10)
                     request = ActionRequest.parse(canonical(dict(schema_version="1.0",
                         task_id=task_id, resource_id=resource_id, grant_id=grant,
                         capability="terminal.run", args=args, idempotency_key=key,
@@ -589,6 +593,7 @@ if sys.argv[1:] == ["--inner"]:
                         real_persistent_broker_transport=True,
                         production_client_transport=True,
                         durable_journal_executor=True,
+                        lower_grant_kernel_limits=True,
                         journal_stop_cancels_unknown=True,
                         executor_pam_authorization=False,
                         reply_creator_and_message_credentials=True,

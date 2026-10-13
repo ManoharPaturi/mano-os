@@ -25,7 +25,7 @@ class Child:
         if request.capability != Capability.RUN:
             raise Denied("Supervised terminal request required")
         self.timeout = json.loads(request.args_json)["timeout_seconds"]
-        self.group = manager.create(admission.action_id)
+        self.group = manager.create(admission.action_id, admission.limits)
         self.started = False
         self.closed = False
         self.state = "preparing"
