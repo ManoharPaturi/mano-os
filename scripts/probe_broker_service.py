@@ -788,6 +788,124 @@ finally:
         fresh_pam_terminal_after_rearm=True, native_stop_generation=6)
 
 
+    grant_observer = """import sqlite3,sys
+s=sqlite3.connect('file:/var/lib/mano-broker/runtime/state.sqlite3?mode=ro',uri=True)
+assert s.execute('SELECT revoked FROM grants WHERE id=?',(sys.argv[1],)).fetchone()[0]==1
+assert s.execute("SELECT value FROM meta WHERE key='native_generation'").fetchone()[0]==6
+s.close()
+"""
+    subprocess.run(["/usr/sbin/runuser", "-u", "mano-broker", "--", "python3", "-c",
+        grant_observer, terminal_grant["grant_id"]], check=True, capture_output=True,
+        text=True, timeout=5)
+    stop_pid = int(command("systemctl", "show", "mano-stopd.service",
+                           "--property=MainPID", "--value"))
+    subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
+        stop_client, "S", "stopped", str(stop_pid)], check=True, capture_output=True,
+        text=True, timeout=5)
+    assert (STOP_STATE / "state").read_text() == "v1:7:latched\n"
+    expired_view = human(dict(mode="rearm_view"))["view"]
+    time.sleep(61)  # Real monotonic expiry; no configurable shortcut or clock spoof.
+    assert human(dict(mode="rearm_confirm", view=expired_view, password=password)) == {"ok": False}
+    assert (STOP_STATE / "state").read_text() == "v1:7:latched\n"
+    subprocess.run(["systemctl", "start", "mano-launcher.service"], check=True)
+    # Trusted operator fault injection only: emulate an undrained task leaf.
+    # Production Controller still forbids preparing while the native latch is set.
+    injected = Path("/sys/fs/cgroup/system.slice/mano-launcher.service/task-" + "c"*32)
+    assert not injected.exists()
+    injected.mkdir(mode=0o700)
+    (injected / "memory.max").write_text(str(64*1024**2))
+    (injected / "pids.max").write_text("4")
+    (injected / "cpu.max").write_text("10000 100000")
+    gate_r, gate_w = os.pipe()
+    sleeper = os.fork()
+    if sleeper == 0:
+        try:
+            os.close(gate_w)
+            if os.read(gate_r, 1) != b'g':
+                os._exit(125)
+            os.close(gate_r)
+            os.setgroups([])
+            os.setgid(identity.gid)
+            os.setuid(identity.uid)
+            time.sleep(30)
+            os._exit(0)
+        except BaseException:
+            os._exit(125)  # Never enter the operator parent's cleanup from this child.
+
+    os.close(gate_r)
+    try:
+        (injected / "cgroup.procs").write_text(str(sleeper))
+        os.write(gate_w, b'g')
+        os.close(gate_w)
+        gate_w = -1
+        assert "populated 1" in (injected / "cgroup.events").read_text()
+        undrained_view = human(dict(mode="rearm_view"))["view"]
+        assert human(dict(mode="rearm_confirm", view=undrained_view, password=password)) == {
+            "ok": False
+        }
+        assert (STOP_STATE / "state").read_text() == "v1:7:latched\n"
+    finally:
+        if gate_w >= 0:
+            os.close(gate_w)
+        (injected / "cgroup.kill").write_text("1")
+        os.waitpid(sleeper, 0)
+        assert "populated 0" in (injected / "cgroup.events").read_text()
+        injected.rmdir()
+    drained_view = human(dict(mode="rearm_view"))["view"]
+    assert human(dict(mode="rearm_confirm", view=drained_view, password=password))["rearmed"]
+    assert (STOP_STATE / "state").read_text() == "v1:8:armed\n"
+    original_launcher = int(command("systemctl", "show", "mano-launcher.service",
+                                    "--property=MainPID", "--value"))
+    subprocess.run(["systemctl", "restart", "mano-launcher.service"], check=True)
+    replacement_launcher = int(command("systemctl", "show", "mano-launcher.service",
+                                       "--property=MainPID", "--value"))
+    assert replacement_launcher and replacement_launcher != original_launcher
+    # Broker transport pins launcher process identity; explicit broker recovery
+    # must renew that identity and require new provisioning and fresh approval.
+    previous_broker = ready()
+    subprocess.run(["systemctl", "restart", "mano-broker.service"], check=True)
+    ready(previous_broker)
+    replaced_task = rpc("provision", dict(schema_version="1.0", operation="provision_task",
+        body=dict(human_uid=1002, caller_uid=identity.uid, mode="supervised",
+                  classification="internal")), actor="root", directory=terminal_workspace)
+    replaced_proposal = terminal_proposal | dict(task_id=replaced_task["task_id"],
+        resource_id=replaced_task["resource_id"], idempotency_key="replacement-stop", args=dict(
+            argv=["/usr/bin/python3", "-c", "import time;from pathlib import Path;"
+                  "Path('/workspace/replacement-ready').write_text('ready');time.sleep(60)"],
+            cwd=".", timeout_seconds=60))
+    replaced_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=replaced_proposal), actor=identity.name)["approval"]
+    replaced_view = human(dict(mode="view", id=replaced_pending["approval_id"]))["view"]
+    replaced_grant = human(dict(mode="confirm", view=replaced_view, password=password))
+    assert replaced_grant["ok"]
+    replaced_action = rpc("request", dict(schema_version="1.0", operation="propose",
+        body=replaced_proposal | {"grant_id": replaced_grant["grant_id"]}), actor=identity.name)
+    replaced_group = Path("/sys/fs/cgroup/system.slice/mano-launcher.service/task-" +
+                          replaced_action["action"]["id"])
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not (terminal_workspace / "replacement-ready").exists():
+        time.sleep(0.1)
+    assert (terminal_workspace / "replacement-ready").read_text() == "ready"
+    assert int(command("systemctl", "show", "mano-stopd.service",
+                       "--property=MainPID", "--value")) == stop_pid
+    subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
+        stop_client, "S", "stopped", str(stop_pid)], check=True, capture_output=True,
+        text=True, timeout=5)
+    deadline = time.monotonic() + 3
+    replacement_drained = False
+    while time.monotonic() < deadline:
+        try:
+            replacement_drained = "populated 0" in (replaced_group / "cgroup.events").read_text()
+        except FileNotFoundError:
+            replacement_drained = True  # Root controller removed its empty completed group.
+        if replacement_drained:
+            break
+        time.sleep(0.05)
+    assert replacement_drained
+    terminal_report.update(rearm_expired_denied=True, rearm_populated_group_denied=True,
+        old_grant_journal_revocation_observed=True,
+        rearm_after_drain=True, native_stop_replacement_launcher_drained=True,
+        native_stop_generation=9)
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
