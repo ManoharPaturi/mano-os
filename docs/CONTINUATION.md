@@ -444,3 +444,13 @@ NativePIDunchanged, explicitbrokertransportrestart/newprovision/newPAMtask, Stop
 mustdrainreplacement. ReadonlyactualjournalRootBrokerUIDobserver checksoldgrant
 revoked1/nativegeneration6. No productionpolicychanges.108tests12MacLinuxskips
 pass; actualVMacceptancepending. Runtime51fixtureendsnativeg9latched.
+
+# Watchdog drain observer fix
+
+Post-main51 CI38443276815 FAILED P0watchdogobserver afterpopulated0/latch:
+Task1530 exited_or_zombieFalse. Preciseoldprocessstate/identityunknown, notignored.
+Currentfix/stop-process-drain-observer requiresALLoriginalPIDs exit/Z PLUSsame
+cgroupempty/latch withinUNCHANGED15secs beforebreak; survivorassertionsretained.
+TimeoutState/Uid/PPid diagnostics added, no args/passwords; permissionerrorsfail.
+Local108tests12MacLinuxskips/Ruff/diffpass, actualwatchdogVMpending.
+PR52sealed-artifacts branchcommittede07ae56 preserved; no stashneeded/nonecreated.
