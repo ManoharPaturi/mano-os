@@ -140,3 +140,12 @@ Linux workspace evidence is pending CI; do not claim its gate passed yet.
 Continue with task UID allocation and actual sandbox/executor after acceptance.
 Full original version goal remains active. Physical gates remain unmeasured.
 Disk 14 GiB free / 94 percent used; no local VM images or model downloads.
+# Task identity continuation
+
+PR30 merged at 33d71f0f8a9c2b98ad5e74d641e92bd02ae92676 after all three
+current-head checks passed, run38353159570. Actual workspace report accepted:
+four cross-identity EACCES, default broker/human nested access and private-mode
+restriction. PR29 post-main38352940988 passed all three checks.
+Next branch feat/phase1-task-identities adds a bounded root-only allocator and
+two real allocated identity workspace tests. Local71 tests pass/10Linux skips;
+real Linux identity tests pending. Do not claim executor or fullPhase1 complete.
