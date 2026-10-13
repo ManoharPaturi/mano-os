@@ -553,6 +553,21 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
         assert human(prompt_request, actor=actor)["ok"] is False
     assert rpc("request", dict(schema_version="1.0", operation="submit_prompt",
         body=dict(human_uid=1002, request_key="b" * 32, prompt="forged human"))) == denied
+    default_prompt_code = """import json
+from mano_prompt.app import Prompt
+from mano_prompt.submit import status_packet
+from mano_prompt.approve import rpc
+app=Prompt()
+receipt=app.submit('Default human prompt production transport')
+assert receipt['state']=='received' and receipt['task_id'] is None
+assert rpc(status_packet(receipt['id']))['prompt']==receipt
+print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
+"""
+    default_prompt = subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1", "python3", "-c",
+        default_prompt_code], capture_output=True, text=True, timeout=10, check=False)
+    assert default_prompt.returncode == 0, default_prompt.stderr
+    assert json.loads(default_prompt.stdout)["default_handler_native_ack"] is True
     factory_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
@@ -771,6 +786,7 @@ finally:client.close()
         durable_prompt_context_dispatch_reused=True,
         installed_root_task_factory=True,
         authenticated_native_human_prompt_queue=True,
+        default_prompt_handler_actual_native_transport=True,
         human_prompt_claim_to_actual_task=True,
         prompt_creation_replay_denied=True,
         prompt_duplicate_and_malformed_cases_verified=True,
