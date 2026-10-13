@@ -1,10 +1,21 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from mano_broker.sandbox import command
+from mano_broker.sandbox import command, guard
 
 
 class SandboxProfileGuards(unittest.TestCase):
+    def test_user_owned_guard_never_accepted(self):
+        with TemporaryDirectory() as temporary:
+            native = Path(temporary) / "guard"
+            native.write_text("untrusted fixture")
+            native.chmod(0o555)
+            with patch("mano_broker.sandbox.GUARD", native):
+                with self.assertRaises(PermissionError):
+                    guard()
+
     def test_root_or_nonlinux_never_compiles_or_checks_package(self):
         for platform, uid in (("darwin", 1004), ("linux", 0)):
             with (

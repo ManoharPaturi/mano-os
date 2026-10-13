@@ -22,9 +22,10 @@ jobs:
       - name: Compile native approval adapter with strict warnings
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libpam0g-dev libjson-c-dev libsystemd-dev
+          sudo apt-get install -y --no-install-recommends libpam0g-dev libjson-c-dev libsystemd-dev libseccomp-dev
           cc -std=c11 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 native/mano_approve.c $(pkg-config --cflags --libs json-c libsystemd) -lpam -Wl,-z,relro,-z,now -o /tmp/mano-approve
           cc -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared native/mano_resources.c -Wl,-z,relro,-z,now -o /tmp/libmano-resources.so
+          cc -std=c11 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 native/mano_sandbox_guard.c -lseccomp -Wl,-z,relro,-z,now -o /tmp/mano-sandbox-guard
           sudo install -d -m 0755 /usr/lib/mano-broker
           sudo install -m 0644 /tmp/libmano-resources.so /usr/lib/mano-broker/libmano-resources.so
       - run: ruff check .

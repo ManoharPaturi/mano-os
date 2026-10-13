@@ -159,3 +159,16 @@ Current feat/phase1-fd-sandbox adds trusted unprivileged command compiler and
 operator-driven real VM descriptor/cgroup/mount/network/environment tests.
 Local72 tests pass/10LinuxMacskips; real sandbox CI pending. Seccomp/Landlock and
 broker executor integration remain unimplemented; never claim fullPhase1 done.
+# Kernel guard continuation
+
+PR32 merged9e5e9ec483994cd883ae057ece053c30095f0733 after run38356193540 all3success.
+Actual fd-sandbox report accepted: held workspace/cwd mount after name replacement,
+minimal exact4env, host network/IPC/inherited socket denied, NNP/caps0, output,
+128MiB24pids20CPU actual scope membership. Seccomp/Landlock then null.
+Current feat/phase1-kernel-guard adds mandatory root-installed UNPRIVILEGED Cguard,
+Landlock ABI>=5 fixedFS/TCP policy, seccomp denyprofile and startup kernel probes,
+child inheritance tests. Local73 tests pass/10LinuxMacskips; native compilation
+and real enforcement NOT verified yet. GitHub DNS unavailable on this Mac at last
+check; preserve local commit and push/create PR when access returns. Main postmerge
+cannot currently be queried. No root endpoint/model/broker executor connected.
+Disk16GiB92percent; no local VM/models. Full original goal remains active.
