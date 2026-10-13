@@ -254,3 +254,13 @@ fixed paths, bounded messages, rights closure, root creator and message credenti
 pidfd lifetime identity and no implicit launch retry/recovery. Grant journal,
 epoch/Stop coupling and production daemon remain required. Linux credential
 response tests run in CI, not macOS. Full original version remains incomplete.
+
+# Journal executor continuation
+
+PR41 current CI38404746333 all3SUCCESS observed; merge gate/evidence verification
+still required before merge. Current feat/phase1-journal-executor adds trusted
+Executor real journal lease/start/lifecycle library with real SQLite tests and
+actual root-service VM fixture. No public Runtime execution or production daemon
+integration yet; grants in the VM originate from trusted operator fixture, notPAM.
+Fixed launcher ceilings require grant>=128MiB24pids20CPU; narrower grants denied.
+Local91tests12MacLinuxskips pass. Actual executor VM acceptance pending.

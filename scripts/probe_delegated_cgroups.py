@@ -15,16 +15,18 @@ from pathlib import Path
 
 from mano_broker.cgroups import ROOT, Manager
 from mano_broker.credentials import drop
+from mano_broker.executor import Executor
 from mano_broker.identities import LOCK, allocate_identity
 from mano_broker.ipc import Peer
 from mano_broker.launch_admission import LaunchAdmission
 from mano_broker.launch_client import Client
 from mano_broker.launch_controller import Controller, serve_control, serve_prepare
 from mano_broker.launch_transport import PATHS, activated_listeners
-from mano_broker.protocol import ActionRequest, canonical
+from mano_broker.protocol import ActionRequest, Capability, Mode, canonical
+from mano_broker.registry import Registry
 from mano_broker.resources import LIBRARY
 from mano_broker.sandbox import GUARD
-from mano_broker.state import Denied
+from mano_broker.state import Denied, State
 from mano_broker.workspaces import BASE, create_workspace
 
 STATE = Path("/run/mano-delegation-ci")
@@ -445,6 +447,73 @@ if sys.argv[1:] == ["--inner"]:
                 assert wire_control("status", running)["state"] == "running"
                 assert wire_control("cancel", concurrent)["state"] == "not-started"
                 assert wire_control("cancel", running)["state"] == "unknown"
+                journal = State(Path(workspace) / "executor-journal")
+                registry = Registry()
+                fd = os.open(workspace, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+                try:
+                    resource_id = registry.register(fd, human_uid=1002,
+                        caller_uid=account["uid"], boot_id="executor-fixture-boot")
+                finally:
+                    os.close(fd)
+                task_id = journal.create_task(human_uid=1002, caller_uid=account["uid"],
+                    mode=Mode.AUTO, resource_id=resource_id, classification="internal",
+                    boot_id="executor-fixture-boot")
+                registry.resources[resource_id].task_id = task_id
+                executor = Executor(journal, registry, client, boot_id="executor-fixture-boot")
+
+                def authorized(source, key):
+                    args = dict(argv=["/usr/bin/python3", "-c", source], cwd=".",
+                                timeout_seconds=10)
+                    grant = journal.issue_grant(task_id, approved_human_uid=1002,
+                        approved_args=args, capability=Capability.RUN, resource_id=resource_id,
+                        expires=time.monotonic() + 30, max_count=1, memory_bytes=128 * 1024**2,
+                        pids=24, cpu_percent=20, max_timeout_seconds=10)
+                    request = ActionRequest.parse(canonical(dict(schema_version="1.0",
+                        task_id=task_id, resource_id=resource_id, grant_id=grant,
+                        capability="terminal.run", args=args, idempotency_key=key,
+                        reason="operator approval fixture with actual journal coupling")).encode())
+                    row, lease = registry.prepare(journal, request, caller_uid=account["uid"],
+                        now=time.monotonic(), boot_id="executor-fixture-boot")
+                    assert lease is not None
+                    return row["id"]
+
+                completed = authorized("print('journal-wire-ok')", "journal-once")
+                executor.launch(completed)
+                handle = executor.jobs[completed].copy()
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    result = executor.poll(completed)
+                    if result["state"] == "finished":
+                        break
+                    time.sleep(0.01)
+                row = journal.db.execute(
+                    "SELECT * FROM actions WHERE id=?", (completed,)
+                ).fetchone()
+                assert row["state"] == "done" and row["verified"] == 0
+                output = wire_control("read_output", handle, stream="stdout", offset=0, length=64)
+                assert base64.b64decode(output["data"]).strip() == b"journal-wire-ok"
+                try:
+                    executor.launch(completed)
+                except Denied:
+                    pass
+                else:
+                    raise AssertionError("Journal action repeated")
+                active = authorized("import time;time.sleep(60)", "journal-stop")
+                executor.launch(active)
+                handle = executor.jobs[active].copy()
+                journal.emergency_stop()
+                try:
+                    executor.poll(active)
+                except Denied:
+                    pass
+                else:
+                    raise AssertionError("Stopped journal action reported success")
+                assert wire_control("status", handle)["state"] == "unknown"
+                assert journal.db.execute("SELECT state FROM actions WHERE id=?",
+                                          (active,)).fetchone()[0] == "unknown"
+                assert not registry.leases
+                registry.close()
+                journal.close()
                 client.close()
                 os.write(proxy_report_w, b"ok")
                 os._exit(0)
@@ -518,6 +587,9 @@ if sys.argv[1:] == ["--inner"]:
                         operator_peer_metadata_synthetic=True,
                         real_persistent_broker_transport=True,
                         production_client_transport=True,
+                        durable_journal_executor=True,
+                        journal_stop_cancels_unknown=True,
+                        executor_pam_authorization=False,
                         reply_creator_and_message_credentials=True,
                         minimum_capability_cwd_pin=True,
                         metadata_pin_preserves_running_child=True,
