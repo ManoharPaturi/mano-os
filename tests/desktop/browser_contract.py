@@ -56,6 +56,7 @@ button{font:inherit;padding:12px 24px;background:#7ac8ff;border:0;border-radius:
 <button onclick="document.querySelector('#result').textContent='clicked 1'">
 Verify action</button><p id="result">waiting</p></body></html>""")
     async with async_playwright() as p:
+        launch_started = time.monotonic()
         browser = await p.chromium.launch(
             executable_path="/usr/bin/chromium",
             headless=False,
@@ -63,11 +64,14 @@ Verify action</button><p id="result">waiting</p></body></html>""")
             args=["--ozone-platform=wayland"],
             timeout=30000,
         )
+        control_ready_seconds = time.monotonic() - launch_started
         try:
             context = await browser.new_context(viewport={"width": 1100, "height": 650})
             await context.tracing.start(screenshots=True, snapshots=True, sources=True)
             page = await context.new_page()
             await page.goto("file:///workspace/page.html")
+            await page.get_by_role("button", name="Verify action").wait_for(state="visible")
+            page_ready_seconds = time.monotonic() - launch_started
             await page.get_by_role("button", name="Verify action").click()
             assert await page.locator("#result").inner_text() == "clicked 1"
             processes = browser_processes()
@@ -107,6 +111,13 @@ Verify action</button><p id="result">waiting</p></body></html>""")
             assert not listeners(), "Unexpected TCP listener, including exposed CDP"
             await page.screenshot(path=str(ROOT / "browser-page.png"))
             report = {
+                "startup": {
+                    "process_launch_to_control_ready_seconds": control_ready_seconds,
+                    "process_launch_to_page_ready_seconds": page_ready_seconds,
+                    "clock": "monotonic",
+                    "cold_start_verified": False,
+                    "scope": "fresh isolated Chromium process to local page readiness",
+                },
                 "playwright_version": version("playwright"),
                 "chromium_version": browser.version,
                 "executable_path": "/usr/bin/chromium",

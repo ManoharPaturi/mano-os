@@ -741,6 +741,14 @@ def main():
             "model_connected": False,
         }
     )
+    app_startup = {}
+    for name, artifact in (
+        ("chromium", "browser-contract.json"),
+        ("writer", "office-contract.json"),
+    ):
+        if (OUT / artifact).is_file():
+            app_startup[name] = json.loads((OUT / artifact).read_text()).get("startup")
+    RESOURCE_OBSERVATIONS["app_startup_observations"] = app_startup
     (OUT / "resources.json").write_text(json.dumps(RESOURCE_OBSERVATIONS, indent=2) + "\n")
     resources_complete = (
         all(
@@ -753,6 +761,7 @@ def main():
             )
         )
         and (OUT / "task-cgroup-limits.txt").is_file()
+        and all(app_startup.get(name) for name in ("chromium", "writer"))
     )
     PROBES.append(
         Probe(

@@ -46,3 +46,13 @@ fresh PAM rearm, six actor signal/socket denials per stop and recovery TTY all v
 
 Warn disk below 20 GiB/above 90%; stop new large downloads below 10 GiB. No user-data deletion.
 Never rerun fresh-disk formatting scripts on prepared or recovered guests.
+
+PR17 merged at02ec98d5b01fc4fb425256de85487162d6ed6b75 after accepted
+CI38330472820 (35pass/0fail/0pending). Post-main CI38330847410 was watched.
+Final review found missing separate app startup metrics; do not begin Phase1 until
+this measurement gap is resolved. Current branch feat/phase0-app-startup-metrics:
+real monotonic Chromium launch->control/page readiness and Writer launch->UNO
+document readiness. Fresh process, not cold-cache/physical performance. Resources
+include both, audit requires finite positive values and matching summary on both
+boot stages; old PR17 artifacts now fail this stronger audit. Local30tests pass.
+Need fresh CI, PR merge only all-success final head, then post-main verification.

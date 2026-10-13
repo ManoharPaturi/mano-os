@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 SPEC_SHA256 = "6d320e79ad62a44afea04fcf305432ec56dcdc5061e6cfcef55d113b7101eace"
@@ -49,6 +50,33 @@ def verify_hashes(root, report):
                 all(name in report["artifact_sha256"] for name in probe["artifacts"]),
                 f"Unhashed evidence: {probe['name']}",
             )
+
+
+def validate_startup(browser, office):
+    for record, fields in (
+        (
+            browser,
+            ("process_launch_to_control_ready_seconds", "process_launch_to_page_ready_seconds"),
+        ),
+        (office, ("process_launch_to_document_ready_seconds",)),
+    ):
+        require(
+            isinstance(record, dict)
+            and record.get("clock") == "monotonic"
+            and record.get("cold_start_verified") is False,
+            "Startup measurement missing or mis-scoped",
+        )
+        for field in fields:
+            value = record.get(field)
+            require(
+                type(value) in {int, float} and math.isfinite(value) and value > 0,
+                f"Missing or invalid startup measurement: {field}",
+            )
+    require(
+        browser["process_launch_to_page_ready_seconds"]
+        >= browser["process_launch_to_control_ready_seconds"],
+        "Startup milestone order invalid",
+    )
 
 
 def audit(root: Path, spec: Path, adr: Path):
@@ -158,6 +186,11 @@ def audit(root: Path, spec: Path, adr: Path):
         "Browser contract incomplete",
     )
     office = load("office-contract.json")
+    validate_startup(browser.get("startup"), office.get("startup"))
+    validate_startup(
+        json.loads((root / "first-root/browser-contract.json").read_text()).get("startup"),
+        json.loads((root / "first-root/office-contract.json").read_text()).get("startup"),
+    )
     require(
         office["named_action"]["name"] == "Save"
         and office["saved_text"] == office["pdf_text"]
@@ -247,6 +280,14 @@ def audit(root: Path, spec: Path, adr: Path):
     )
     resources = load("resources.json")
     require(
+        resources.get("app_startup_observations")
+        == {
+            "chromium": browser["startup"],
+            "writer": office["startup"],
+        },
+        "Resource summary does not match measured app startup",
+    )
+    require(
         resources["physical_hardware"] is False
         and resources["model_connected"] is False
         and resources["pre_probe_guest_memory_bytes"]["MemTotal"] > 0
@@ -284,5 +325,6 @@ def audit(root: Path, spec: Path, adr: Path):
         "physical_input_provenance": None,
         "bootstrap_preserved_hash_record": preserved.decode().strip(),
         "pressure_kernel_journal_sha256": hashlib.sha256(kernel.encode()).hexdigest(),
+        "app_startup_observations": resources["app_startup_observations"],
         "deferred_release_gates": environment["deferred_release_gates"],
     }
