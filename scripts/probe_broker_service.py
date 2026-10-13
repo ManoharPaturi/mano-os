@@ -190,7 +190,7 @@ try:
     subprocess.run(["usermod", "-a", "-G", "mano-request", "mano-worker"], check=True)
     joined = True
     CODE.mkdir(mode=0o755)
-    for package in ("mano_broker", "mano_prompt", "mano_lab"):
+    for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core"):
         shutil.copytree(
             ROOT / "src" / package, CODE / package, ignore=shutil.ignore_patterns("__pycache__")
         )
@@ -587,6 +587,61 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     assert artifact_read["ok"] and artifact_read["eof"]
     assert base64.b64decode(artifact_read["data"]) == b"pam-terminal-ok"
     assert artifact_read["artifact"]["effect_verified"] is False
+    agent_program = (
+        "from pathlib import Path;import subprocess,sys;"
+        "Path('/workspace/calc.py').write_text('def add(a,b): return a+b\\n');"
+        "Path('/workspace/test_calc.py').write_text('import unittest\\nfrom calc import add\\n'"
+        "+'class TestAdd(unittest.TestCase):\\n'"
+        "+' def test_add(self): self.assertEqual(add(2,3),5)\\n');"
+        "p=subprocess.run([sys.executable,'-m','unittest','-q'],cwd='/workspace');"
+        "Path('/workspace/golden-result').write_text('tests-passed' if p.returncode==0 "
+        "else 'tests-failed');sys.exit(p.returncode)"
+    )
+    agent_step_code = """import json,sys
+from mano_core.broker import BrokerClient
+from mano_core.runtime import AgentRuntime
+body=json.load(sys.stdin)
+def mock_model(prompt):
+ assert prompt=='Create and test a small addition project'
+ return dict(args=body['args'],reason='Create and run golden project unit test')
+client=BrokerClient()
+try:
+ result=AgentRuntime(mock_model,client).step(body['state'],thread_id=body['state']['task_id'])
+ print(json.dumps(result))
+finally:client.close()
+"""
+
+    def agent_step(state):
+        result = subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--", "env",
+            "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1",
+            "/usr/local/lib/mano-core/bin/python", "-c", agent_step_code],
+            input=json.dumps(dict(state=state, args=dict(argv=["/usr/bin/python3", "-c",
+                agent_program], cwd=".", timeout_seconds=10))), capture_output=True,
+            text=True, timeout=10, check=True)
+        return json.loads(result.stdout)
+
+    agent_state = agent_step(dict(task_id=terminal_task["task_id"],
+        resource_id=terminal_task["resource_id"], operation_key="agent-golden-project",
+        prompt="Create and test a small addition project"))
+    assert agent_state["status"] == "awaiting_grant"
+    assert not (terminal_workspace / "calc.py").exists()
+    agent_view = human(dict(mode="view", id=agent_state["approval_id"]))["view"]
+    assert human(dict(mode="confirm", view=agent_view, password=password))["ok"]
+    agent_pending = dict(agent_state)
+    agent_state = agent_step(agent_state)
+    agent_action_id = agent_state["action_id"]
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and agent_state["status"] in {"queued", "running"}:
+        time.sleep(0.1)
+        agent_state = agent_step(agent_state)
+    assert agent_state["status"] == "verifying", agent_state["status"]
+    assert (terminal_workspace / "golden-result").read_text() == "tests-passed"
+    assert (terminal_workspace / "calc.py").exists()
+    (terminal_workspace / "golden-result").write_text("replay-canary")
+    agent_replay = agent_step(agent_pending)
+    assert agent_replay["action_id"] == agent_action_id
+    assert agent_replay["status"] == "verifying"
+    assert (terminal_workspace / "golden-result").read_text() == "replay-canary"
     assert rpc("request", artifact_query) == denied
     assert rpc("request", artifact_query | {"body": artifact_query["body"] | {"length": 4097}},
         actor=identity.name) == denied
@@ -605,6 +660,10 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
         workspace_effect_observed=True, effect_verified=False, replay_no_execution=True,
         wrong_caller_status_denied=True, physical_input_provenance=None,
         production_broker_sealed_capture=True, actual_task_artifact_read=True,
+        langgraph_actual_task_peer=True, mock_agent_golden_project_tests=True,
+        mock_agent_pam_grant=True, mock_agent_replay_same_action=True,
+        mock_agent_replay_no_effect=True,
+        mock_agent_done_remains_unverified=True,
         artifact_capture_request_denied=True, artifact_wrong_caller_and_range_denied=True)
     subprocess.run(["systemctl", "start", "mano-stopd.socket", "mano-stopd.service"], check=True)
     stop_pid = int(command(

@@ -28,6 +28,11 @@ class LauncherReplyGuards(unittest.TestCase):
         peer, result = reply(self.connection())
         self.assertEqual(peer, Peer(200, 0, 0))
         self.assertTrue(result["ok"])
+        broker_reply = self.connection(credentials=CREDENTIALS.pack(300, 999, 999))
+        broker_peer, _ = reply(broker_reply, expected_uid=999, expected_gid=999)
+        self.assertEqual(broker_peer, Peer(300, 999, 999))
+        with self.assertRaises(Denied):
+            reply(broker_reply)  # Root launcher identity remains the default.
         for kwargs in (
             dict(credentials=CREDENTIALS.pack(200, 999, 999)),
             dict(credentials=CREDENTIALS.pack(0, 0, 0)),
