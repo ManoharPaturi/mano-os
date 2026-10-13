@@ -65,9 +65,10 @@ and runtime gates; physical 8 GB and installer/firmware requirements remain late
 
 ## Phase 1 work in progress
 
-`mano_broker` adds a strict action proposal contract and durable grant/journal state
-core. It reserves usage/intent atomically, rechecks dispatch authority, binds replay,
-keeps zero-exit separate from verification and preserves unknown/revoked states.
-Production IPC/approval, descriptor-pinned resources, sandbox execution and model
-routing remain unimplemented. This core does not run commands or authenticate an
-untrusted Python caller. See ADR0009 and fresh CI `broker-state.json` for its scope.
+`mano_broker` provides typed proposals, exact grants, durable action state and a
+kernel-authenticated request channel under a hardened non-root service. A pending
+approval queue supports public request/status without exposing nonce or confirmation.
+Trusted confirmation consumes one challenge and issues one exact grant atomically;
+its production PAM/control adapter remains unimplemented. Descriptor-pinned resources,
+sandbox execution, native stop/verifier integration and model routing remain required.
+No model command is executed. See ADR0009–0013 and accepted CI evidence for scope.

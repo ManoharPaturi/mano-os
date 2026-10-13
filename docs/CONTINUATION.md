@@ -55,3 +55,13 @@ Legacy journals upgrade revokeall/unknownexecuting/failedintent without deletion
 Unit48tests pass1MacLinuxskip; actualmigration and changed-target IPC/service probes
 added. ADR0012. TrustedPAMcontrol not integrated yet; nextwork. Need freshCI/PR
 all-current-head checks beforemerge, then postmain. Disk13GiB94%last.
+
+Latest PR22 main30bfa59a3b1f72e98c4747fd9f602a6efe95d3dc, acceptedCI38337001596
+all3success, post-main38337436583 all3success nowverified. Current branch
+feat/phase1-approval-queue: durable private pending challenge, publicrequest/status
+only, trustedconfirmation atomicallyconsume+one exactgrant, nonce/digest/time/boot/
+epoch/human binding, quota64/task, trustednestedSavepoints.57localtests inclrace/
+rollback/expiry-status passed; guestservicepending/selfapprovaldeny/restart added.
+No PAM/rootcontrol transport yet; ADR0013. NeednewPR/allCIbeforemerge. Fullgoalactive.
+
+Disknow9.3GiB free96%: NO newlarge localdownloads below10GiB, no data deletion.

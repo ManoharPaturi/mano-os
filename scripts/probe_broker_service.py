@@ -206,11 +206,35 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
     elapsed = time.monotonic() - started
     slow.wait(timeout=6)
     assert fresh["ok"] and fresh["fresh"] and elapsed < 5
+    approval_proposal = {key: value for key, value in seed_body.items() if key != "grant_id"}
+    pending = request(
+        "mano-worker",
+        {
+            "schema_version": "1.0",
+            "operation": "request_approval",
+            "body": approval_proposal | {"idempotency_key": "pending-human"},
+        },
+    )
+    assert pending["ok"] and pending["approval"]["state"] == "pending"
+    assert pending["approval"]["grant_id"] is None
+    assert set(pending["approval"]) == {"approval_id", "state", "grant_id"}
+    approval_query = {
+        "schema_version": "1.0",
+        "operation": "approval_status",
+        "body": {"approval_id": pending["approval"]["approval_id"]},
+    }
+    assert request("mano-worker", approval_query) == pending
+    assert request("mano-worker", approval_query | {"operation": "approve"}) == {
+        "schema_version": "1.0",
+        "ok": False,
+        "error": "denied",
+    }
     # Real process kill triggers systemd restart; journal identity and unknown state persist.
     subprocess.run(["systemctl", "kill", "--signal=SIGKILL", "mano-broker.service"], check=True)
     replacement = wait_service(pid)
     again = request("mano-worker", packet)
     assert again["ok"] and not again["fresh"] and again["action"] == recovered["action"]
+    assert request("mano-worker", approval_query) == pending
     assert command("systemctl", "is-active", "mano-broker.socket") == "active"
     print(
         json.dumps(
@@ -230,6 +254,8 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
                 restart_pid_changed=pid != replacement,
                 unknown_preserved_no_replay=True,
                 approved_target_change_denied=True,
+                durable_pending_approval=True,
+                self_approval_wire_denied=True,
                 model_connected=False,
                 production_execution_authorized=False,
             ),
