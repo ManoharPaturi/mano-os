@@ -14,11 +14,9 @@ import stat
 from contextlib import contextmanager
 from pathlib import Path
 
+from mano_protocol.errors import Denied as Denied
+
 from .protocol import ActionRequest, Capability, Mode, canonical, identifier
-
-
-class Denied(ValueError):
-    pass
 
 
 class State:

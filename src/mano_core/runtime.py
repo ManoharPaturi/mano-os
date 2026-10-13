@@ -3,7 +3,7 @@
 import hashlib
 from typing import TypedDict
 
-from mano_broker.protocol import ActionRequest, canonical, identifier, text
+from mano_protocol.actions import ActionRequest, canonical, identifier, text
 
 
 class TaskState(TypedDict, total=False):

@@ -11,23 +11,15 @@ import hashlib
 import json
 import os
 import socket
-import struct
 import time
-from dataclasses import dataclass
+
+from mano_protocol.transport import CREDENTIALS as CREDENTIALS
+from mano_protocol.transport import Peer as Peer
 
 from .approvals import Approvals
 from .artifacts import durable_chunk
 from .protocol import MAX_PACKET, ActionRequest, canonical, identifier, unique_object
 from .state import Denied
-
-CREDENTIALS = struct.Struct("3i")
-
-
-@dataclass(frozen=True)
-class Peer:
-    pid: int
-    uid: int
-    gid: int
 
 
 def receive(connection):

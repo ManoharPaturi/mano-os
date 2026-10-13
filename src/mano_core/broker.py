@@ -5,9 +5,8 @@ import pwd
 import select
 import socket
 
-from mano_broker.ipc import CREDENTIALS, Peer
-from mano_broker.launch_client import reply
-from mano_broker.protocol import MAX_PACKET, canonical
+from mano_protocol.actions import MAX_PACKET, canonical
+from mano_protocol.transport import CREDENTIALS, Peer, reply
 
 PATH = '/run/mano-broker/request.sock'
 OPERATIONS = {'request_approval', 'approval_status', 'propose', 'status', 'artifact_read'}

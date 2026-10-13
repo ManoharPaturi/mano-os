@@ -190,7 +190,7 @@ try:
     subprocess.run(["usermod", "-a", "-G", "mano-request", "mano-worker"], check=True)
     joined = True
     CODE.mkdir(mode=0o755)
-    for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core"):
+    for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core", "mano_protocol"):
         shutil.copytree(
             ROOT / "src" / package, CODE / package, ignore=shutil.ignore_patterns("__pycache__")
         )
