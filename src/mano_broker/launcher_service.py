@@ -24,6 +24,8 @@ def iteration(selector, budgets, controller):
                     serve_control(controller, connection)
                 else:
                     serve_prepare(controller, connection)
+            else:
+                print('{"event":"launcher-connection-rate-denied"}', file=sys.stderr, flush=True)
     controller.sweep()
 
 

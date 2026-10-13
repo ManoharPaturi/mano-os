@@ -312,3 +312,9 @@ exposure. Sourceinspectionalsofoundobserverrace: Rootstatus couldfinishafter
 Runtime.tick poll but beforesecondcontrolRPC, so testbroke beforeSQLitebecamedone.
 Fixture nowawaits BOTHRootfinishedANDjournal(done,0) withinSAME5seconddeadline,
 thenassertsboth. No productionexit/grantchecksweakened. NewCIrequired.
+
+PR44diagnosticrun38410509463 FAILED clientline72 recvmsg ECONNRESET whileRoot
+servicehealthy. Sourcepoll2controlRPCs/0.01secs exceedsfixed10/secbudget. Fixprobe
+0.25sec(<=8/sec), SAME5secdeadline/bothRootfinish+journaldone. Broker service now
+pacesRuntime.tick>=0.5sec independentofrequestbursts; Root10/secbudgetunchanged.
+Rootrate-deniedevent added withoutarguments. Resource-limitsWIPstashed.

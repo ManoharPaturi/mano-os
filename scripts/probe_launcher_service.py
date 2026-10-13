@@ -76,7 +76,7 @@ try:
         ).fetchone()
         if response["state"] == "finished" and tuple(row) == ("done", 0):
             break
-        time.sleep(0.01)
+        time.sleep(0.25)  # At most eight control packets/sec, below the ten/sec budget.
     row = state.db.execute("SELECT state,verified FROM actions WHERE id=?", (action,)).fetchone()
     assert tuple(row) == ("done", 0)
     assert response["state"] == "finished"
