@@ -15,14 +15,15 @@ STATE = Path("/var/lib/mano-broker/runtime")
 PARENT = STATE.parent
 CODE = Path("/usr/lib/mano-os")
 SOCKET = Path("/run/mano-broker/request.sock")
-UNITS = ("mano-broker.service", "mano-broker.socket")
+CONTROL = Path("/run/mano-broker/control.sock")
+UNITS = ("mano-broker.service", "mano-broker.socket", "mano-broker-control.socket")
 assert os.geteuid() == 0
 assert Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
 assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip() in {
     "kvm",
     "qemu",
 }
-assert not STATE.exists() and not CODE.exists() and not SOCKET.exists()
+assert not STATE.exists() and not CODE.exists() and not SOCKET.exists() and not CONTROL.exists()
 assert all(not (Path("/etc/systemd/system") / unit).exists() for unit in UNITS)
 old_mode = PARENT.stat().st_mode & 0o777
 installed = []
@@ -68,6 +69,48 @@ def request(actor, body):
         timeout=10,
         check=True,
     )
+    return json.loads(result.stdout)
+
+
+control_client = """import errno,json,socket,struct,sys
+s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);s.settimeout(5)
+s.setsockopt(socket.SOL_SOCKET,socket.SO_PASSCRED,1)
+try:s.connect(sys.argv[1])
+except PermissionError as e:
+ assert e.errno==errno.EACCES;print(json.dumps({'kernel_errno':'EACCES'}));sys.exit(0)
+_,creator_uid,_=struct.unpack('3i',s.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
+assert creator_uid==0,('unexpected socket creator',creator_uid)
+s.sendall(sys.stdin.buffer.read())
+packet,ancillary,flags,_=s.recvmsg(131072,socket.CMSG_SPACE(12))
+assert not flags & (socket.MSG_TRUNC|socket.MSG_CTRUNC)
+assert len(ancillary)==1 and ancillary[0][:2]==(socket.SOL_SOCKET,socket.SCM_CREDENTIALS)
+pid,uid,_=struct.unpack('3i',ancillary[0][2])
+assert uid==int(sys.argv[2]) and pid==int(sys.argv[3]),('unexpected reply sender',pid,uid)
+print(packet.decode())
+"""
+
+
+def control_rpc(body, actor="root"):
+    result = subprocess.run(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            actor,
+            "--",
+            "python3",
+            "-c",
+            control_client,
+            str(CONTROL),
+            str(broker_uid),
+            str(replacement),
+        ],
+        input=json.dumps(body),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
 
@@ -139,6 +182,7 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
     assert int(fields["CapEff"].strip(), 16) == 0
     stat = SOCKET.stat()
     assert stat.st_uid == 0 and stat.st_mode & 0o777 == 0o660
+    assert CONTROL.stat().st_uid == 0 and CONTROL.stat().st_mode & 0o777 == 0o600
     assert STATE.stat().st_uid == broker_uid and STATE.stat().st_mode & 0o777 == 0o700
     assert (STATE / "state.sqlite3").stat().st_mode & 0o777 == 0o600
     properties = {
@@ -235,11 +279,55 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
     again = request("mano-worker", packet)
     assert again["ok"] and not again["fresh"] and again["action"] == recovered["action"]
     assert request("mano-worker", approval_query) == pending
+    view_request = {
+        "schema_version": "1.0",
+        "operation": "approval_view",
+        "body": {"approval_id": pending["approval"]["approval_id"], "human_uid": 1002},
+    }
+    for actor in ("mano-agent", "mano-core", "mano-worker", "mano-human"):
+        assert control_rpc(view_request, actor) == {"kernel_errno": "EACCES"}
+        denials.append(
+            {"actor": actor, "target": "approval-control-socket", "kernel_errno": "EACCES"}
+        )
+    view = control_rpc(view_request)["view"]
+    confirmation = {
+        "schema_version": "1.0",
+        "operation": "confirm_approval",
+        "body": {
+            "approval_id": view["approval_id"],
+            "human_uid": 1002,
+            "nonce": view["nonce"],
+            "operation_digest": view["operation_digest"],
+        },
+    }
+    denied = {"schema_version": "1.0", "ok": False, "error": "denied"}
+    for change in (
+        {"human_uid": 1004},
+        {"nonce": "0" * 64},
+        {"operation_digest": "0" * 64},
+        {"password": "not-a-control-field"},
+    ):
+        assert control_rpc(confirmation | {"body": confirmation["body"] | change}) == denied
+    approved = control_rpc(confirmation)
+    assert approved["ok"]
+    assert control_rpc(confirmation) == denied
+    status = request("mano-worker", approval_query)
+    assert status["approval"]["state"] == "approved"
+    assert status["approval"]["grant_id"] == approved["grant_id"]
+    new_body = approval_proposal | {
+        "idempotency_key": "pending-human",
+        "grant_id": approved["grant_id"],
+    }
+    assert (
+        request("mano-worker", packet | {"body": new_body | {"args": {"path": "other"}}}) == denied
+    )
+    accepted = request("mano-worker", packet | {"body": new_body})
+    assert accepted["ok"] and accepted["fresh"] and accepted["action"]["verified"] == 0
     assert command("systemctl", "is-active", "mano-broker.socket") == "active"
     print(
         json.dumps(
             dict(
-                scope="non-root request-only service; approval/executor not integrated",
+                scope="non-root request/control service; PAM/executor not integrated",
                 broker_uid=broker_uid,
                 no_new_privs=True,
                 seccomp_filter=True,
@@ -256,6 +344,10 @@ s.start(a['id'],now=time.monotonic(),boot_id=boot);s.close();print(json.dumps(b)
                 approved_target_change_denied=True,
                 durable_pending_approval=True,
                 self_approval_wire_denied=True,
+                root_control_single_confirmation=True,
+                confirmation_binding_denials=4,
+                control_pam_authenticated=False,
+                root_control_reply_credentials_verified=True,
                 model_connected=False,
                 production_execution_authorized=False,
             ),

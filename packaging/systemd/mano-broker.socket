@@ -8,6 +8,7 @@ SocketGroup=mano-request
 SocketMode=0660
 DirectoryMode=0755
 PassCredentials=yes
+FileDescriptorName=request
 Backlog=32
 RemoveOnStop=yes
 

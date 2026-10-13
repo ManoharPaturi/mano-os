@@ -1,15 +1,20 @@
 """Fixed-path, non-root, systemd socket-activated request service."""
 
 import os
+import selectors
 import socket
 import sys
 import time
 from pathlib import Path
 
+from .control import serve_control
 from .ipc import serve_connection
 from .state import State
 
-REQUEST_SOCKET = "/run/mano-broker/request.sock"
+SOCKET_PATHS = {
+    "request": "/run/mano-broker/request.sock",
+    "control": "/run/mano-broker/control.sock",
+}
 STATE_DIRECTORY = Path("/var/lib/mano-broker/runtime")
 
 
@@ -29,26 +34,39 @@ class Admission:
         return True
 
 
-def activated_listener():
+def activated_listeners():
     if os.geteuid() == 0:
         raise ValueError("Broker service must not run as root")
-    if os.environ.get("LISTEN_PID") != str(os.getpid()) or os.environ.get("LISTEN_FDS") != "1":
-        raise ValueError("Expected one systemd listener")
-    listener = socket.socket(fileno=3)
+    names = os.environ.get("LISTEN_FDNAMES", "").split(":")
     if (
-        listener.family != socket.AF_UNIX
-        or listener.type != socket.SOCK_SEQPACKET
-        or listener.getsockname() != REQUEST_SOCKET
-        or not listener.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN)
-        or not listener.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED)
+        os.environ.get("LISTEN_PID") != str(os.getpid())
+        or os.environ.get("LISTEN_FDS") != "2"
+        or len(names) != 2
+        or set(names) != set(SOCKET_PATHS)
     ):
-        listener.close()
-        raise ValueError("Unexpected systemd listener")
-    for key in ("LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES"):
-        os.environ.pop(key, None)
-    listener.set_inheritable(False)
-    listener.settimeout(0.5)
-    return listener
+        raise ValueError("Expected named request and control systemd listeners")
+    listeners = {}
+    try:
+        for fd, name in enumerate(names, start=3):
+            listener = socket.socket(fileno=fd)
+            listeners[name] = listener
+            if (
+                listener.family != socket.AF_UNIX
+                or listener.type != socket.SOCK_SEQPACKET
+                or listener.getsockname() != SOCKET_PATHS[name]
+                or not listener.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN)
+                or not listener.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED)
+            ):
+                raise ValueError("Unexpected systemd listener")
+            listener.set_inheritable(False)
+            listener.setblocking(False)
+        for key in ("LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES"):
+            os.environ.pop(key, None)
+        return listeners
+    except BaseException:
+        for listener in listeners.values():
+            listener.close()
+        raise
 
 
 def notify(message):
@@ -61,31 +79,41 @@ def notify(message):
         channel.sendto(message.encode(), address)
 
 
-def run(listener, state, boot_id):
-    state.recover()  # Never infer success or repeat an executing action after restart.
-    budget = Admission(time.monotonic())
-    notify("READY=1")
-    while True:
-        notify("WATCHDOG=1")
-        try:
-            connection, _ = listener.accept()
-        except TimeoutError:
-            continue
-        with connection:
-            if budget.admit(time.monotonic()):
-                serve_connection(state, connection, boot_id=boot_id)
-            # Otherwise close without parsing, journaling or acquiring rights.
+def run(listeners, state, boot_id):
+    state.recover()
+    # Independent admission budgets; give protected control priority when both ready.
+    budgets = {name: Admission(time.monotonic()) for name in listeners}
+    with selectors.DefaultSelector() as selector:
+        for name, listener in listeners.items():
+            selector.register(listener, selectors.EVENT_READ, name)
+        notify("READY=1")
+        while True:
+            notify("WATCHDOG=1")
+            events = sorted(selector.select(0.5), key=lambda item: item[0].data != "control")
+            for key, _ in events:
+                try:
+                    connection, _ = key.fileobj.accept()
+                except BlockingIOError:
+                    continue
+                with connection:
+                    if budgets[key.data].admit(time.monotonic()):
+                        handler = serve_control if key.data == "control" else serve_connection
+                        handler(state, connection, boot_id=boot_id)
 
 
 def main():
     if len(sys.argv) != 1:
         raise ValueError("Service has no caller-selectable paths or commands")
-    with activated_listener() as listener:
+    listeners = activated_listeners()
+    try:
         state = State(STATE_DIRECTORY)
         try:
-            run(listener, state, Path("/proc/sys/kernel/random/boot_id").read_text().strip())
+            run(listeners, state, Path("/proc/sys/kernel/random/boot_id").read_text().strip())
         finally:
             state.close()
+    finally:
+        for listener in listeners.values():
+            listener.close()
 
 
 if __name__ == "__main__":

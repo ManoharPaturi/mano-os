@@ -1,12 +1,13 @@
 [Unit]
 Description=mano non-root request broker
-Requires=mano-broker.socket
-After=mano-broker.socket
+Requires=mano-broker.socket mano-broker-control.socket
+After=mano-broker.socket mano-broker-control.socket
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
 Type=notify
+Sockets=mano-broker.socket mano-broker-control.socket
 User=mano-broker
 Group=mano-broker
 ExecStart=/usr/bin/python3 -m mano_broker.service

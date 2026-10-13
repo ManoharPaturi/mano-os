@@ -69,6 +69,7 @@ and runtime gates; physical 8 GB and installer/firmware requirements remain late
 kernel-authenticated request channel under a hardened non-root service. A pending
 approval queue supports public request/status without exposing nonce or confirmation.
 Trusted confirmation consumes one challenge and issues one exact grant atomically;
-its production PAM/control adapter remains unimplemented. Descriptor-pinned resources,
+a protected root control channel carries view/confirmation. Its native PAM adapter
+remains unimplemented. Descriptor-pinned resources,
 sandbox execution, native stop/verifier integration and model routing remain required.
-No model command is executed. See ADR0009–0013 and accepted CI evidence for scope.
+No model command is executed. See ADR0009–0014 and accepted CI evidence for scope.
