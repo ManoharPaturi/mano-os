@@ -8,8 +8,6 @@ import json
 import os
 import pwd
 import shutil
-import socket
-import struct
 import subprocess
 import sys
 import time
@@ -20,6 +18,7 @@ from mano_broker.credentials import drop
 from mano_broker.identities import LOCK, allocate_identity
 from mano_broker.ipc import Peer
 from mano_broker.launch_admission import LaunchAdmission
+from mano_broker.launch_client import Client
 from mano_broker.launch_controller import Controller, serve_control, serve_prepare
 from mano_broker.launch_transport import PATHS, activated_listeners
 from mano_broker.protocol import ActionRequest, canonical
@@ -380,43 +379,22 @@ if sys.argv[1:] == ["--inner"]:
                 os.setgid(broker_account.pw_gid)
                 os.setuid(broker_account.pw_uid)
 
-                def exchange(channel, envelope, with_fds=False):
-                    import array
+                client = Client()
 
-                    connection = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
-                    connection.settimeout(8)
-                    connection.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
-                    connection.connect(PATHS[channel])
-                    creator = struct.unpack(
-                        "3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
-                    )
-                    assert creator[1] == 0
+                def exchange(channel, envelope, with_fds=False):
                     rights = []
-                    if with_fds:
-                        rights = [
-                            os.open(workspace, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
-                            for _ in range(2)
-                        ]
                     try:
-                        connection.sendmsg(
-                            [canonical(envelope).encode()],
-                            [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", rights))]
-                            if rights
-                            else [],
-                        )
-                        packet, ancillary, flags, _ = connection.recvmsg(
-                            65536, socket.CMSG_SPACE(12)
-                        )
-                        assert not flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)
-                        assert len(ancillary) == 1
-                        assert ancillary[0][:2] == (socket.SOL_SOCKET, socket.SCM_CREDENTIALS)
-                        sender = struct.unpack("3i", ancillary[0][2])
-                        assert sender[0] == server_pid and sender[1] == 0
-                        return json.loads(packet)
+                        if with_fds:
+                            rights = [
+                                os.open(workspace, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+                                for _ in range(2)
+                            ]
+                        result = client.exchange(channel, envelope, rights)
+                        assert client.peer.pid == server_pid
+                        return result
                     finally:
                         for fd in rights:
                             os.close(fd)
-                        connection.close()
 
                 def wire_prepare(action, source):
                     request = dict(
@@ -467,6 +445,7 @@ if sys.argv[1:] == ["--inner"]:
                 assert wire_control("status", running)["state"] == "running"
                 assert wire_control("cancel", concurrent)["state"] == "not-started"
                 assert wire_control("cancel", running)["state"] == "unknown"
+                client.close()
                 os.write(proxy_report_w, b"ok")
                 os._exit(0)
             except BaseException:
@@ -538,6 +517,7 @@ if sys.argv[1:] == ["--inner"]:
                         controller_verified_flag_false=True,
                         operator_peer_metadata_synthetic=True,
                         real_persistent_broker_transport=True,
+                        production_client_transport=True,
                         reply_creator_and_message_credentials=True,
                         minimum_capability_cwd_pin=True,
                         metadata_pin_preserves_running_child=True,
