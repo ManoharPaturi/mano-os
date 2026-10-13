@@ -6,9 +6,9 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
-from mano_protocol.actions import text  # noqa: E402
 from mano_prompt.dispatch import SubmissionWorker  # noqa: E402
 from mano_prompt.submit import Submission  # noqa: E402
+from mano_protocol.actions import text  # noqa: E402
 
 
 class Prompt(Gtk.Application):
