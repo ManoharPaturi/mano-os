@@ -17,6 +17,7 @@ mano-lab = "mano_lab.cli:main"
 mano-prompt = "mano_prompt.app:main"
 mano-approve = "mano_prompt.approve:main"
 mano-core = "mano_core.cli:main"
+mano-task = "mano_broker.task_factory:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

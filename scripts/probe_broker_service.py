@@ -13,9 +13,9 @@ import sys
 import time
 from pathlib import Path
 
-from mano_broker.identities import LOCK, allocate_identity
+from mano_broker.identities import LOCK, TaskIdentity
 from mano_broker.sandbox import GUARD
-from mano_broker.workspaces import BASE, create_workspace
+from mano_broker.workspaces import BASE
 
 ROOT = Path("/opt/mano-lab")
 STATE = Path("/var/lib/mano-broker/runtime")
@@ -535,13 +535,19 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     assert elapsed < 5
     # Actual allocated caller → kernel broker socket → native PAM → journal
     # → private root launcher → sandboxed terminal. No direct grant injection.
-    identity = allocate_identity()
-    terminal_workspace, terminal_fd = create_workspace(human_uid=1002, caller_uid=identity.uid)
-    os.close(terminal_fd)
-    terminal_task = rpc("provision", dict(schema_version="1.0", operation="provision_task",
-        body=dict(human_uid=1002, caller_uid=identity.uid, mode="supervised",
-                  classification="internal")), actor="root", directory=terminal_workspace)
-    assert terminal_task["ok"]
+    factory_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+        "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
+        input=json.dumps(dict(prompt="Create and test a small addition project")),
+        capture_output=True, text=True, timeout=25, check=True)
+    managed = json.loads(factory_result.stdout)
+    assert managed["ok"]
+    managed = managed["task"]
+    account = pwd.getpwuid(managed["caller_uid"])
+    assert account.pw_name == managed["caller_name"]
+    identity = TaskIdentity(account.pw_name, account.pw_uid, account.pw_gid)
+    terminal_workspace = Path(managed["workspace"])
+    terminal_task = dict(ok=True, task_id=managed["context"]["task_id"],
+                         resource_id=managed["context"]["resource_id"])
     terminal_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
         resource_id=terminal_task["resource_id"], capability="terminal.run",
         args=dict(argv=["/usr/bin/python3", "-c",
@@ -732,6 +738,7 @@ finally:client.close()
         mock_agent_replay_no_effect=True,
         sqlite_agent_checkpoint_new_process_recovery=True,
         installed_core_cli_entrypoint=True,
+        installed_root_task_factory=True,
         core_step_cgroup_and_capability_limits_verified=True,
         mock_agent_exit_alone_unverified=True, preapproval_exact_file_predicate=True,
         verifier_public_and_wrong_action_denied=True,
