@@ -8,13 +8,14 @@ from pathlib import Path
 from gi.repository import GLib
 
 from mano_prompt.app import Prompt
+from mano_prompt.requests import store_request
 
 ROOT = Path("/run/mano-human")
 CANARY = "Human canary: agent input must leave this unchanged"
 
 
 def main():
-    app = Prompt()
+    app = Prompt(submit=store_request)  # Phase0 layout/focus fixture; explicitly local data only.
     report = {
         "passed": False,
         "uid": os.getuid(),

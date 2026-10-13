@@ -6,12 +6,13 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
-from mano_prompt.requests import store_request  # noqa: E402
+from mano_prompt.submit import Submission  # noqa: E402
 
 
 class Prompt(Gtk.Application):
-    def __init__(self):
+    def __init__(self, *, submit=None):
         super().__init__(application_id="org.mano.Prompt")
+        self.submit = submit if submit is not None else Submission().submit
         self.connect("activate", self.activate_window)
 
     def activate_window(self, _app):
@@ -40,7 +41,7 @@ class Prompt(Gtk.Application):
 
         def submit(_widget):
             try:
-                store_request(entry.get_text())
+                self.submit(entry.get_text())
                 status.set_text("Request received")
                 entry.set_text("")
                 entry.grab_focus()

@@ -179,8 +179,22 @@ static bool field_hex(struct json_object *view,const char *name,const char *expe
         json_object_get_string_len(field)!=(int)length) return false;
     const char *value=json_object_get_string(field);return hex(value,length) && !memcmp(value,expected,length);
 }
+static struct json_object *prompt_control(uid_t human,const char *id,const char *prompt,size_t length) {
+    struct passwd *broker=getpwnam("mano-broker");if (!broker || !broker->pw_uid) return NULL;
+    uid_t broker_uid=broker->pw_uid;
+    struct json_object *request=json_object_new_object(),*body=json_object_new_object();
+    json_object_object_add(request,"schema_version",json_object_new_string("1.0"));
+    json_object_object_add(request,"operation",json_object_new_string(prompt?"submit_prompt":"prompt_status"));
+    json_object_object_add(body,"human_uid",json_object_new_int64(human));
+    json_object_object_add(body,prompt?"request_key":"prompt_id",json_object_new_string(id));
+    if (prompt) json_object_object_add(body,"prompt",json_object_new_string_len(prompt,(int)length));
+    json_object_object_add(request,"body",body);
+    const char *wire=json_object_to_json_string_ext(request,JSON_C_TO_STRING_PLAIN);
+    struct json_object *result=exchange(CONTROL_SOCKET,(const unsigned char *)wire,strlen(wire),broker_uid);
+    json_object_put(request);return result;
+}
 static void handle(int fd,uid_t human) {
-    unsigned char packet[421]={0};ssize_t size=0;struct json_object *reply=NULL;
+    unsigned char packet[8229]={0};ssize_t size=0;struct json_object *reply=NULL;
     struct timeval timeout={2,0};
     if (setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout)) ||
         setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout))) goto done;
@@ -209,6 +223,16 @@ static void handle(int fd,uid_t human) {
     }
     if (size<34 || !hex((char *)packet+2,32)) goto done;
     char id[33]={0};memcpy(id,packet+2,32);
+    if (packet[1]==5 || packet[1]==6) {
+        if (packet[1]==6 && size==34) reply=prompt_control(human,id,NULL,0);
+        else if (packet[1]==5 && size>=37) {
+            unsigned length=((unsigned)packet[34]<<8)|packet[35];
+            if (!length || length>8192 || size!=36+(ssize_t)length || memchr(packet+36,0,length)) goto failed;
+            reply=prompt_control(human,id,(char *)packet+36,length);
+        }
+        if (reply) goto send_reply;
+        goto failed;
+    }
     reply=control("approval_view",id,human,NULL,NULL);
     struct json_object *ok=NULL,*view=NULL;
     if (!reply || !json_object_object_get_ex(reply,"ok",&ok) || !json_object_is_type(ok,json_type_boolean) ||
