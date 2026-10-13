@@ -9,6 +9,9 @@ description = "Phase 0 feasibility and security lab for mano-OS"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+agent = ["langgraph==1.2.15"]
+
 [project.scripts]
 mano-lab = "mano_lab.cli:main"
 mano-prompt = "mano_prompt.app:main"

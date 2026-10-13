@@ -1,0 +1,92 @@
+"""One bounded LangGraph cycle; no shell, grant creation or verification authority."""
+
+from typing import TypedDict
+
+from mano_broker.protocol import ActionRequest, canonical, identifier, text
+
+
+class TaskState(TypedDict, total=False):
+    prompt: str
+    task_id: str
+    resource_id: str
+    operation_key: str
+    proposal: dict
+    approval_id: str
+    action_id: str
+    status: str
+
+
+class AgentRuntime:
+    def __init__(self, model, broker, *, checkpointer=None):
+        from langgraph.graph import END, START, StateGraph
+
+        self.model, self.broker = model, broker
+        graph = StateGraph(TaskState)
+        graph.add_node('cycle', self.cycle)
+        graph.add_edge(START, 'cycle')
+        graph.add_edge('cycle', END)
+        self.graph = graph.compile(checkpointer=checkpointer)
+
+    def request(self, operation, body):
+        result = self.broker(dict(schema_version='1.0', operation=operation, body=body))
+        if not isinstance(result, dict) or result.get('ok') is not True:
+            raise ValueError('Broker denied agent request')
+        return result
+
+    def cycle(self, state):
+        identifier(state['task_id'])
+        identifier(state['resource_id'])
+        text(state['operation_key'], 128)
+        text(state['prompt'], 8192)
+        proposal = state.get('proposal')
+        if proposal is None:
+            # Model receives the human prompt only; IDs/grants/UIDs are never supplied.
+            plan = self.model(state['prompt'])
+            if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
+                raise ValueError('Unexpected model plan fields')
+            proposal = dict(schema_version='1.0', task_id=state['task_id'],
+                resource_id=state['resource_id'], capability='terminal.run',
+                args=plan['args'], reason=plan['reason'], idempotency_key=state['operation_key'])
+        # Validate both initial and checkpointed proposals with the broker schema.
+        parsed = ActionRequest.parse(canonical(proposal | {'grant_id': '0' * 32}).encode())
+        if (parsed.task_id != state['task_id'] or parsed.resource_id != state['resource_id']
+                or parsed.idempotency_key != state['operation_key']
+                or parsed.capability != 'terminal.run' or 'grant_id' in proposal):
+            raise ValueError('Checkpoint proposal changed task scope')
+        update = dict(proposal=proposal)
+        action_id = state.get('action_id')
+        if action_id is None:
+            approval_id = state.get('approval_id')
+            if approval_id is None:
+                pending = self.request('request_approval', proposal)['approval']
+                approval_id = identifier(pending['approval_id'])
+            update['approval_id'] = approval_id
+            pending = self.request('approval_status', {'approval_id': approval_id})['approval']
+            if pending['state'] != 'approved':
+                update['status'] = ('awaiting_grant' if pending['state'] == 'pending'
+                                    else 'failed')
+                return update
+            grant_id = identifier(pending['grant_id'])
+            action = self.request('propose', proposal | {'grant_id': grant_id})['action']
+            action_id = identifier(action['id'])
+            update['action_id'] = action_id
+        # Always query the broker, even if a checkpoint previously claimed completion.
+        action = self.request('status', dict(task_id=state['task_id'],
+                                             action_id=action_id))['action']
+        status = action['state']
+        if status == 'done':
+            update['status'] = 'completed' if action['verified'] else 'verifying'
+        elif status == 'unknown':
+            update['status'] = 'unknown_effect'
+        elif status == 'failed':
+            update['status'] = 'failed'
+        elif status in {'intent', 'executing'}:
+            update['status'] = 'queued' if status == 'intent' else 'running'
+        else:
+            raise ValueError('Unexpected broker effect state')
+        return update
+
+    def step(self, state, *, thread_id):
+        text(thread_id, 128)
+        return self.graph.invoke(state, config={'configurable': {'thread_id': thread_id},
+                                                'recursion_limit': 4})
