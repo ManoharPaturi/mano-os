@@ -91,3 +91,13 @@ The fixture saves/restores printk settings and keeps warning/error output on UAR
 info and real fork rejections remain in the kernel journal. The accepted journal
 contains no RCU stall, BUG or soft-lockup message. KVM uses explicit host CPU and
 TCG uses max. The VM still has two vCPUs/4 GiB and requires both task units saturated.
+
+Original-spec audit candidate: ADR0008 reviews all ten Phase0 tests and P0-01..12
+against source and real normal/recovered-root artifacts. `scripts/audit_phase0.py`
+runs after the recovered suite and original-disk preservation comparison. It rejects
+changed specification/evidence, missing/failed coverage and failed critical outcomes.
+A passing recovered report has 35 passing probes and no pending Phase0 checks.
+GO authorizes Phase1 development only; no production model-facing execution exists.
+The stronger request-bound OS-auth fallback is explicitly permitted by spec3.8;
+physical provenance stays null, with physical8GB and installer/firmware gates retained.
+Final-head CI determines acceptance, not the local audit against prior evidence.

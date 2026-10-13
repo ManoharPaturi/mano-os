@@ -358,7 +358,7 @@ def desktop_probe(human_witness):
                     "P0-06",
                     "atspi-named-save",
                     "pass",
-                    "Task-private accessibility invokes enabled Save; geometry remains pending",
+                    "Task-private named Save; geometry verified by separate scale probe",
                     ("office-contract.json", "office-accessibility-tree.json"),
                 )
             )

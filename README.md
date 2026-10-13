@@ -25,12 +25,14 @@ checks actual coordinate saves at scales 1 and 2; CI artifacts determine accepta
 Native GTK4 prompt input is tested in the separate CI human session. Real serial
 rescue authentication is verified on the VM serial console with a stopped mock core.
 Concurrent human/agent focus and input isolation is verified in the CI VM. A fixed
-request-bound OS-auth/PAM approval spike is under final CI acceptance. The trusted
+request-bound OS-auth/PAM approval spike is verified in both CI boot stages. The trusted
 stop/grant-revocation route passed the CI fixture on normal and recovered roots:
 native watchdog and human TTY stop kill all fixture tasks, invalidate live grants,
 disable input and preserve recovery while core and approval authority are frozen.
-Recovered suite: 34 pass, zero fail, one pending full Phase 0 architecture audit.
-The architecture stays NO-GO until that original-spec audit is complete.
+The original-spec audit maps every Phase 0 requirement to real evidence and runs
+after recovered-root tests. Its passing report means GO for Phase 1 development
+only; final-head CI determines acceptance. Production execution is not authorized.
+See docs/architecture/0008-phase0-original-spec-audit.md for the complete decision.
 
 ## Development
 
@@ -57,6 +59,6 @@ All implementation uses PRs. Required checks: `quality`, `security-lab`,
 `python3 scripts/merge_checked.py PR_URL` to validate checks and merge against the
 current PR head. Branch protection is the final server authority.
 
-Passing lab CI means the implemented probes passed; the architecture stays NO-GO
-while physical-input, GUI security or other mandatory proof is pending. A model is
-never connected to host execution before the Phase 0 gate.
+Passing Phase 0 audit means the feasibility boundaries passed, using the specified
+OS-authenticated fallback. Model-facing execution still requires Phase 1 broker
+and runtime gates; physical 8 GB and installer/firmware requirements remain later.
