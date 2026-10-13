@@ -63,6 +63,16 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
             raise Denied("Unexpected uncertain prompt fields")
         result = Prompts(state).uncertain(**body, boot_id=boot_id)
         return dict(schema_version="1.0", ok=True, prompt=result)
+    if value["operation"] == "store_prompt_context":
+        if set(body) != {"human_uid", "prompt_id", "managed"}:
+            raise Denied("Unexpected launch context fields")
+        Prompts(state).store_context(**body, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True)
+    if value["operation"] == "prompt_context":
+        if set(body) != {"human_uid", "prompt_id"}:
+            raise Denied("Unexpected context query fields")
+        managed = Prompts(state).context(**body, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, managed=managed)
     if value["operation"] == "declare_artifact_contract":
         if set(body) != {"approval_id", "path", "sha256", "size"}:
             raise Denied("Unexpected expectation fields")

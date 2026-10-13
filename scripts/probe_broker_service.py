@@ -668,11 +668,9 @@ finally:client.close()
         plan_args = dict(argv=["/usr/bin/python3", "-c", agent_program],
                          cwd=".", timeout_seconds=10)
         if persistent:
-            context = {key: state[key] for key in
-                       ("task_id", "resource_id", "operation_key", "prompt")}
             lifecycle = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
                 "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.lifecycle", "--mock"],
-                input=json.dumps(dict(managed=managed | {"context": context},
+                input=json.dumps(dict(prompt_id=managed["prompt_id"],
                     plan=dict(args=plan_args, reason="Create and run golden project unit test"))),
                 capture_output=True, text=True, timeout=15, check=False)
             assert lifecycle.returncode == 0, lifecycle.stderr
@@ -708,9 +706,7 @@ finally:client.close()
             return decoded["task"]
         return decoded
 
-    agent_state = agent_step(dict(task_id=terminal_task["task_id"],
-        resource_id=terminal_task["resource_id"], operation_key="agent-golden-project",
-        prompt="Create and test a small addition project"))
+    agent_state = agent_step(managed["context"])
     assert agent_state["status"] == "awaiting_grant"
     assert not (terminal_workspace / "calc.py").exists()
     expected_source = b"def add(a,b): return a+b\n"
@@ -772,6 +768,7 @@ finally:client.close()
         sqlite_agent_checkpoint_new_process_recovery=True,
         installed_core_cli_entrypoint=True,
         installed_bounded_lifecycle_controller=True,
+        durable_prompt_context_dispatch_reused=True,
         installed_root_task_factory=True,
         authenticated_native_human_prompt_queue=True,
         human_prompt_claim_to_actual_task=True,

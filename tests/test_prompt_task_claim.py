@@ -60,3 +60,24 @@ class PromptTaskClaims(unittest.TestCase):
                              'unknown_task_creation')
         with self.assertRaises(Denied):
             self.queue.claim(self.prompt, **self.binding)
+
+    def test_durable_context_reopens_and_rejects_changed_binding_without_reallocation(self):
+        self.queue.claim(self.prompt, **self.binding)
+        task = self.task()
+        self.queue.attach(self.prompt, task, **self.binding)
+        managed = dict(context=dict(task_id=task, resource_id='b' * 32,
+            operation_key=self.prompt, prompt='goal'),
+            workspace='/var/lib/mano-workspaces/' + 'c' * 32,
+            caller_uid=1005, caller_name='mano-task-test', mode='supervised', prompt_id=self.prompt)
+        self.queue.store_context(self.prompt, managed=managed, **self.binding)
+        self.queue.store_context(self.prompt, managed=managed, **self.binding)
+        self.state.close()
+        self.state = State(Path(self.temp.name).resolve() / 'journal')
+        self.queue = Prompts(self.state)
+        self.assertEqual(self.queue.context(self.prompt, **self.binding), managed)
+        with self.assertRaises(Denied):
+            self.queue.context(self.prompt, **(self.binding | {'human_uid': 1003}))
+        for update in (dict(caller_uid=1006), dict(workspace='/etc'),
+                       dict(context=managed['context'] | {'operation_key': 'different'})):
+            with self.assertRaises(ValueError):
+                self.queue.store_context(self.prompt, managed=managed | update, **self.binding)

@@ -1,8 +1,10 @@
 """Protected human-intent queue; receiving a goal grants no execution authority."""
 
+import json
 import secrets
+from pathlib import PurePosixPath
 
-from .protocol import identifier, text
+from .protocol import canonical, identifier, text
 from .state import Denied
 
 MAX_PROMPTS = 256
@@ -102,3 +104,62 @@ class Prompts:
                                   (prompt_id,))
             self.state.event(None, 'human-prompt-creation-uncertain', dict(prompt_id=prompt_id))
             return dict(id=prompt_id, state='unknown_task_creation', task_id=None)
+
+    def store_context(self, prompt_id, *, human_uid, managed, boot_id):
+        identifier(prompt_id)
+        if (type(human_uid) is not int or not isinstance(managed, dict)
+                or set(managed) != {'context', 'workspace', 'caller_uid', 'caller_name', 'mode',
+                                    'prompt_id'} or managed['prompt_id'] != prompt_id):
+            raise ValueError('Expected original managed prompt context')
+        context = managed['context']
+        if (not isinstance(context, dict)
+                or set(context) != {'task_id', 'resource_id', 'operation_key', 'prompt'}):
+            raise ValueError('Unexpected task context')
+        identifier(context['task_id'])
+        identifier(context['resource_id'])
+        if context['operation_key'] != prompt_id:
+            raise Denied('Prompt operation key changed')
+        text(context['prompt'], 8192)
+        workspace = PurePosixPath(managed['workspace'])
+        if (workspace.parent != PurePosixPath('/var/lib/mano-workspaces')
+                or str(workspace) != managed['workspace']):
+            raise Denied('Context workspace is outside fixed administrative parent')
+        identifier(workspace.name)
+        text(managed['caller_name'], 64)
+        if (type(managed['caller_uid']) is not int or managed['caller_uid'] < 1000
+                or not managed['caller_name'].startswith('mano-task-')
+                or managed['mode'] != 'supervised'):
+            raise Denied('Context caller/mode mismatch')
+        with self.state.transaction():
+            row = self.state.db.execute('SELECT p.*,t.caller_uid,t.resource_id '
+                'FROM human_prompts p '
+                'JOIN tasks t ON p.task_id=t.id WHERE p.id=? AND p.human_uid=? AND p.boot_id=? '
+                'AND t.boot_id=?', (prompt_id, human_uid, boot_id, boot_id)).fetchone()
+            if (row is None or row['state'] != 'task_created'
+                    or row['task_id'] != context['task_id'] or row['prompt'] != context['prompt']
+                    or row['caller_uid'] != managed['caller_uid']
+                    or row['resource_id'] != context['resource_id']):
+                raise Denied('Context does not match original prompt/task')
+            encoded = canonical(managed)
+            prior = self.state.db.execute('SELECT metadata_json FROM prompt_launch_contexts '
+                                         'WHERE prompt_id=?', (prompt_id,)).fetchone()
+            if prior is not None:
+                if prior[0] != encoded:
+                    raise Denied('Original launch context is immutable')
+                return
+            self.state.db.execute('INSERT INTO prompt_launch_contexts VALUES(?,?)',
+                                  (prompt_id, encoded))
+            self.state.event(None, 'human-prompt-context-stored', dict(prompt_id=prompt_id))
+
+    def context(self, prompt_id, *, human_uid, boot_id):
+        identifier(prompt_id)
+        if type(human_uid) is not int:
+            raise ValueError('Trusted human identity required')
+        row = self.state.db.execute('SELECT c.metadata_json FROM prompt_launch_contexts c '
+            'JOIN human_prompts p ON p.id=c.prompt_id JOIN tasks t ON t.id=p.task_id '
+            "WHERE p.id=? AND p.human_uid=? AND p.boot_id=? AND t.boot_id=? "
+            "AND p.state='task_created'",
+            (prompt_id, human_uid, boot_id, boot_id)).fetchone()
+        if row is None:
+            raise Denied('No original launch context; operator recovery required')
+        return json.loads(row[0])

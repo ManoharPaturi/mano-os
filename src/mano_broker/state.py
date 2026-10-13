@@ -81,6 +81,9 @@ class State:
                 id TEXT PRIMARY KEY,human_uid INTEGER NOT NULL,request_key TEXT NOT NULL,
                 prompt TEXT NOT NULL,boot_id TEXT NOT NULL,state TEXT NOT NULL,
                 task_id TEXT REFERENCES tasks(id),UNIQUE(human_uid,request_key));
+            CREATE TABLE IF NOT EXISTS prompt_launch_contexts(
+                prompt_id TEXT PRIMARY KEY REFERENCES human_prompts(id),
+                metadata_json TEXT NOT NULL);
         """)
 
         # Upgrade pre-binding journals without silently retaining broad authority.

@@ -123,6 +123,7 @@ def create_from_prompt(prompt_id):
                 or attached['task_id'] != result['context']['task_id']):
             raise ValueError('Uncertain prompt/task attachment')
         result['prompt_id'] = prompt_id
+        control_request('store_prompt_context', binding | {'managed': result})
         return result
     except BaseException:
         try:

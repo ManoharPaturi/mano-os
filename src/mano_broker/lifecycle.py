@@ -14,7 +14,7 @@ from pathlib import Path
 from mano_protocol.actions import canonical, identifier, text, unique_object
 
 from .stop_state import snapshot
-from .task_factory import control_request
+from .task_factory import control_request, create_from_prompt, human_uid
 from .workspaces import BASE
 
 CORE_PYTHON = '/usr/local/lib/mano-core/bin/python'
@@ -117,6 +117,25 @@ def run_mock_step(managed, plan):
     return task
 
 
+def dispatch_prompt(prompt_id, plan):
+    if os.geteuid() != 0 or sys.platform != 'linux':
+        raise PermissionError('Trusted Linux root operator required')
+    identifier(prompt_id)
+    binding = dict(prompt_id=prompt_id, human_uid=human_uid())
+    status = control_request('prompt_status', binding)['prompt']
+    if status['id'] != prompt_id:
+        raise ValueError('Prompt status identity changed')
+    if status['state'] == 'received':
+        managed = create_from_prompt(prompt_id)
+    elif status['state'] == 'task_created':
+        managed = control_request('prompt_context', binding)['managed']
+    else:
+        raise ValueError('Prompt creation is uncertain; no automatic reallocation')
+    if managed['prompt_id'] != prompt_id:
+        raise ValueError('Stored context belongs to another prompt')
+    return run_mock_step(managed, plan)
+
+
 def main(argv=None):
     import argparse
 
@@ -132,9 +151,11 @@ def main(argv=None):
         if not 1 <= len(packet) <= 65536:
             raise ValueError('Invalid lifecycle packet size')
         value = json.loads(packet.decode('utf8'), object_pairs_hook=unique_object)
-        if not isinstance(value, dict) or set(value) != {'managed', 'plan'}:
+        if not isinstance(value, dict) or set(value) not in (
+                {'managed', 'plan'}, {'prompt_id', 'plan'}):
             raise ValueError('Unknown lifecycle fields')
-        task = run_mock_step(value['managed'], value['plan'])
+        task = (dispatch_prompt(value['prompt_id'], value['plan']) if 'prompt_id' in value
+                else run_mock_step(value['managed'], value['plan']))
         print(canonical(dict(schema_version='1.0', ok=True, task=task)))
         return 0
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
