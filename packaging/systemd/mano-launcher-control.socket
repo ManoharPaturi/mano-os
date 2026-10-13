@@ -1,0 +1,16 @@
+[Unit]
+Description=mano private launch control
+
+[Socket]
+ListenSequentialPacket=/run/mano-launcher/control.sock
+Service=mano-launcher.service
+SocketUser=mano-broker
+SocketGroup=mano-broker
+SocketMode=0600
+DirectoryMode=0755
+PassCredentials=yes
+FileDescriptorName=control
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

@@ -737,7 +737,6 @@ RemoveOnStop=yes
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
         if (STATE / "report.json").exists():
-            print((STATE / "report.json").read_text())
             break
         result = subprocess.check_output(
             ["systemctl", "show", "mano-launcher.service", "--property=Result", "--value"],
@@ -747,6 +746,20 @@ RemoveOnStop=yes
         time.sleep(0.1)
     else:
         raise AssertionError("Delegated service report unavailable")
+    subprocess.run(["systemctl", "stop", "mano-launcher.service",
+                    *(p.name for p in SOCKET_UNITS.values())], check=True)
+    packaging = Path("/opt/mano-lab/packaging/systemd")
+    shutil.copyfile(packaging / UNIT_FILE.name, UNIT_FILE)
+    for unit in SOCKET_UNITS.values():
+        shutil.copyfile(packaging / unit.name, unit)
+    subprocess.run(["systemctl", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "start", *(p.name for p in SOCKET_UNITS.values()),
+                    "mano-launcher.service"], check=True)
+    daemon = subprocess.run(["/usr/bin/python3", "/opt/mano-lab/scripts/probe_launcher_service.py"],
+                            check=True, capture_output=True, text=True, timeout=20)
+    report = json.loads((STATE / "report.json").read_text())
+    report["production_daemon"] = json.loads(daemon.stdout)
+    print(json.dumps(report, indent=2))
 except BaseException:
     subprocess.run(
         ["journalctl", "-u", "mano-launcher.service", "--no-pager", "-n", "80"],
