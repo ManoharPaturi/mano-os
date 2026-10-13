@@ -18,6 +18,17 @@ class Prompts:
     def __init__(self, state):
         self.state = state
 
+    def pending(self, *, human_uid, boot_id):
+        if type(human_uid) is not int or human_uid < 1000:
+            raise ValueError('Trusted human identity required')
+        if self.state.meta('latched'):
+            raise Denied('Prompt discovery disabled while Stop is latched')
+        rows = self.state.db.execute(
+            "SELECT id,state,task_id FROM human_prompts WHERE human_uid=? AND boot_id=? "
+            "AND state='received' ORDER BY rowid LIMIT ?",
+            (human_uid, boot_id, MAX_PROMPTS)).fetchall()
+        return [public(row) for row in rows]
+
     def submit(self, *, human_uid, request_key, prompt, boot_id):
         if type(human_uid) is not int or human_uid < 1000:
             raise ValueError('Trusted human identity required')

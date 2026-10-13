@@ -62,6 +62,31 @@ class HumanPromptQueueTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prompt_packet(prompt, 'a' * 32)
 
+    def test_discovery_is_root_only_scoped_read_only_and_stop_gated(self):
+        first = self.call('submit_prompt', self.body)['prompt']
+        second = self.call('submit_prompt', self.body | {'request_key': 'b' * 32})['prompt']
+        self.call('submit_prompt', self.body | {'human_uid': 1003})
+        self.state.db.execute('INSERT INTO human_prompts VALUES(?,?,?,?,?,?,NULL)',
+            ('c' * 32, 1002, 'c' * 32, 'old boot', 'old', 'received'))
+        query = dict(human_uid=1002)
+        expected = dict(schema_version='1.0', ok=True, prompts=[first, second])
+        self.assertEqual(self.call('pending_prompts', query), expected)
+        self.assertEqual(self.call('pending_prompts', query), expected)
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM tasks').fetchone()[0], 0)
+        for uid in (1001, 1002, 1003, 1004):
+            with self.assertRaises(Denied):
+                self.call('pending_prompts', query, uid)
+        for extra in (dict(limit=1), dict(boot_id='old'), dict(prompt='replacement')):
+            with self.assertRaises(Denied):
+                self.call('pending_prompts', query | extra)
+        with self.assertRaises(ValueError):
+            self.call('pending_prompts', dict(human_uid=True))
+        self.call('claim_prompt', dict(human_uid=1002, prompt_id=first['id']))
+        self.assertEqual(self.call('pending_prompts', query)['prompts'], [second])
+        self.state.emergency_stop()
+        with self.assertRaises(Denied):
+            self.call('pending_prompts', query)
+
     def test_ui_retry_preserves_key_until_acknowledged_then_allows_new_intent(self):
         submission = Submission()
         receipt = dict(id='b' * 32, state='received', task_id=None)
