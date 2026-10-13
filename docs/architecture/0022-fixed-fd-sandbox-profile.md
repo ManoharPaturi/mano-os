@@ -12,6 +12,10 @@ environment. OS runtime files are read-only; mano code/native helper locations
 are hidden. Host /etc, /var, /run/user, input devices and session sockets are not
 mounted. Only the supplied workspace/cwd directories are writable host mounts.
 Temporary directories and a private /dev are task-local.
+The exact environment is PATH, HOME, LANG and Bubblewrap's generated PWD.
+PWD must equal /task-cwd; no inherited host variables are accepted. The initial
+VM test incorrectly expected only three variables; v0.12.0 source line 3427
+sets PWD after chdir. The fixture now asserts all four exact values.
 
 Bubblewrap 0.12.0 bind-fd uses the supplied descriptor and compares the mounted
 device/inode against it, aborting a substitution race. The profile requires the

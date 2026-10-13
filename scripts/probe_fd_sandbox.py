@@ -107,7 +107,8 @@ try:
 from pathlib import Path
 assert Path('/workspace').stat().st_ino==int(sys.argv[1])
 assert Path.cwd().stat().st_ino==int(sys.argv[1])
-assert set(os.environ)=={'PATH','HOME','LANG'}
+assert dict(os.environ)=={'PATH':'/usr/bin:/bin','HOME':'/home/task',
+ 'LANG':'C.UTF-8','PWD':'/task-cwd'}
 assert not Path('/run/mano-broker').exists()
 assert not Path('/etc/mano-lab-disposable').exists()
 assert not Path('/usr/lib/mano-os/mano_broker').exists()
