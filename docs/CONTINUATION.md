@@ -474,3 +474,17 @@ Linuxactualpersist/reopen/corrupt/permissioncasespending. VMclosessealedFDs then
 brokerUIDprocess readsprivatejournal data unverified. No powercut/persistencefakeclaim.
 PR52CI38443695245 all3SUCCESS butholdmergeuntilwatchdogfix53accepted. PR53
 CI38444304133 remainsLIVE atlatestcheck, knownpostmain51failureunderinvestigation.
+# Watchdog drain observer fix
+
+Post-main51 CI38443276815 FAILED P0watchdogobserver afterpopulated0/latch:
+Task1530 exited_or_zombieFalse. Preciseoldprocessstate/identityunknown, notignored.
+Currentfix/stop-process-drain-observer requiresALLoriginalPIDs exit/Z PLUSsame
+cgroupempty/latch withinUNCHANGED15secs beforebreak; survivorassertionsretained.
+TimeoutState/Uid/PPid diagnostics added, no args/passwords; permissionerrorsfail.
+Local108tests12MacLinuxskips/Ruff/diffpass, actualwatchdogVMpending.
+PR52sealed-artifacts branchcommittede07ae56 preserved; no stashneeded/nonecreated.
+
+PR53 merged42ba32903b8b84e140726200c5a453f31b723fe8 afterheada06314f/all3PASS
+38444304133/artifact11837358440. Watchdogacceptedpop0/allpidexit-Z/core+authority
+stillT/pulseStopped/inputrevoke/6actorDenials/restart1; originalpost51 precisecause
+unknown. PR52 refreshesmain; docappendconflictpreservesbothnotes, no sourceconflict.
