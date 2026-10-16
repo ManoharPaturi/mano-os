@@ -5,6 +5,8 @@ from typing import TypedDict
 
 from mano_protocol.actions import ActionRequest, canonical, identifier, text
 
+from .planner import PlanningPending
+
 
 class TaskState(TypedDict, total=False):
     prompt: str
@@ -42,7 +44,10 @@ class AgentRuntime:
         proposal = state.get('proposal')
         if proposal is None:
             # Model receives the human prompt only; IDs/grants/UIDs are never supplied.
-            plan = self.model(state['prompt'])
+            try:
+                plan = self.model(state['prompt'])
+            except PlanningPending as pending:
+                return dict(status=pending.status)
             if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
                 raise ValueError('Unexpected model plan fields')
             proposal = dict(schema_version='1.0', task_id=state['task_id'],
