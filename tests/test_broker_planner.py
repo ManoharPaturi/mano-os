@@ -1,3 +1,5 @@
+import importlib.util
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +13,7 @@ from mano_core.runtime import AgentRuntime
 from mano_protocol.actions import canonical
 
 
+@unittest.skipUnless(importlib.util.find_spec('langgraph'), 'Optional LangGraph required')
 class BrokerPlannerTests(unittest.TestCase):
     def setUp(self):
         from langgraph.checkpoint.memory import InMemorySaver
@@ -100,3 +103,37 @@ class BrokerPlannerTests(unittest.TestCase):
             self.step()
         self.assertFalse(any(call['operation'] == 'model_result' for call in self.calls))
         self.assertEqual(self.state.db.execute('SELECT count(*) FROM grants').fetchone()[0], 1)
+
+    @unittest.skipIf(os.geteuid() == 0, 'Core session requires unprivileged identity')
+    def test_sqlite_checkpoint_reopen_retains_disclosure_and_unknown_state(self):
+        from mano_core.checkpoints import Session
+
+        directory = Path(self.temp.name).resolve() / 'checkpoints'
+        def session():
+            planner = BrokerPlanner(self.broker, task_id=self.task, resource_id='a' * 32,
+                operation_key='build', model='synthetic-snapshot', max_output_tokens=100)
+            return Session(directory, planner, self.broker)
+        first = session()
+        try:
+            self.assertEqual(first.step(self.input)['status'], 'awaiting_model_grant')
+        finally:
+            first.close()
+        self.approve_model()
+        reopened = session()
+        try:
+            self.assertEqual(reopened.step(self.input)['status'], 'model_queued')
+        finally:
+            reopened.close()
+        action_id = self.state.db.execute('SELECT id FROM actions').fetchone()[0]
+        ModelStore(self.state).begin(action_id, now=10, boot_id='boot')
+        self.state.recover()
+        recovered = session()
+        try:
+            self.assertEqual(recovered.step(self.input)['status'], 'model_unknown_effect')
+            self.assertEqual(recovered.step(self.input)['status'], 'model_unknown_effect')
+        finally:
+            recovered.close()
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM approvals').fetchone()[0], 1)
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM actions').fetchone()[0], 1)
+        self.assertEqual(self.state.db.execute(
+            'SELECT count(*) FROM model_attempts').fetchone()[0], 1)
