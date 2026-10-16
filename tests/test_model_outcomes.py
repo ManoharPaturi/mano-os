@@ -1,3 +1,5 @@
+import os
+import socket
 import tempfile
 import unittest
 from pathlib import Path
@@ -132,6 +134,27 @@ class ModelOutcomeTests(unittest.TestCase):
         result = self.store.finish(self.action, canonical(response).encode(), boot_id='boot')
         self.assertGreater(len(canonical(result)), 65536)
         self.assertEqual(self.read(), result)
+        if hasattr(socket, 'SCM_CREDENTIALS'):
+            from mano_protocol.transport import reply
+
+            def wire_client(envelope):
+                response = dispatch(self.state, canonical(envelope).encode(),
+                    peer=Peer(42, 1005, 1005), now=15, boot_id='boot')
+                packet = canonical(response).encode()
+                self.assertLess(len(packet), 65536)
+                sender, receiver = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+                with sender, receiver:
+                    receiver.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+                    sender.settimeout(1)
+                    receiver.settimeout(1)
+                    self.assertEqual(sender.send(packet), len(packet))
+                    peer, received = reply(receiver, expected_uid=os.getuid(),
+                                           expected_gid=os.getgid())
+                    self.assertEqual(peer.pid, os.getpid())
+                    return received
+
+            self.assertEqual(read_model_result(wire_client, task_id=self.task,
+                                               action_id=self.action), result)
         for offset, length in ((-1, 1), (True, 1), (0, False), (0, 4097), (131073, 1)):
             with self.assertRaises(Denied):
                 self.store.chunk(self.action, task_id=self.task, caller_uid=1005,
