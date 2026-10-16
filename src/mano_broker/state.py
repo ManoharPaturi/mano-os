@@ -93,6 +93,9 @@ class State:
                 task_id TEXT NOT NULL REFERENCES model_budgets(task_id),
                 money INTEGER NOT NULL,tokens INTEGER NOT NULL,
                 settled INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS model_prices(
+                action_id TEXT PRIMARY KEY REFERENCES model_attempts(action_id),
+                policy_json TEXT NOT NULL,CHECK(length(policy_json)<=4096));
             CREATE TABLE IF NOT EXISTS model_attempts(
                 action_id TEXT PRIMARY KEY REFERENCES actions(id),
                 request_digest TEXT NOT NULL,result_json TEXT,result_sha256 TEXT,
