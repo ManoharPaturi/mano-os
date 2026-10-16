@@ -177,6 +177,10 @@ class Approvals:
                 cpu_percent=20,
                 max_timeout_seconds=300,
             )
+            if view["capability"] == "model.set_budget":
+                from .model_budget import ModelBudget
+
+                ModelBudget(self.state).apply_grant(grant, now=now, boot_id=boot_id)
             self.state.db.execute(
                 "UPDATE approvals SET state='approved',grant_id=? WHERE id=?", (grant, approval_id)
             )
