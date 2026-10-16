@@ -55,3 +55,8 @@ The frozen-job timer witness waits for the Type=exec unit to be active/running
 with MainPID equal to its cgroup PID before SIGSTOP. A PID in the cgroup during
 systemd's pre-exec startup does not prove RuntimeMaxSec has begun. The witness
 still requires systemd Result=timeout, SIGKILL status9 and its original38sec bound.
+
+The job uses KillSignal=SIGKILL for deadline/control-group termination. A
+credentialed one-shot operation cannot rely on Python shutdown handlers after
+its journaled dispatch. The frozen-job witness still demands Result=timeout and
+ExecMainStatus=9 within38 seconds; the exit status is included if the check fails.

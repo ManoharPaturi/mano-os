@@ -20,6 +20,8 @@ UMask=0077
 RuntimeMaxSec=35
 TimeoutStopSec=1
 KillMode=control-group
+# Provider effects are journaled before dispatch; no Python shutdown cooperation.
+KillSignal=SIGKILL
 NoNewPrivileges=yes
 CapabilityBoundingSet=
 AmbientCapabilities=

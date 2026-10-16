@@ -393,7 +393,7 @@ try:
         assert result == "timeout", result
         provider_deadline_seconds = time.monotonic() - provider_started
         assert command("systemctl", "show", provider_timer_unit,
-                       "--property=ExecMainStatus", "--value") == "9"
+                       "--property=ExecMainStatus", "--value") == "9", exit_status
     finally:
         provider_timer_client.terminate()
         provider_timer_client.wait(timeout=3)
