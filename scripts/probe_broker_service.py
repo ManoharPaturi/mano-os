@@ -1066,11 +1066,6 @@ try:
  c=Client();result=c.exchange('prepare',packet,fds);c.close()
  assert result['ok'] is False
 finally:
-    provider_units = [line.split()[0] for line in command("systemctl", "list-units", "--all",
-        "--plain", "--no-legend", "mano-provider@*.service").splitlines() if line.strip()]
-    if provider_units:
-        subprocess.run(["systemctl", "stop", *provider_units], check=False, capture_output=True,
-                       timeout=5)
  for fd in fds:os.close(fd)
 """
     negative = dict(schema_version="1.0", operation="launch_task", body=dict(
@@ -1367,6 +1362,11 @@ except BaseException:
     )
     raise
 finally:
+    provider_units = [line.split()[0] for line in command("systemctl", "list-units", "--all",
+        "--plain", "--no-legend", "mano-provider@*.service").splitlines() if line.strip()]
+    if provider_units:
+        subprocess.run(["systemctl", "stop", *provider_units], check=False, capture_output=True,
+                       timeout=5)
     subprocess.run(["systemctl", "stop", *(unit for unit in UNITS if "@" not in unit)],
                    check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
