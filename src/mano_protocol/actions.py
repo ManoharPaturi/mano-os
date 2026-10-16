@@ -15,6 +15,7 @@ class Capability(StrEnum):
     READ = "files.read"
     WRITE = "files.write"
     RUN = "terminal.run"
+    PLAN = "model.plan"
 
 
 class Mode(StrEnum):
@@ -30,6 +31,12 @@ def canonical(value):
 def identifier(value):
     if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{32}", value):
         raise ValueError("Expected broker-issued identifier")
+    return value
+
+
+def model_identifier(value):
+    if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9._/-]{1,128}', value):
+        raise ValueError('Invalid explicit model identifier')
     return value
 
 
@@ -110,6 +117,16 @@ class ActionRequest:
             relative_path(args["path"])
             if capability == Capability.WRITE:
                 text(args["text"], 32768, allow_empty=True)
+        elif capability == Capability.PLAN:
+            if set(args) != {'provider', 'model', 'prompt', 'max_output_tokens'}:
+                raise ValueError('Unexpected model disclosure arguments')
+            if args['provider'] != 'openai':
+                raise ValueError('Unsupported fixed provider')
+            model_identifier(args['model'])
+            text(args['prompt'], 8192)
+            if (type(args['max_output_tokens']) is not int
+                    or not 16 <= args['max_output_tokens'] <= 8192):
+                raise ValueError('Invalid output token ceiling')
         else:
             if set(args) != {"argv", "cwd", "timeout_seconds"}:
                 raise ValueError("Unexpected terminal arguments")

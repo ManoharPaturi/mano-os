@@ -65,6 +65,8 @@ class Registry:
 
     def prepare(self, state, request, *, caller_uid, now, boot_id):
         request = ActionRequest.parse(canonical(request.body()).encode())
+        if request.capability == Capability.PLAN:
+            raise Denied('Protected provider executor is not installed')
         resource = self.resources.get(request.resource_id)
         task = state.db.execute("SELECT * FROM tasks WHERE id=?", (request.task_id,)).fetchone()
         if (
