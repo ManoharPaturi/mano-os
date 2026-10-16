@@ -16,6 +16,7 @@ class Capability(StrEnum):
     WRITE = "files.write"
     RUN = "terminal.run"
     PLAN = "model.plan"
+    BUDGET = "model.set_budget"
 
 
 class Mode(StrEnum):
@@ -117,6 +118,12 @@ class ActionRequest:
             relative_path(args["path"])
             if capability == Capability.WRITE:
                 text(args["text"], 32768, allow_empty=True)
+        elif capability == Capability.BUDGET:
+            if set(args) != {'money_micro_usd', 'tokens'}:
+                raise ValueError('Unexpected model budget fields')
+            for key, maximum in (('money_micro_usd', 10**12), ('tokens', 10**9)):
+                if type(args[key]) is not int or not 1 <= args[key] <= maximum:
+                    raise ValueError('Invalid bounded model budget')
         elif capability == Capability.PLAN:
             if set(args) != {'provider', 'model', 'prompt', 'max_output_tokens'}:
                 raise ValueError('Unexpected model disclosure arguments')

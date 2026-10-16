@@ -4,6 +4,9 @@ This ledger does not establish provider prices or tokenize requests. A trusted
 executor must supply a conservative reservation before any paid dispatch.
 """
 
+import json
+import math
+
 from .protocol import identifier
 from .state import Denied
 
@@ -39,6 +42,39 @@ class ModelBudget:
                                   (task_id, money, tokens))
             self.state.event(None, 'model-budget-approved', dict(task_id=task_id,
                 money_micro_usd=money, tokens=tokens))
+
+    def apply_grant(self, grant_id, *, now, boot_id):
+        """Consume a dedicated exact budget grant inside authenticated approval."""
+        identifier(grant_id)
+        if type(now) not in {int, float} or not math.isfinite(now) or now < 0:
+            raise ValueError('Invalid trusted budget clock')
+        with self.state.transaction():
+            grant = self.state.db.execute('SELECT g.*,t.boot_id,t.human_uid AS task_human,'
+                't.resource_id AS task_resource '
+                'FROM grants g JOIN tasks t ON g.task_id=t.id WHERE g.id=?',
+                (grant_id,)).fetchone()
+            if (grant is None or grant['capability'] != 'model.set_budget'
+                    or grant['human_uid'] != grant['task_human'] or grant['boot_id'] != boot_id
+                    or grant['resource_id'] != grant['task_resource']
+                    or self.state.meta('latched') or grant['revoked']
+                    or grant['epoch'] != self.state.meta('epoch') or now >= grant['expires']
+                    or grant['used'] != 0 or grant['max_count'] != 1):
+                raise Denied('No unused authenticated model budget grant')
+            args = json.loads(grant['approved_args_json'])
+            if set(args) != {'money_micro_usd', 'tokens'}:
+                raise Denied('Invalid exact model budget grant')
+            money = bounded(args['money_micro_usd'], MAX_AMOUNT)
+            tokens = bounded(args['tokens'], MAX_TOKENS)
+            prior = self.state.db.execute('SELECT * FROM model_budgets WHERE task_id=?',
+                                         (grant['task_id'],)).fetchone()
+            if prior and (money < prior['money_limit'] or tokens < prior['token_limit']):
+                raise Denied('Budget grants cannot silently lower existing task limits')
+            self.state.db.execute('INSERT INTO model_budgets VALUES(?,?,?) '
+                'ON CONFLICT(task_id) DO UPDATE SET money_limit=excluded.money_limit,'
+                'token_limit=excluded.token_limit', (grant['task_id'], money, tokens))
+            self.state.db.execute('UPDATE grants SET used=1 WHERE id=?', (grant_id,))
+            self.state.event(None, 'model-budget-grant-consumed', dict(grant_id=grant_id,
+                task_id=grant['task_id'], money_micro_usd=money, tokens=tokens))
 
     def reserve(self, action_id, *, boot_id, money, tokens):
         """Caller composes this with ModelStore.begin in one outer transaction."""
