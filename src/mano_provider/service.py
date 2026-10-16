@@ -3,6 +3,7 @@
 import json
 import pwd
 import socket
+import sys
 
 from mano_protocol.actions import canonical, unique_object
 from mano_protocol.transport import receive
@@ -21,7 +22,10 @@ def health(packet, peer):
             or value['schema_version'] != '1.0' or value['operation'] != 'health'
             or value['body'] != {}):
         raise ValueError('Provider dispatch is not enabled')
-    config, _key = load()
+    try:
+        config, _key = load()
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
+        raise ValueError('provider-credential-load-denied') from None
     return dict(schema_version='1.0', ok=True, provider=config['provider'], model=config['model'],
                 credentials_present=True, execution_enabled=False)
 
@@ -29,13 +33,29 @@ def health(packet, peer):
 def main():
     connection = None
     result = dict(schema_version='1.0', ok=False, error='denied')
+    stage = 'profile'
     try:
         verify_current()  # Before socket requests or credentials are read.
+        stage = 'socket'
         connection = socket.fromfd(0, socket.AF_UNIX, socket.SOCK_SEQPACKET)
         connection.settimeout(15)
+        stage = 'receive'
         peer, packet = receive(connection)
+        stage = 'health'
         result = health(packet, peer)
-    except (OSError, ValueError, KeyError, TypeError, StopIteration, RecursionError):
+    except (OSError, ValueError, KeyError, TypeError, StopIteration, RecursionError) as error:
+        # Emit fixed codes only: exception text may contain provider secrets.
+        known = {
+            'Protected provider requires its Linux service': 'identity-platform',
+            'Protected provider identity absent': 'identity-account',
+            'Protected provider process restrictions absent': 'process-profile',
+            'Protected provider is outside the Stop domain': 'stop-domain',
+            'Provider cgroup is not root managed': 'cgroup-owner',
+            'Provider resource constraints absent': 'cgroup-limits',
+            'provider-credential-load-denied': 'credentials',
+        }
+        code = known.get(str(error), 'denied')
+        print(f'provider-request-denied stage={stage} code={code}', file=sys.stderr)
         result = dict(schema_version='1.0', ok=False, error='denied')
     finally:
         if connection is not None:

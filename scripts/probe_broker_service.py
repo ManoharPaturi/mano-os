@@ -1347,6 +1347,8 @@ except BaseException:
             "mano-broker.service",
             "-u",
             "mano-approve.service",
+            "-u",
+            "mano-provider@*.service",
             "--no-pager",
             "-n",
             "80",

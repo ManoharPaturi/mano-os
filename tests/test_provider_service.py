@@ -66,3 +66,14 @@ class ProtectedProviderTests(unittest.TestCase):
             self.assertEqual(main(), 1)
             socket.assert_not_called()
             load.assert_not_called()
+
+    def test_journal_diagnostic_never_prints_exception_secret(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        with patch('mano_provider.service.verify_current',
+                   side_effect=ValueError('ci-secret-must-not-appear')), \
+             contextlib.redirect_stderr(output):
+            self.assertEqual(main(), 1)
+        self.assertEqual(output.getvalue(), 'provider-request-denied stage=profile code=denied\n')
