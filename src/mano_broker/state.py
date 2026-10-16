@@ -84,6 +84,10 @@ class State:
             CREATE TABLE IF NOT EXISTS prompt_launch_contexts(
                 prompt_id TEXT PRIMARY KEY REFERENCES human_prompts(id),
                 metadata_json TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS model_attempts(
+                action_id TEXT PRIMARY KEY REFERENCES actions(id),
+                request_digest TEXT NOT NULL,result_json TEXT,result_sha256 TEXT,
+                CHECK(length(result_json)<=131072));
         """)
 
         # Upgrade pre-binding journals without silently retaining broad authority.
