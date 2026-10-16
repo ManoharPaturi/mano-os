@@ -8,6 +8,7 @@ from mano_broker.state import Denied
 
 class ModelBudgetTests(unittest.TestCase):
     tearDown = outcomes.ModelOutcomeTests.tearDown
+
     def setUp(self):
         outcomes.ModelOutcomeTests.setUp(self)
         self.budget = ModelBudget(self.state)
@@ -64,6 +65,8 @@ class ModelBudgetTests(unittest.TestCase):
         self.store.finish(self.action, self.packet, boot_id='boot')
         with self.assertRaises(Denied):
             self.budget.settle(self.action, boot_id='boot', money=81, tokens=5)
+        with self.assertRaises(Denied):
+            self.budget.settle(self.action, boot_id='boot', money=40, tokens=4)
         self.budget.settle(self.action, boot_id='boot', money=40, tokens=5)
         self.assertEqual(tuple(self.state.db.execute(
             'SELECT money,tokens,settled FROM model_reservations').fetchone()), (40, 5, 1))
@@ -95,3 +98,20 @@ class ModelBudgetTests(unittest.TestCase):
             self.budget.begin(second['id'], now=12, boot_id='boot', money=80, tokens=800)
         self.assertEqual(self.state.db.execute(
             'SELECT count(*) FROM model_attempts').fetchone()[0], 1)
+
+    def test_stop_retains_full_reservation_and_public_mutations_are_denied(self):
+        from mano_broker.ipc import Peer, dispatch
+        from mano_protocol.actions import canonical
+
+        self.configure()
+        self.begin()
+        self.state.emergency_stop()
+        with self.assertRaises(Denied):
+            self.budget.settle(self.action, boot_id='boot', money=0, tokens=0)
+        self.assertEqual(tuple(self.state.db.execute(
+            'SELECT money,tokens,settled FROM model_reservations').fetchone()), (80, 800, 0))
+        for operation in ('configure_model_budget', 'reserve_model_budget', 'settle_model_budget'):
+            packet = canonical(dict(schema_version='1.0', operation=operation,
+                                    body=dict(task_id=self.task, action_id=self.action))).encode()
+            with self.assertRaises(Denied):
+                dispatch(self.state, packet, peer=Peer(42, 1005, 1005), now=15, boot_id='boot')
