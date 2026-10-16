@@ -89,7 +89,8 @@ class ProtectedProviderTests(unittest.TestCase):
         def packet(items):
             return struct.pack('<I', 2) + b''.join(struct.pack('<HHI', *x) for x in items)
         with patch('mano_provider.credentials.os.geteuid', return_value=1003), \
-             patch('mano_provider.credentials.os.getxattr', return_value=packet(entries)) as acl:
+             patch('mano_provider.credentials.os.getxattr',
+                   return_value=packet(entries), create=True) as acl:
             self.assertTrue(private_mode(info, 42))
             acl.assert_called_once_with(42, 'system.posix_acl_access')
             for index, replacement in ((1, (2, 4, 1004)), (1, (2, 6, 1003)),
