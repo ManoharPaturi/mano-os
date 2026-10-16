@@ -126,9 +126,11 @@ class ModelOutcomeTests(unittest.TestCase):
         self.plan['args']['argv'] = ['true'] + ['x' * 4000] * 16
         response = json.loads(self.packet)
         response['output'][0]['arguments'] = canonical(self.plan)
+        response['usage']['input_tokens'] = int('9' * 1200)
+        response['usage']['total_tokens'] = response['usage']['input_tokens'] + 3
         self.store.begin(self.action, now=12, boot_id='boot')
         result = self.store.finish(self.action, canonical(response).encode(), boot_id='boot')
-        self.assertGreater(len(canonical(result)), 64000)
+        self.assertGreater(len(canonical(result)), 65536)
         self.assertEqual(self.read(), result)
         for offset, length in ((-1, 1), (True, 1), (0, False), (0, 4097), (131073, 1)):
             with self.assertRaises(Denied):
@@ -138,7 +140,9 @@ class ModelOutcomeTests(unittest.TestCase):
     def test_client_rejects_changed_digest_and_truncated_transfer(self):
         self.store.begin(self.action, now=12, boot_id='boot')
         self.store.finish(self.action, self.packet, boot_id='boot')
-        for field, value in (('eof', False), ('data', 'eA==')):
+        for field, value in (('eof', False), ('data', 'eA=='),
+                             ('result', dict(action_id=self.action, task_id=self.task,
+                                             size=1, sha256='0' * 64))):
             def client(envelope, field=field, value=value):
                 response = dispatch(self.state, canonical(envelope).encode(),
                     peer=Peer(42, 1005, 1005), now=15, boot_id='boot')
