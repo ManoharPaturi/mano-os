@@ -20,10 +20,16 @@ def private_file(directory, name, maximum):
         file = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
         try:
             info = os.fstat(file)
-            if (not stat.S_ISREG(info.st_mode) or info.st_uid not in {0, os.geteuid()}
-                    or stat.S_IMODE(info.st_mode) not in {0o400, 0o600} or info.st_nlink != 1
-                    or not 1 <= info.st_size <= maximum):
-                raise ValueError('Unsafe bounded provider credential')
+            checks = {
+                'credential-file-type': stat.S_ISREG(info.st_mode),
+                'credential-file-owner': info.st_uid in {0, os.geteuid()},
+                'credential-file-mode': stat.S_IMODE(info.st_mode) in {0o400, 0o600},
+                'credential-file-links': info.st_nlink == 1,
+                'credential-file-size': 1 <= info.st_size <= maximum,
+            }
+            for code, valid in checks.items():
+                if not valid:
+                    raise ValueError(code)
             packet = os.read(file, maximum + 1)
             if len(packet) != info.st_size:
                 raise ValueError('Provider credential changed')

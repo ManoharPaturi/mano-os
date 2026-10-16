@@ -24,7 +24,15 @@ def health(packet, peer):
         raise ValueError('Provider dispatch is not enabled')
     try:
         config, _key = load()
-    except (OSError, ValueError, KeyError, TypeError, RecursionError):
+    except (OSError, ValueError, KeyError, TypeError, RecursionError) as error:
+        codes = {'Unknown provider credential', 'Unsafe credential directory',
+                 'credential-file-type', 'credential-file-owner', 'credential-file-mode',
+                 'credential-file-links', 'credential-file-size', 'Provider credential changed',
+                 'Fixed service credential directory required', 'Untrusted credential ancestor',
+                 'Invalid fixed provider policy', 'Invalid explicit model identifier',
+                 'Invalid provider credential'}
+        if str(error) in codes:
+            raise ValueError(str(error)) from None
         raise ValueError('provider-credential-load-denied') from None
     return dict(schema_version='1.0', ok=True, provider=config['provider'], model=config['model'],
                 credentials_present=True, execution_enabled=False)
@@ -54,6 +62,19 @@ def main():
             'Provider resource constraints absent': 'cgroup-limits',
             'provider-credential-load-denied': 'credentials',
         }
+        credential_codes = {
+            'Unknown provider credential': 'credential-name',
+            'Unsafe credential directory': 'credential-directory',
+            'Provider credential changed': 'credential-changed',
+            'Fixed service credential directory required': 'credential-path',
+            'Untrusted credential ancestor': 'credential-ancestor',
+            'Invalid fixed provider policy': 'credential-policy',
+            'Invalid explicit model identifier': 'credential-model',
+            'Invalid provider credential': 'credential-key-format',
+        }
+        known.update(credential_codes)
+        for item in ('type', 'owner', 'mode', 'links', 'size'):
+            known[f'credential-file-{item}'] = f'credential-file-{item}'
         code = known.get(str(error), 'denied')
         print(f'provider-request-denied stage={stage} code={code}', file=sys.stderr)
         result = dict(schema_version='1.0', ok=False, error='denied')
