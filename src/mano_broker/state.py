@@ -84,6 +84,15 @@ class State:
             CREATE TABLE IF NOT EXISTS prompt_launch_contexts(
                 prompt_id TEXT PRIMARY KEY REFERENCES human_prompts(id),
                 metadata_json TEXT NOT NULL);
+
+            CREATE TABLE IF NOT EXISTS model_budgets(
+                task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+                money_limit INTEGER NOT NULL, token_limit INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS model_reservations(
+                action_id TEXT PRIMARY KEY REFERENCES actions(id),
+                task_id TEXT NOT NULL REFERENCES model_budgets(task_id),
+                money INTEGER NOT NULL,tokens INTEGER NOT NULL,
+                settled INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS model_attempts(
                 action_id TEXT PRIMARY KEY REFERENCES actions(id),
                 request_digest TEXT NOT NULL,result_json TEXT,result_sha256 TEXT,
