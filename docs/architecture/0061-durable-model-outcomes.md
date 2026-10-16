@@ -29,3 +29,9 @@ idempotent reservation, private mutation denial, caller scope and corruption.
 These are synthetic in-process outcomes, not a live provider or network proof.
 Protected service credentials, task-scoped TLS egress, job/reply association,
 dispatch cancellation, durable cost reservations and real API tests remain gates.
+
+Public result reads require an explicit offset and length (1 to 4096 bytes).
+Each reply carries base64 bytes, total size, original task/action identity, a
+stable SHA-256 digest and exact EOF. The core reassembles at most 128 KiB, rejects
+changed metadata, oversized/empty chunks, premature EOF and digest mismatches.
+This preserves valid large plans without exceeding the 64 KiB transport packet.

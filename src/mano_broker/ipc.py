@@ -82,10 +82,11 @@ def dispatch(state, packet, *, peer, now, boot_id):
         from .models import ModelStore
 
         body = value["body"]
-        if not isinstance(body, dict) or set(body) != {"task_id", "action_id"}:
+        if not isinstance(body, dict) or set(body) != {"task_id", "action_id", "offset", "length"}:
             raise Denied("Unknown model result fields")
-        result = ModelStore(state).read(**body, caller_uid=peer.uid, boot_id=boot_id)
-        return dict(schema_version="1.0", ok=True, result=result)
+        result = ModelStore(state).chunk(**body, caller_uid=peer.uid, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, result=result["metadata"],
+                    data=base64.b64encode(result["data"]).decode("ascii"), eof=result["eof"])
     if value["operation"] == "artifact_read":
         body = value["body"]
         if (not isinstance(body, dict)
