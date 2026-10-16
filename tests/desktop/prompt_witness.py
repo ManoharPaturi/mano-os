@@ -15,7 +15,25 @@ CANARY = "Human canary: agent input must leave this unchanged"
 
 
 def main():
-    app = Prompt(submit=store_request)  # Phase0 layout/focus fixture; explicitly local data only.
+    def delayed_recorder(prompt):
+        time.sleep(1)  # CI-only slow acknowledgement, never a production delay.
+        return store_request(prompt)
+
+    app = Prompt(submit=delayed_recorder)  # Explicit local data-only fixture.
+    submission_ticks = 0
+
+    def responsiveness():
+        nonlocal submission_ticks
+        if app.worker.busy:
+            submission_ticks += 1
+        elif submission_ticks:
+            assert submission_ticks >= 2, 'GTK did not run during slow submission'
+            (ROOT / 'submission-response.json').write_text(json.dumps(dict(
+                responsive_during_slow_ack=True, ui_ticks=submission_ticks,
+                injected_ack_delay_seconds=1, scope='synthetic local-recorder UI fixture',
+                physical_input_provenance=None)) + '\n')
+            return False
+        return True
     report = {
         "passed": False,
         "uid": os.getuid(),
@@ -97,6 +115,7 @@ def main():
         app.window.connect("notify::focus-widget", event)
         app.window.connect("notify::is-active", event)
         GLib.timeout_add(50, poll)
+        GLib.timeout_add(50, responsiveness)
 
     app.connect("activate", install)
     return app.run(None)
