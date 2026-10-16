@@ -6,6 +6,7 @@ from mano_broker.approvals import Approvals
 from mano_broker.ipc import Peer, dispatch
 from mano_broker.models import ModelStore
 from mano_broker.state import Denied, State
+from mano_core.broker import read_model_result
 from mano_protocol.actions import ActionRequest, canonical
 
 
@@ -39,9 +40,10 @@ class ModelOutcomeTests(unittest.TestCase):
         self.temp.cleanup()
 
     def read(self, uid=1005, boot='boot'):
-        return dispatch(self.state, canonical(dict(schema_version='1.0', operation='model_result',
-            body=dict(task_id=self.task, action_id=self.action))).encode(),
-            peer=Peer(42, uid, uid), now=15, boot_id=boot)['result']
+        def client(envelope):
+            return dispatch(self.state, canonical(envelope).encode(),
+                peer=Peer(42, uid, uid), now=15, boot_id=boot)
+        return read_model_result(client, task_id=self.task, action_id=self.action)
 
     def test_result_is_durable_same_caller_scoped_and_not_task_verification(self):
         self.assertEqual(self.store.begin(self.action, now=12, boot_id='boot'),
@@ -114,6 +116,32 @@ class ModelOutcomeTests(unittest.TestCase):
             resource_id='b' * 32, classification='sensitive', boot_id='boot')
         self.state.db.execute('UPDATE actions SET task_id=? WHERE id=?', (other, self.action))
         packet = canonical(dict(schema_version='1.0', operation='model_result',
-                                body=dict(task_id=other, action_id=self.action))).encode()
+                                body=dict(task_id=other, action_id=self.action,
+                                          offset=0, length=4096))).encode()
         with self.assertRaises(Denied):
             dispatch(self.state, packet, peer=Peer(42, 1006, 1006), now=15, boot_id='boot')
+
+    def test_large_valid_result_is_transferred_in_bounded_chunks(self):
+        import json
+        self.plan['args']['argv'] = ['true'] + ['x' * 4000] * 16
+        response = json.loads(self.packet)
+        response['output'][0]['arguments'] = canonical(self.plan)
+        self.store.begin(self.action, now=12, boot_id='boot')
+        result = self.store.finish(self.action, canonical(response).encode(), boot_id='boot')
+        self.assertGreater(len(canonical(result)), 64000)
+        self.assertEqual(self.read(), result)
+        for offset, length in ((-1, 1), (True, 1), (0, False), (0, 4097), (131073, 1)):
+            with self.assertRaises(Denied):
+                self.store.chunk(self.action, task_id=self.task, caller_uid=1005,
+                    boot_id='boot', offset=offset, length=length)
+
+    def test_client_rejects_changed_digest_and_truncated_transfer(self):
+        self.store.begin(self.action, now=12, boot_id='boot')
+        self.store.finish(self.action, self.packet, boot_id='boot')
+        for field, value in (('eof', False), ('data', 'eA==')):
+            def client(envelope, field=field, value=value):
+                response = dispatch(self.state, canonical(envelope).encode(),
+                    peer=Peer(42, 1005, 1005), now=15, boot_id='boot')
+                return response | {field: value}
+            with self.assertRaises(ValueError):
+                read_model_result(client, task_id=self.task, action_id=self.action)

@@ -102,3 +102,16 @@ class ModelStore:
         if hashlib.sha256(encoded.encode()).hexdigest() != attempt['result_sha256']:
             raise Denied('Model result custody mismatch')
         return decode(encoded.encode(), 131072)
+
+    def chunk(self, action_id, *, task_id, caller_uid, boot_id, offset, length):
+        if (type(offset) is not int or offset < 0 or type(length) is not int
+                or not 1 <= length <= 4096):
+            raise Denied('Invalid bounded model result read')
+        result = self.read(action_id, task_id=task_id, caller_uid=caller_uid, boot_id=boot_id)
+        encoded = canonical(result).encode()
+        if offset > len(encoded):
+            raise Denied('Model result range unavailable')
+        piece = encoded[offset:offset + length]
+        return dict(metadata=dict(action_id=action_id, task_id=task_id, size=len(encoded),
+            sha256=hashlib.sha256(encoded).hexdigest()), data=piece,
+            eof=offset + len(piece) == len(encoded))

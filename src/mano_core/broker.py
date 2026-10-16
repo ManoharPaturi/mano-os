@@ -1,5 +1,7 @@
 """Fixed public request socket with authenticated broker replies and no retry."""
 
+import base64
+import hashlib
 import os
 import pwd
 import select
@@ -57,3 +59,40 @@ class BrokerClient:
             os.close(self.pidfd)
             self.pidfd = None
         self.closed = True
+
+
+def read_model_result(client, *, task_id, action_id):
+    """Reassemble read-only custody with fixed bounds and a stable identity/digest."""
+    from mano_protocol.actions import identifier
+    from mano_protocol.provider import decode
+
+    identifier(task_id)
+    identifier(action_id)
+    data = bytearray()
+    metadata = None
+    while True:
+        response = client(dict(schema_version='1.0', operation='model_result',
+            body=dict(task_id=task_id, action_id=action_id, offset=len(data), length=4096)))
+        current = response.get('result')
+        if (response.get('ok') is not True or response.get('schema_version') != '1.0'
+                or not isinstance(current, dict)
+                or set(current) != {'task_id', 'action_id', 'size', 'sha256'}
+                or current['task_id'] != task_id or current['action_id'] != action_id
+                or type(current['size']) is not int or not 1 <= current['size'] <= 131072
+                or not isinstance(current['sha256'], str) or len(current['sha256']) != 64
+                or type(response.get('eof')) is not bool):
+            raise ValueError('Invalid model custody metadata')
+        if metadata is None:
+            metadata = current.copy()
+        elif current != metadata:
+            raise ValueError('Model custody changed during read')
+        piece = base64.b64decode(response.get('data'), validate=True)
+        if not 1 <= len(piece) <= 4096 or len(data) + len(piece) > metadata['size']:
+            raise ValueError('Invalid model custody chunk')
+        data.extend(piece)
+        if response['eof'] != (len(data) == metadata['size']):
+            raise ValueError('Invalid model custody end')
+        if response['eof']:
+            if hashlib.sha256(data).hexdigest() != metadata['sha256']:
+                raise ValueError('Model custody digest mismatch')
+            return decode(bytes(data), 131072)
