@@ -49,3 +49,9 @@ rejected. Existing private 0400/0600 ownership and path checks remain. This
 matches systemd's fd_add_uid_acl_permission(..., ACL_READ) implementation:
 https://github.com/systemd/systemd/blob/v257/src/core/exec-credential.c
 Actual installed service acceptance still requires the disposable VM witness.
+
+
+The frozen-job timer witness waits for the Type=exec unit to be active/running
+with MainPID equal to its cgroup PID before SIGSTOP. A PID in the cgroup during
+systemd's pre-exec startup does not prove RuntimeMaxSec has begun. The witness
+still requires systemd Result=timeout, SIGKILL status9 and its original38sec bound.
