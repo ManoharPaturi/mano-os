@@ -2,12 +2,14 @@
 """Actual provision/PAM/descriptor preparation service flow in disposable Debian."""
 
 import base64
+import contextlib
 import hashlib
 import json
 import os
 import pwd
 import secrets
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -609,6 +611,33 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
         capture_output=True, text=True, timeout=5, check=False)
     assert duplicate_creation.returncode == 1
     assert json.loads(duplicate_creation.stdout)["ok"] is False
+    budget_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
+        resource_id=terminal_task["resource_id"], capability="model.set_budget",
+        args=dict(money_micro_usd=100, tokens=1000), idempotency_key="task-model-budget",
+        reason="Synthetic task spending ceiling witness")
+    budget_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=budget_proposal), actor=identity.name)["approval"]
+    budget_view = human(dict(mode="view", id=budget_pending["approval_id"]))["view"]
+    assert budget_view["capability"] == "model.set_budget"
+    assert budget_view["args"] == budget_proposal["args"]
+    assert human(dict(mode="confirm", view=budget_view, password="wrong-ci-password")) == {
+        "ok": False}
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        assert database.execute("SELECT 1 FROM model_budgets WHERE task_id=?",
+                                (terminal_task["task_id"],)).fetchone() is None
+    budget_grant = human(dict(mode="confirm", view=budget_view, password=password))
+    assert budget_grant["ok"]
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        assert database.execute("SELECT money_limit,token_limit FROM model_budgets WHERE task_id=?",
+                                (terminal_task["task_id"],)).fetchone() == (100, 1000)
+        assert database.execute("SELECT used FROM grants WHERE id=?",
+                                (budget_grant["grant_id"],)).fetchone() == (1,)
+    assert human(dict(mode="confirm", view=budget_view, password=password)) == {"ok": False}
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=budget_proposal | {"grant_id": budget_grant["grant_id"]}),
+        actor=identity.name) == denied
     cloud_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
         resource_id=terminal_task["resource_id"], capability="model.plan",
         args=dict(provider="openai", model="explicit-snapshot",
@@ -824,6 +853,8 @@ finally:client.close()
         default_prompt_handler_actual_native_transport=True,
         protected_pending_prompt_discovery=True,
         installed_bounded_queue_cycle=True,
+        native_pam_task_model_budget=True,
+        budget_grant_replay_and_public_dispatch_denied=True,
         native_pam_model_disclosure_grant=True,
         model_executor_unavailable_denied=True,
         human_prompt_claim_to_actual_task=True,
