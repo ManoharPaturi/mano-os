@@ -39,3 +39,13 @@ these installed-service claims before acceptance.
 [Official systemd credential design](https://systemd.io/CREDENTIALS/) documents
 LoadCredential and service-private credential delivery. Units target Debian's
 systemd v257 and are verified in that guest, not installed on the development Mac.
+
+
+The credential loader recognizes systemd v257's root-owned 0440 representation
+only when the Linux POSIX access ACL is exactly owner-read, named service UID
+read, owning-group-none, mask-read, other-none. A plain group-readable file,
+other UID, write permission, group/other access, extra entry or absent ACL is
+rejected. Existing private 0400/0600 ownership and path checks remain. This
+matches systemd's fd_add_uid_acl_permission(..., ACL_READ) implementation:
+https://github.com/systemd/systemd/blob/v257/src/core/exec-credential.c
+Actual installed service acceptance still requires the disposable VM witness.

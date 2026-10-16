@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from mano_protocol.actions import canonical
 from mano_protocol.transport import Peer
-from mano_provider.credentials import private_file
+from mano_provider.credentials import private_file, private_mode
 from mano_provider.service import health, main
 
 
@@ -77,3 +77,29 @@ class ProtectedProviderTests(unittest.TestCase):
              contextlib.redirect_stderr(output):
             self.assertEqual(main(), 1)
         self.assertEqual(output.getvalue(), 'provider-request-denied stage=profile code=denied\n')
+
+    def test_systemd_named_user_acl_is_exact_and_not_group_read_access(self):
+        import stat
+        import struct
+
+        info = SimpleNamespace(st_mode=stat.S_IFREG | 0o440, st_uid=0)
+        unused = 0xffffffff
+        entries = [(1, 4, unused), (2, 4, 1003), (4, 0, unused),
+                   (16, 4, unused), (32, 0, unused)]
+        def packet(items):
+            return struct.pack('<I', 2) + b''.join(struct.pack('<HHI', *x) for x in items)
+        with patch('mano_provider.credentials.os.geteuid', return_value=1003), \
+             patch('mano_provider.credentials.os.getxattr', return_value=packet(entries)) as acl:
+            self.assertTrue(private_mode(info, 42))
+            acl.assert_called_once_with(42, 'system.posix_acl_access')
+            for index, replacement in ((1, (2, 4, 1004)), (1, (2, 6, 1003)),
+                                       (2, (4, 4, unused)), (4, (32, 4, unused))):
+                changed = entries.copy()
+                changed[index] = replacement
+                acl.return_value = packet(changed)
+                self.assertFalse(private_mode(info, 42))
+            acl.return_value = packet(entries) + b'\x00' * 8
+            self.assertFalse(private_mode(info, 42))
+            acl.side_effect = OSError('no ACL')
+            with self.assertRaises(OSError):
+                private_mode(info, 42)

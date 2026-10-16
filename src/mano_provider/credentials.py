@@ -4,9 +4,27 @@ import json
 import os
 import re
 import stat
+import struct
 from pathlib import Path
 
 from mano_protocol.actions import model_identifier, unique_object
+
+
+def private_mode(info, fd):
+    mode = stat.S_IMODE(info.st_mode)
+    if mode in {0o400, 0o600}:
+        return True
+    if mode != 0o440 or info.st_uid != 0:
+        return False
+    # systemd v257 prefers root ownership plus a named-user read ACL. The
+    # ACL mask is reflected in group mode bits; do not grant arbitrary groups.
+    packet = os.getxattr(fd, 'system.posix_acl_access')
+    if len(packet) != 44 or struct.unpack_from('<I', packet)[0] != 2:
+        return False
+    entries = [struct.unpack_from('<HHI', packet, offset) for offset in range(4, 44, 8)]
+    unused = 0xffffffff
+    return entries == [(1, 4, unused), (2, 4, os.geteuid()), (4, 0, unused),
+                       (16, 4, unused), (32, 0, unused)]
 
 
 def private_file(directory, name, maximum):
@@ -23,7 +41,7 @@ def private_file(directory, name, maximum):
             checks = {
                 'credential-file-type': stat.S_ISREG(info.st_mode),
                 'credential-file-owner': info.st_uid in {0, os.geteuid()},
-                'credential-file-mode': stat.S_IMODE(info.st_mode) in {0o400, 0o600},
+                'credential-file-mode': private_mode(info, file),
                 'credential-file-links': info.st_nlink == 1,
                 'credential-file-size': 1 <= info.st_size <= maximum,
             }
