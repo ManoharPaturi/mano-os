@@ -56,8 +56,6 @@ def allocate_identity():
                 "--user-group",
                 "--no-create-home",
                 "--no-log-init",
-                "--key",
-                "CREATE_MAIL_SPOOL=no",
                 "--home-dir",
                 "/nonexistent",
                 "--shell",

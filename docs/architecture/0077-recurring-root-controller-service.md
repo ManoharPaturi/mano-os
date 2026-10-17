@@ -21,8 +21,9 @@ Account tools require writable /etc for atomic account database replacement. Thi
 is a trusted Root component with that access; /etc/mano, PAM, systemd and sudo policy
 are separately mounted read-only. Provider key sources, the broker journal directory
 and direct provider socket directory are inaccessible in the controller namespace. Outside /etc, write mounts are only the fixed
-allocation lock and workspace tree. useradd no longer initializes login logs or
-mail spools for locked non-login task identities. tmpfiles creates the Root-owned
+allocation lock and workspace tree. useradd no longer initializes login logs for locked non-login task identities.
+The service mounts a private temporary /var/mail so any mail-spool creation does
+not persist in the host mail directory; no global useradd defaults are changed. tmpfiles creates the Root-owned
 workspace parent and allocation lock before service startup; it preserves existing
 contents. Packaging must install default controller policy as Root0600 only when
 absent, never overwrite an operator policy, and apply these prerequisites first.

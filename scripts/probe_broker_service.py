@@ -711,7 +711,9 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     factory_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
-        capture_output=True, text=True, timeout=25, check=True)
+        capture_output=True, text=True, timeout=25, check=False)
+    assert factory_result.returncode == 0, (factory_result.stdout[-1024:],
+                                           factory_result.stderr[-4096:])
     managed = json.loads(factory_result.stdout)
     assert managed["ok"]
     managed = managed["task"]

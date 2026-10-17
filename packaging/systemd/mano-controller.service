@@ -28,6 +28,7 @@ InaccessiblePaths=/etc/mano/credentials -/var/lib/mano-broker -/run/mano-provide
 ProtectHome=yes
 PrivateNetwork=yes
 PrivateTmp=yes
+TemporaryFileSystem=/var/mail:rw,mode=0700
 PrivateDevices=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
