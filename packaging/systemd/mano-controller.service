@@ -1,0 +1,47 @@
+[Unit]
+Description=mano bounded Root controller cycle
+Requires=mano-broker.service mano-stopd.service mano-core.slice
+After=mano-broker.service mano-stopd.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+Slice=mano-core.slice
+ExecStart=/usr/bin/python3 -m mano_broker.controller_service
+Environment=PYTHONPATH=/usr/lib/mano-os
+Environment=PYTHONDONTWRITEBYTECODE=1
+LoadCredential=config:/etc/mano/controller.json
+UMask=0077
+TimeoutStartSec=40
+TimeoutStopSec=1
+KillMode=control-group
+KillSignal=SIGKILL
+NoNewPrivileges=yes
+# Fixed account/workspace creation only. The core retains its separate cap-zero profile.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
+AmbientCapabilities=
+ProtectSystem=strict
+ReadWritePaths=/etc /run/mano-task-allocation.lock /var/lib/mano-workspaces
+ReadOnlyPaths=/etc/mano /etc/pam.d /etc/systemd -/etc/sudoers -/etc/sudoers.d
+ProtectHome=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+MemoryMax=128M
+TasksMax=16
+CPUQuota=20%
+LimitNOFILE=128
+LimitCORE=0
