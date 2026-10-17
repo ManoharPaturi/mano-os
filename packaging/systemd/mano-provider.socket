@@ -1,0 +1,17 @@
+[Unit]
+Description=mano broker-only protected provider socket
+
+[Socket]
+ListenSequentialPacket=/run/mano-provider/request.sock
+SocketUser=mano-broker
+SocketGroup=mano-broker
+SocketMode=0600
+DirectoryMode=0755
+PassCredentials=yes
+Accept=yes
+MaxConnections=2
+Backlog=2
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

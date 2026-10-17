@@ -207,6 +207,8 @@ def main():
     )
     try:
         mapped = False
+        started = time.monotonic()
+        current = {}
         for _ in range(100):
             tree = run(
                 [
@@ -242,7 +244,15 @@ def main():
                 break
             time.sleep(0.1)
         if not mapped:
-            raise RuntimeError("Authorized X11 window not observed by compositor")
+            log.flush()
+            failure = dict(elapsed_seconds=time.monotonic() - started,
+                client_exit_code=app.poll(), compositor_tree=current,
+                client_log=(out / "xmessage.txt").read_text()[-8192:],
+                xwayland_alive=Path(f"/proc/{xpid}").exists())
+            (out / "xwayland-mapping-failure.json").write_text(
+                json.dumps(failure, indent=2) + "\n")
+            raise RuntimeError("Authorized X11 window not observed by compositor; "
+                               "see xwayland-mapping-failure.json")
         observations["compositor_network_namespace_isolated"] = True
         (out / "xwayland-confinement.json").write_text(json.dumps(observations, indent=2) + "\n")
         print(json.dumps(observations, indent=2))
