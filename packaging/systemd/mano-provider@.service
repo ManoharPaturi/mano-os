@@ -1,7 +1,7 @@
 [Unit]
 Description=mano isolated credentialed provider job
-Requires=mano-core.slice
-After=mano-core.slice
+Requires=mano-core.slice mano-egress.socket
+After=mano-core.slice mano-egress.socket
 
 [Service]
 Type=exec

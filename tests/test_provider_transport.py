@@ -5,7 +5,16 @@ import unittest
 from unittest.mock import Mock, patch
 
 from mano_protocol.provider import MAX_RESPONSE
-from mano_provider.https import HOST, PATH, PinnedHTTPS, ProviderUnavailable, addresses, generate
+from mano_protocol.transport import CREDENTIALS
+from mano_provider.https import (
+    HOST,
+    PATH,
+    TUNNEL,
+    PinnedHTTPS,
+    ProviderUnavailable,
+    addresses,
+    generate,
+)
 
 PUBLIC = (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('93.184.216.34', 443))
 
@@ -47,32 +56,35 @@ class ProviderTransportTests(unittest.TestCase):
             with patch('mano_provider.https.socket.getaddrinfo', return_value=[PUBLIC, record]), \
                  patch('mano_provider.https.PinnedHTTPS') as connection:
                 with self.assertRaises(ProviderUnavailable):
-                    generate(self.args, 'ci-synthetic-key')
+                    addresses()
                 connection.assert_not_called()
         with patch('mano_provider.https.socket.getaddrinfo', return_value=[PUBLIC]) as resolver:
             self.assertEqual(addresses(), [PUBLIC])
             resolver.assert_called_once_with(HOST, 443, type=socket.SOCK_STREAM,
                                              proto=socket.IPPROTO_TCP)
 
-    def test_numeric_connect_retains_fixed_tls_hostname_and_certificate_checks(self):
+    def test_unix_tunnel_retains_fixed_tls_hostname_and_certificate_checks(self):
         context = Mock()
         context.check_hostname = True
         context.verify_mode = ssl.CERT_REQUIRED
         raw, secure = Mock(), Mock()
+        raw.getsockopt.return_value = CREDENTIALS.pack(1, 0, 0)
         context.wrap_socket.return_value = secure
         with patch('mano_provider.https.ssl.create_default_context', return_value=context), \
              patch('mano_provider.https.socket.socket', return_value=raw), \
-             patch('mano_provider.https.time.monotonic', return_value=10):
-            connection = PinnedHTTPS(PUBLIC, 40)
+             patch('mano_provider.https.time.monotonic', return_value=10), \
+             patch('mano_provider.https.socket.SO_PEERCRED',
+                   getattr(socket, 'SO_PEERCRED', 17), create=True):
+            connection = PinnedHTTPS(40)
             connection.connect()
-            raw.connect.assert_called_once_with(('93.184.216.34', 443))
+            raw.connect.assert_called_once_with(TUNNEL)
             context.wrap_socket.assert_called_once_with(raw, server_hostname=HOST)
             self.assertIs(connection.sock, secure)
             connection.close()
         context.check_hostname = False
         with patch('mano_provider.https.ssl.create_default_context', return_value=context):
             with self.assertRaises(ProviderUnavailable):
-                PinnedHTTPS(PUBLIC, 40)
+                PinnedHTTPS(40)
 
     def run_reply(self, reply):
         connection = Mock()
@@ -136,3 +148,21 @@ class ProviderTransportTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 generate(self.args | {'endpoint': 'http://localhost'}, 'ci-synthetic-key')
             resolver.assert_not_called()
+
+    def test_counterfeit_tunnel_listener_denies_before_tls_or_http(self):
+        context, raw = Mock(), Mock()
+        context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
+        raw.getsockopt.return_value = CREDENTIALS.pack(42, 1004, 1004)
+        with (
+            patch('mano_provider.https.ssl.create_default_context', return_value=context),
+            patch('mano_provider.https.socket.socket', return_value=raw),
+            patch('mano_provider.https.socket.SO_PEERCRED',
+                  getattr(socket, 'SO_PEERCRED', 17), create=True),
+            patch('mano_provider.https.time.monotonic', return_value=10),
+        ):
+            connection = PinnedHTTPS(40)
+            with self.assertRaises(ProviderUnavailable):
+                connection.connect()
+            context.wrap_socket.assert_not_called()
+            raw.close.assert_called_once()

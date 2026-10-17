@@ -1,0 +1,16 @@
+[Unit]
+Description=mano provider-only fixed TLS egress
+
+[Socket]
+ListenStream=/run/mano-egress/tls.sock
+SocketUser=mano-provider
+SocketGroup=mano-provider
+SocketMode=0600
+DirectoryMode=0755
+Accept=yes
+MaxConnections=2
+Backlog=2
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

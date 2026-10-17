@@ -37,8 +37,9 @@ class ProviderTLSContract(unittest.TestCase):
         server_context.load_cert_chain(cert, key)
         names, requests, failures = [], [], []
         server_context.set_servername_callback(lambda _socket, name, _context: names.append(name))
-        listener = socket.socket()
-        listener.bind(('127.0.0.1', 0))
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        socket_path = Path(self.temp.name) / 'tls.sock'
+        listener.bind(str(socket_path))
         listener.listen(1)
         listener.settimeout(5)
 
@@ -67,14 +68,13 @@ class ProviderTLSContract(unittest.TestCase):
 
         thread = threading.Thread(target=server, daemon=True)
         thread.start()
-        # Test-only DNS/CA injection: production rejects loopback and uses system trust.
-        address = (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '',
-                   listener.getsockname())
+        # Test-only Unix path, listener-auth and CA injection. Production fixes all three.
         context = ssl.create_default_context(cafile=str(cert))
         args = dict(provider='openai', model='explicit-snapshot', prompt='human goal',
                     max_output_tokens=100)
         try:
-            with patch('mano_provider.https.addresses', return_value=[address]), \
+            with patch('mano_provider.https.TUNNEL', str(socket_path)), \
+                 patch('mano_provider.https.root_listener'), \
                  patch('mano_provider.https.ssl.create_default_context', return_value=context):
                 if name == HOST:
                     self.assertEqual(generate(args, 'ci-synthetic-key'), b'{"object":"response"}')
@@ -84,6 +84,7 @@ class ProviderTLSContract(unittest.TestCase):
         finally:
             thread.join(6)
             listener.close()
+            socket_path.unlink(missing_ok=True)
         self.assertFalse(thread.is_alive())
         self.assertEqual(names, [HOST])
         return requests, failures

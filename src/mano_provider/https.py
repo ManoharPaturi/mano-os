@@ -1,7 +1,6 @@
 """Fixed OpenAI POST transport; no proxies, redirects or implicit retries."""
 
 import http.client
-import ipaddress
 import re
 import socket
 import ssl
@@ -10,38 +9,31 @@ import time
 
 from mano_protocol.actions import ActionRequest, canonical
 from mano_protocol.provider import MAX_RESPONSE, request_body
+from mano_protocol.provider_endpoint import HOST, ProviderUnavailable
+from mano_protocol.provider_endpoint import addresses as addresses
+from mano_protocol.transport import CREDENTIALS, Peer
 
-HOST = 'api.openai.com'
+TUNNEL = '/run/mano-egress/tls.sock'
 PATH = '/v1/responses'
 DEADLINE_SECONDS = 30
 
 
-class ProviderUnavailable(ValueError):
-    pass
 
 
-def addresses():
-    resolved = socket.getaddrinfo(HOST, 443, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
-    if not resolved or len(resolved) > 32:
-        raise ProviderUnavailable('Provider resolution denied')
-    for family, kind, protocol, _name, address in resolved:
-        ip = ipaddress.ip_address(address[0])
-        if (family not in {socket.AF_INET, socket.AF_INET6} or kind != socket.SOCK_STREAM
-                or protocol != socket.IPPROTO_TCP or address[1] != 443 or not ip.is_global
-                or ip.is_multicast or ip.is_unspecified or ip.is_reserved
-                or (family == socket.AF_INET) != (ip.version == 4)
-                or (family == socket.AF_INET6 and (address[2] != 0 or address[3] != 0))):
-            raise ProviderUnavailable('Provider address denied')
-    return resolved
+def root_listener(raw):
+    creator = Peer(*CREDENTIALS.unpack(raw.getsockopt(
+        socket.SOL_SOCKET, socket.SO_PEERCRED, CREDENTIALS.size)))
+    if creator.pid <= 0 or creator.uid != 0 or creator.gid != 0:
+        raise ProviderUnavailable('Egress listener is not Root activated')
 
 
 class PinnedHTTPS(http.client.HTTPSConnection):
-    def __init__(self, address, deadline):
+    def __init__(self, deadline):
         context = ssl.create_default_context()
         if not context.check_hostname or context.verify_mode != ssl.CERT_REQUIRED:
             raise ProviderUnavailable('Provider TLS verification disabled')
         super().__init__(HOST, 443, timeout=DEADLINE_SECONDS, context=context)
-        self.address, self.deadline = address, deadline
+        self.deadline = deadline
 
     def remaining(self):
         remaining = self.deadline - time.monotonic()
@@ -50,11 +42,11 @@ class PinnedHTTPS(http.client.HTTPSConnection):
         return remaining
 
     def connect(self):
-        family, kind, protocol, _name, address = self.address
-        raw = socket.socket(family, kind, protocol)
+        raw = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             raw.settimeout(self.remaining())
-            raw.connect(address)  # Validated numeric address; no second DNS lookup.
+            raw.connect(TUNNEL)
+            root_listener(raw)
             raw.settimeout(self.remaining())
             self.sock = self._context.wrap_socket(raw, server_hostname=HOST)
             self.sock.settimeout(self.remaining())
@@ -86,8 +78,7 @@ def generate(args, credential):
                 pass
 
     try:
-        resolved = addresses()
-        connection = PinnedHTTPS(resolved[0], deadline)  # One address, one attempt.
+        connection = PinnedHTTPS(deadline)  # One fixed Unix tunnel, one attempt.
         connection.connect()
         stream = connection.sock
         timer = threading.Timer(connection.remaining(), interrupt)
