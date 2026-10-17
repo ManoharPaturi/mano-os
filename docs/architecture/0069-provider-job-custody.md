@@ -21,3 +21,10 @@ priced-reservation and sealed-handoff PRs. Production Registry continues denying
 model.plan until the protected installed executor, generation policy/credentials,
 permitted fixed egress, native cancellation and actual end-to-end provider/billing
 verification are connected. Synthetic custody tests do not prove paid execution.
+
+The companion provider job_request.authorize validator checks the broker peer,
+enabled fixed provider/model/output policy, strict envelope and ActionRequest,
+original digest/task and current boot before returning only disclosure arguments.
+It performs no credential read or network call. A combined test passes the real
+broker claim envelope through this provider validator. The installed main entry
+remains health-only; this validator alone does not authorize activation.

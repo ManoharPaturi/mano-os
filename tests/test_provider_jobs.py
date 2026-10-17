@@ -33,6 +33,19 @@ class ProviderJobTests(unittest.TestCase):
         self.assertEqual(self.prepare(), self.proposal['args'])
         packet = self.claim()
         binding = packet['body']['binding']
+        from types import SimpleNamespace
+
+        from mano_protocol.actions import canonical
+        from mano_protocol.transport import Peer
+        from mano_provider.job_request import authorize
+
+        config = dict(provider='openai', model='snapshot', enabled=True, max_output_tokens=100)
+        with patch('mano_provider.job_request.pwd.getpwnam',
+                   return_value=SimpleNamespace(pw_uid=999, pw_gid=999)):
+            bound, args = authorize(canonical(packet).encode(), Peer(42, 999, 999),
+                                    config=config, boot_id='boot')
+        self.assertEqual(bound, binding)
+        self.assertEqual(args, self.proposal['args'])
         self.assertEqual(binding['task_id'], self.task)
         self.assertEqual(packet['body']['request']['args'], self.proposal['args'])
         with self.assertRaises(Denied):
