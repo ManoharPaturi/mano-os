@@ -368,6 +368,12 @@ try:
     assert provider_reply["sender_uid"] == provider_uid and provider_reply["creator_uid"] == 0
     assert provider_reply["payload"] == dict(schema_version="1.0", ok=True, provider="openai",
         model="ci-health-snapshot", credentials_present=True, execution_enabled=False)
+    disabled_request = dict(schema_version="1.0", operation="generate", body={})
+    disabled_provider = subprocess.run(["/usr/sbin/runuser", "-u", "mano-broker", "--",
+        "python3", "-c", client, str(PROVIDER_SOCKET), str(provider_uid), "-"],
+        input=json.dumps(disabled_request), capture_output=True, text=True, timeout=10, check=True)
+    assert json.loads(disabled_provider.stdout)["payload"] == dict(
+        schema_version="1.0", ok=False, error="denied")
     for actor in ("mano-agent", "mano-core", "mano-worker", "mano-human"):
         negative_provider = subprocess.run(["/usr/sbin/runuser", "-u", actor, "--", "python3",
             "-c", client, str(PROVIDER_SOCKET), str(provider_uid), "-"],
@@ -1075,6 +1081,7 @@ else:raise AssertionError('task reached native Stop')
     terminal_report["native_stop_frozen_core_and_detached_child_drained"] = True
     terminal_report["native_stop_frozen_provider_drained"] = True
     terminal_report["installed_provider_credential_health"] = True
+    terminal_report["installed_provider_disabled_generation_denied"] = True
     terminal_report["provider_kernel_runtime_deadline_verified"] = True
     terminal_report["provider_frozen_job_deadline_seconds"] = provider_deadline_seconds
     terminal_report["native_stop_capabilities_zero"] = True

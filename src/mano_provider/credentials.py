@@ -70,7 +70,7 @@ def directory():
     return base
 
 
-def load():
+def load_policy():
     base = directory()
     config = json.loads(private_file(base, 'config', 4096).decode('utf8'),
                         object_pairs_hook=unique_object)
@@ -81,8 +81,16 @@ def load():
             or not 16 <= config['max_output_tokens'] <= 8192):
         raise ValueError('Invalid fixed provider policy')
     model_identifier(config['model'])
-    key = private_file(base, 'api-key', 4096).decode('ascii')
+    return config
+
+
+def load_key():
+    key = private_file(directory(), 'api-key', 4096).decode('ascii')
     if not re.fullmatch(r'[A-Za-z0-9._-]{1,4096}', key):
         raise ValueError('Invalid provider credential')
-    return config, key
+    return key
+
+
+def load():
+    return load_policy(), load_key()
 
