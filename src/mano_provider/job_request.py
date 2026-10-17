@@ -1,8 +1,10 @@
 """Validate a broker-attested job before credentials or provider execution."""
 
 import json
+import math
 import pwd
 import socket
+import time
 
 from mano_protocol.actions import MAX_PACKET, ActionRequest, Capability, canonical
 from mano_protocol.provider import decode
@@ -10,8 +12,10 @@ from mano_protocol.provider_handoff import send_response, validate_binding
 
 from .https import generate
 
+JOB_LIFETIME_SECONDS = 35
 
-def authorize(packet, peer, *, config, boot_id):
+
+def authorize(packet, peer, *, config, boot_id, now, wall_time):
     broker = pwd.getpwnam('mano-broker')
     if (broker.pw_uid == 0 or peer.pid <= 0
             or (peer.uid, peer.gid) != (broker.pw_uid, broker.pw_gid)):
@@ -22,8 +26,17 @@ def authorize(packet, peer, *, config, boot_id):
     if (not isinstance(value, dict) or set(value) != {'schema_version', 'operation', 'body'}
             or value['schema_version'] != '1.0' or value['operation'] != 'generate'
             or not isinstance(value['body'], dict)
-            or set(value['body']) != {'binding', 'request'}):
+            or set(value['body']) != {'binding', 'request', 'grant_expires_monotonic',
+                                     'price_expires_unix'}):
         raise ValueError('Invalid private provider job envelope')
+    body = value['body']
+    for number in (now, wall_time, body['grant_expires_monotonic'], body['price_expires_unix']):
+        if (type(number) not in {int, float} or not 0 <= number <= 2**53
+                or not math.isfinite(number)):
+            raise ValueError('Invalid trusted provider deadline')
+    if (body['grant_expires_monotonic'] - now < JOB_LIFETIME_SECONDS
+            or body['price_expires_unix'] - wall_time < JOB_LIFETIME_SECONDS):
+        raise ValueError('Provider job cannot outlive its grant or price policy')
     binding = value['body']['binding']
     validate_binding(binding)
     request = ActionRequest.parse(canonical(value['body']['request']).encode())
@@ -43,6 +56,7 @@ def execute(connection, packet, peer, *, config, credential, boot_id):
     """One authorized fixed-provider invocation, then one sealed handoff; no retry."""
     if connection.family != socket.AF_UNIX or connection.type != socket.SOCK_SEQPACKET:
         raise ValueError('Private provider response connection required before dispatch')
-    binding, args = authorize(packet, peer, config=config, boot_id=boot_id)
+    binding, args = authorize(packet, peer, config=config, boot_id=boot_id,
+                              now=time.monotonic(), wall_time=int(time.time()))
     response = generate(args, credential)
     send_response(connection, response, binding=binding)

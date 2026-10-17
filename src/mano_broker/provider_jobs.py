@@ -60,7 +60,9 @@ class ProviderJobs:
             policy = PricePolicy(**json.loads(price['policy_json']))
             policy.quote(json.loads(request.args_json), wall_time=wall_time)
             packet = canonical(dict(schema_version='1.0', operation='generate',
-                body=dict(binding=binding, request=request.body()))).encode()
+                body=dict(binding=binding, request=request.body(),
+                    grant_expires_monotonic=grant['expires'],
+                    price_expires_unix=policy.expires_unix))).encode()
             if len(packet) > MAX_PACKET:
                 raise Denied('Provider dispatch packet exceeds bound')
             self.state.db.execute("UPDATE provider_jobs SET state='dispatching' WHERE action_id=?",

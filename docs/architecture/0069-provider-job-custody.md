@@ -46,8 +46,11 @@ has a 40-second receive bound in addition to the provider's independent 35-secon
 unit deadline. No caller-selected path, endpoint or provider UID enters the wire.
 This helper is not registered for public model.plan dispatch yet; the installed
 service and generation route remain disabled pending the activation gates.
-Before installed generation activation, carry the authoritative grant and price
-expiry to the service and recheck them immediately before the actual provider
-call. A claim-time check alone cannot cover a delayed service startup or queued
-packet. The enabled service path must also enforce its remaining operation bound;
-the current helper composition is not permission to bypass these deadline gates.
+The private claim packet now carries the authoritative grant monotonic expiry
+and price Unix expiry. The provider checks its own current clocks immediately
+before the actual helper invocation and requires at least35 seconds remaining
+under both. This covers its fixed35-second hard-kill unit lifetime; a component
+contract test binds that assumption to RuntimeMaxSec and KillSignal. Delayed
+startup/queued packets, malformed numeric deadlines and too-short grants deny
+before an API call. Installed activation must retain this exact protected unit
+profile and supply the current kernel boot; main still does not route generation.
