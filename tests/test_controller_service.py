@@ -83,3 +83,23 @@ class ControllerServiceTests(unittest.TestCase):
                 verify_current()
             opening.assert_not_called()
             network.assert_not_called()
+
+    def test_extra_capabilities_or_missing_guards_fail_before_policy_access(self):
+        from pathlib import Path
+
+        for change in ({'CapInh': f'{ROOT_CAPABILITIES:x}'},
+                       {'CapAmb': f'{ROOT_CAPABILITIES:x}'},
+                       {'CapBnd': f'{ROOT_CAPABILITIES | (1 << 21):x}'},
+                       {'CapEff': '0'}, {'NoNewPrivs': '0'}, {'Seccomp': '0'}):
+            with (
+                self.subTest(change=change),
+                patch('mano_broker.controller_service.sys.platform', 'linux'),
+                patch('mano_broker.controller_service.os.getuid', return_value=0),
+                patch('mano_broker.controller_service.os.geteuid', return_value=0),
+                patch('mano_broker.controller_service.os.getegid', return_value=0),
+                patch.object(Path, 'read_text', autospec=True, side_effect=self.profile(**change)),
+                patch('mano_broker.controller_service.os.open') as opening,
+            ):
+                with self.assertRaisesRegex(ValueError, 'Root controller restrictions absent'):
+                    verify_current()
+                opening.assert_not_called()
