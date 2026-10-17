@@ -24,13 +24,18 @@ class Pending:
 
 
 class ProviderWorker:
-    """Internal scheduler adapter. Public model dispatch is still disabled."""
+    """Broker scheduler adapter; Root pricing policy gates model preparation."""
 
     def __init__(self, jobs, *, boot_id):
         self.jobs = jobs
         self.boot_id = boot_id
         self.pending = {}
         self.closed = False
+
+    def check_policy(self, args):
+        policy = load_policy(wall_time=int(time.time()))
+        policy.quote(args, wall_time=int(time.time()))
+        return policy
 
     def launch(self, action_id):
         if self.closed or action_id in self.pending or len(self.pending) >= 2:

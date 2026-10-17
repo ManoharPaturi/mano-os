@@ -9,16 +9,23 @@ from .artifacts import Store
 from .executor import Executor
 from .ipc import dispatch, public_action, receive
 from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
+from .provider_jobs import ProviderJobs
+from .provider_worker import ProviderWorker
 from .registry import Registry
 from .state import Denied
 from .stop_state import Snapshot, snapshot
 
 
 class Runtime:
-    def __init__(self, state, *, boot_id, launcher=None, stop_reader=None):
+    def __init__(self, state, *, boot_id, launcher=None, stop_reader=None, model_worker=None):
         self.state = state
         self.boot_id = boot_id
-        self.registry = Registry()
+        self.model_worker = model_worker or (
+            ProviderWorker(ProviderJobs(state), boot_id=boot_id) if launcher else None
+        )
+        self.registry = Registry(model_policy=(
+            self.model_worker.check_policy if self.model_worker else None))
+        self.model_pending = deque()
         self.artifacts = Store()
         self.pending = deque()
         self.launcher = launcher
@@ -111,6 +118,8 @@ class Runtime:
             )
             if prepared is not None and request.capability == Capability.RUN and self.executor:
                 self.pending.append(row["id"])
+            if prepared is not None and request.capability == Capability.PLAN and self.model_worker:
+                self.model_pending.append(row["id"])
             return {
                 "schema_version": "1.0",
                 "ok": True,
@@ -119,8 +128,41 @@ class Runtime:
             }
         return dispatch(self.state, packet, peer=peer, now=now, boot_id=self.boot_id)
 
+    def settle_model(self, action_id):
+        row = self.state.db.execute('SELECT state FROM actions WHERE id=?',
+                                    (action_id,)).fetchone()
+        if row is not None and row['state'] in {'intent', 'executing'}:
+            self.state.transition(action_id, 'failed' if row['state'] == 'intent' else 'unknown')
+        self.registry.release(action_id)
+
+    def tick_models(self):
+        if self.model_worker is None:
+            return
+        for action_id in list(self.model_worker.pending):
+            try:
+                self.model_worker.poll(action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.settle_model(action_id)
+                self.state.event(action_id, 'model-poll-denied', {
+                    'error_type': type(error).__name__})
+            if action_id not in self.model_worker.pending:
+                self.registry.release(action_id)
+        if self.model_pending and len(self.model_worker.pending) < 2:
+            action_id = self.model_pending.popleft()
+            try:
+                if self.state.meta('latched'):
+                    raise Denied('Native Stop prevents model dispatch')
+                self.model_worker.launch(action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.settle_model(action_id)
+                self.state.event(action_id, 'model-dispatch-denied', {
+                    'error_type': type(error).__name__})
+            finally:
+                self.registry.release(action_id)
+
     def tick(self):
         self.sync_stop()
+        self.tick_models()
         if self.executor is None:
             return
         for action_id in list(self.executor.jobs):
@@ -140,6 +182,18 @@ class Runtime:
                 })  # Failed/unknown intent is durable; never reschedule it.
 
     def close(self):
+        try:
+            if self.model_worker:
+                self.model_worker.close()
+        finally:
+            try:
+                for action_id in self.model_pending:
+                    self.settle_model(action_id)
+            finally:
+                self.model_pending.clear()
+                self.close_terminal()
+
+    def close_terminal(self):
         try:
             if self.executor:
                 for action_id, handle in list(self.executor.jobs.items()):

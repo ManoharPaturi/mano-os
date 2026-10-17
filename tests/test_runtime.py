@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from mano_broker.approvals import Approvals
 from mano_broker.ipc import Peer
@@ -123,3 +123,67 @@ class RuntimeTests(unittest.TestCase):
             self.call("propose", body, now=12)
         self.assertEqual(self.state.db.execute("SELECT revoked FROM grants").fetchone()[0], 1)
         self.assertEqual(self.state.meta("epoch"), 2)
+
+    def model_worker(self):
+        worker = Mock()
+        worker.pending = {}
+        worker.launch.side_effect = lambda action: worker.pending.update({action: object()})
+        self.runtime.model_worker = worker
+        self.runtime.registry.model_policy = worker.check_policy
+        self.body.update(capability='model.plan', args=dict(provider='openai', model='snapshot',
+            prompt='approved prompt', max_output_tokens=100), idempotency_key='model-one')
+        return worker
+
+    def test_model_approval_queues_after_reply_and_dispatches_only_once(self):
+        worker = self.model_worker()
+        body = self.approved()
+        result = self.call('propose', body, now=12)
+        worker.check_policy.assert_called_once_with(self.body['args'])
+        worker.launch.assert_not_called()
+        self.assertFalse(self.call('propose', body, now=12)['fresh'])
+        action = result['action']['id']
+        self.assertEqual(list(self.runtime.model_pending), [action])
+        self.runtime.tick()
+        self.runtime.tick()
+        worker.launch.assert_called_once_with(action)
+        worker.poll.assert_called_once_with(action)
+        self.assertFalse(self.runtime.registry.leases)
+
+    def test_disabled_model_policy_does_not_consume_approved_grant(self):
+        worker = self.model_worker()
+        body = self.approved()
+        worker.check_policy.side_effect = Denied('disabled')
+        with self.assertRaises(Denied):
+            self.call('propose', body, now=12)
+        self.assertEqual(self.state.db.execute('SELECT used FROM grants').fetchone()[0], 0)
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM actions').fetchone()[0], 0)
+        self.assertFalse(self.runtime.model_pending)
+        worker.launch.assert_not_called()
+
+    def test_failed_model_launch_is_failed_intent_without_retry(self):
+        worker = self.model_worker()
+        worker.launch.side_effect = OSError('listener unavailable')
+        action = self.call('propose', self.approved(), now=12)['action']['id']
+        self.runtime.tick()
+        self.runtime.tick()
+        worker.launch.assert_called_once_with(action)
+        self.assertEqual(self.state.db.execute('SELECT state FROM actions WHERE id=?',
+                                               (action,)).fetchone()[0], 'failed')
+        self.assertFalse(self.runtime.registry.leases)
+
+    def test_stop_before_scheduled_model_never_dispatches(self):
+        worker = self.model_worker()
+        self.call('propose', self.approved(), now=12)
+        self.state.emergency_stop()
+        self.runtime.tick()
+        worker.launch.assert_not_called()
+        self.assertFalse(self.runtime.model_pending)
+        self.assertFalse(self.runtime.registry.leases)
+
+    def test_close_discards_queued_model_and_marks_intent_failed(self):
+        self.model_worker()
+        action = self.call('propose', self.approved(), now=12)['action']['id']
+        self.runtime.close()
+        self.assertEqual(self.state.db.execute('SELECT state FROM actions WHERE id=?',
+                                               (action,)).fetchone()[0], 'failed')
+        self.assertFalse(self.runtime.model_pending)

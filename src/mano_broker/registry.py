@@ -40,7 +40,8 @@ class Prepared:
 
 
 class Registry:
-    def __init__(self):
+    def __init__(self, *, model_policy=None):
+        self.model_policy = model_policy
         self.resources = {}
         self.leases = {}
         self.closed = False
@@ -68,7 +69,9 @@ class Registry:
         if request.capability == Capability.BUDGET:
             raise Denied('Task budgets change only through authenticated approval')
         if request.capability == Capability.PLAN:
-            raise Denied('Protected provider executor is not installed')
+            if self.model_policy is None:
+                raise Denied('Protected provider executor is not installed')
+            self.model_policy(json.loads(request.args_json))
         resource = self.resources.get(request.resource_id)
         task = state.db.execute("SELECT * FROM tasks WHERE id=?", (request.task_id,)).fetchone()
         if (
