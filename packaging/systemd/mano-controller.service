@@ -19,7 +19,7 @@ KillMode=control-group
 KillSignal=SIGKILL
 NoNewPrivileges=yes
 # Fixed account/workspace creation only. The core retains its separate cap-zero profile.
-CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID
 AmbientCapabilities=
 ProtectSystem=strict
 ReadWritePaths=/etc /run/mano-task-allocation.lock /var/lib/mano-workspaces

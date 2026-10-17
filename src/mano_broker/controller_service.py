@@ -15,7 +15,7 @@ from .controller import run_cycle
 from .protocol import canonical
 
 DIRECTORY = Path('/run/credentials/mano-controller.service')
-ROOT_CAPABILITIES = (1 << 0) | (1 << 1) | (1 << 3) | (1 << 6) | (1 << 7)
+ROOT_CAPABILITIES = (1 << 0) | (1 << 1) | (1 << 3) | (1 << 6)
 
 
 def parse(packet):

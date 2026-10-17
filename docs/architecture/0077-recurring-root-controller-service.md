@@ -9,7 +9,8 @@ null model metadata, so timer activation alone allocates no tasks or grants.
 
 The controller runs as Root because the existing task factory creates locked
 accounts and broker-owned workspaces. Its capabilities are limited to CHOWN,
-DAC_OVERRIDE, FOWNER, SETGID and SETUID; no SYS_ADMIN or network capabilities.
+DAC_OVERRIDE, FOWNER and SETGID; no SETUID, SYS_ADMIN or network capabilities.
+The controller never changes its own UID; PID1 creates the separate task-user unit.
 The fixed setpriv entry point explicitly clears inherited and ambient capabilities.
 NoNewPrivileges, seccomp, Unix-only sockets, private network/devices/tmp, a strict
 read-only system, 128MiB/16-PID/20%-CPU limits and a forty-second hard start timeout
