@@ -45,7 +45,7 @@ class ControllerServiceTests(unittest.TestCase):
         return lambda path: status if str(path) == '/proc/self/status' else (
             '0::/mano.slice/mano-core.slice/mano-controller.service\n')
 
-    def test_profile_checks_real_kernel_denials_without_writing_or_connecting(self):
+    def test_profile_probe_contract_without_writes_or_connections(self):
         from pathlib import Path
 
         reader = self.profile()
