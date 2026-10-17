@@ -145,3 +145,53 @@ class CoreLifecycleGuards(unittest.TestCase):
             with self.assertRaises(ValueError):
                 dispatch_prompt(prompt, {})
             create.assert_not_called()
+
+    def test_broker_planner_step_never_accepts_completion_without_a_journal_action(self):
+        from mano_broker.lifecycle import run_broker_step
+
+        with (
+            patch('mano_broker.lifecycle.command', return_value=['fixed-core']) as argv,
+            patch('mano_broker.lifecycle.snapshot', return_value=Snapshot(0, False)),
+            patch('mano_broker.lifecycle.subprocess.run') as run,
+        ):
+            run.return_value = SimpleNamespace(returncode=0, stdout=canonical(dict(ok=True,
+                task=self.context | {'status': 'awaiting_model_grant'})))
+            result = run_broker_step(self.managed, model='synthetic-snapshot',
+                                     max_output_tokens=100)
+            self.assertEqual(result['status'], 'awaiting_model_grant')
+            argv.assert_called_once_with(self.managed, mock=False)
+            import json
+
+            sent = json.loads(run.call_args.kwargs['input'])
+            self.assertEqual(set(sent), {'context', 'model'})
+            self.assertEqual(sent['model'], dict(model='synthetic-snapshot', max_output_tokens=100))
+            run.return_value = SimpleNamespace(returncode=0, stdout=canonical(dict(ok=True,
+                task=self.context | {'status': 'completed'})))
+            with self.assertRaises(ValueError):
+                run_broker_step(self.managed, model='synthetic-snapshot', max_output_tokens=100)
+
+    def test_broker_planner_terminal_result_reconciles_exact_journal_not_core_claim(self):
+        import hashlib
+
+        from mano_broker.lifecycle import run_broker_step
+
+        proposal = dict(schema_version='1.0', task_id=self.context['task_id'],
+            resource_id=self.context['resource_id'], capability='terminal.run',
+            args=dict(argv=['true'], cwd='.', timeout_seconds=10), reason='model plan',
+            idempotency_key=self.context['operation_key'])
+        task = self.context | dict(action_id='e' * 32, proposal=proposal, status='completed')
+        action = dict(id='e' * 32, task_id=self.context['task_id'], state='done', verified=0,
+                      proposal_digest=hashlib.sha256(canonical(proposal).encode()).hexdigest())
+        with (
+            patch('mano_broker.lifecycle.command', return_value=['fixed-core']),
+            patch('mano_broker.lifecycle.snapshot', return_value=Snapshot(0, False)),
+            patch('mano_broker.lifecycle.subprocess.run', return_value=SimpleNamespace(
+                returncode=0, stdout=canonical(dict(ok=True, task=task)))),
+            patch('mano_broker.lifecycle.control_request', return_value={'action': action}),
+        ):
+            result = run_broker_step(self.managed, model='synthetic-snapshot',
+                                     max_output_tokens=100)
+            self.assertEqual(result['status'], 'verifying')
+            action['proposal_digest'] = '0' * 64
+            with self.assertRaises(ValueError):
+                run_broker_step(self.managed, model='synthetic-snapshot', max_output_tokens=100)

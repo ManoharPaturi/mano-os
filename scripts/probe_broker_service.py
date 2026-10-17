@@ -704,6 +704,27 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     managed = json.loads(factory_result.stdout)
     assert managed["ok"]
     managed = managed["task"]
+    planner_managed = managed | {"context": managed["context"] | {
+        "operation_key": "ci-broker-planner-witness"}}
+    for _ in range(2):
+        planner_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+            "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.lifecycle",
+            "--broker-model"], input=json.dumps(dict(managed=planner_managed,
+                model=dict(model="synthetic-snapshot", max_output_tokens=100))),
+            capture_output=True, text=True, timeout=15, check=True)
+        planned = json.loads(planner_result.stdout)
+        assert planned["ok"] and planned["task"]["status"] == "awaiting_model_grant"
+        assert all(planned["task"][key] == value
+                   for key, value in planner_managed["context"].items())
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        disclosures = [json.loads(row[0]) for row in database.execute(
+            "SELECT proposal_json FROM approvals WHERE task_id=?",
+            (managed["context"]["task_id"],))]
+        assert sum(item["capability"] == "model.plan" for item in disclosures) == 1
+        assert database.execute("SELECT count(*) FROM grants WHERE task_id=? "
+            "AND capability='model.plan'", (managed["context"]["task_id"],)).fetchone() == (0,)
+        assert database.execute("SELECT count(*) FROM provider_jobs").fetchone() == (0,)
     account = pwd.getpwuid(managed["caller_uid"])
     assert account.pw_name == managed["caller_name"]
     identity = TaskIdentity(account.pw_name, account.pw_uid, account.pw_gid)
@@ -971,6 +992,7 @@ finally:client.close()
         mock_agent_replay_no_effect=True,
         sqlite_agent_checkpoint_new_process_recovery=True,
         installed_core_cli_entrypoint=True,
+        installed_broker_planner_core_entrypoint=True,
         installed_bounded_lifecycle_controller=True,
         durable_prompt_context_dispatch_reused=True,
         installed_root_task_factory=True,

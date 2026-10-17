@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from mano_protocol.actions import ActionRequest, canonical, identifier, text, unique_object
+from mano_protocol.provider import configuration
 
 from .stop_state import snapshot
 from .task_factory import control_request, create_from_prompt, human_uid
@@ -20,7 +21,7 @@ from .workspaces import BASE
 CORE_PYTHON = '/usr/local/lib/mano-core/bin/python'
 
 
-def command(managed):
+def command(managed, *, mock=True):
     if os.geteuid() != 0 or sys.platform != 'linux':
         raise PermissionError('Trusted Linux operator required')
     if (not isinstance(managed, dict) or set(managed) - {'context', 'workspace', 'caller_uid',
@@ -65,17 +66,36 @@ def command(managed):
         '--property=RestrictAddressFamilies=AF_UNIX', '--property=SystemCallFilter=@system-service',
         '--property=SystemCallErrorNumber=EPERM', '--property=MemoryDenyWriteExecute=yes',
         'env', 'PYTHONPATH=/usr/lib/mano-os', 'PYTHONDONTWRITEBYTECODE=1', CORE_PYTHON,
-        '-m', 'mano_core.cli', '--mock', '--checkpoint-directory', str(workspace / '.mano-agent')]
+        '-m', 'mano_core.cli', '--mock' if mock else '--broker-model',
+        '--checkpoint-directory', str(workspace / '.mano-agent')]
 
 
 def run_mock_step(managed, plan):
-    argv = command(managed)
+    return run_step(managed, plan=plan)
+
+
+def run_broker_step(managed, *, model, max_output_tokens):
+    configuration(model, max_output_tokens)
+    return run_step(managed, model_policy=dict(model=model, max_output_tokens=max_output_tokens))
+
+
+def run_step(managed, *, plan=None, model_policy=None):
+    if (plan is None) == (model_policy is None):
+        raise ValueError('Exactly one explicit core planning mode required')
+    argv = command(managed, mock=model_policy is None)
     before = snapshot()
     if before.latched:
         raise ValueError('Native Stop is latched')
-    if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
-        raise ValueError('Explicit mock plan required')
-    payload = canonical(dict(context=managed['context'], plan=plan))
+    if model_policy is None:
+        if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
+            raise ValueError('Explicit mock plan required')
+        payload = canonical(dict(context=managed['context'], plan=plan))
+    else:
+        if (not isinstance(model_policy, dict)
+                or set(model_policy) != {'model', 'max_output_tokens'}):
+            raise ValueError('Fixed broker model metadata required')
+        configuration(model_policy['model'], model_policy['max_output_tokens'])
+        payload = canonical(dict(context=managed['context'], model=model_policy))
     if len(payload.encode()) > 65536:
         raise ValueError('Core input exceeds packet budget')
     result = subprocess.run(argv, input=payload, text=True, capture_output=True,
@@ -93,15 +113,30 @@ def run_mock_step(managed, plan):
         raise ValueError('Core returned different task context')
     action_id = task.get('action_id')
     if action_id is None:
-        task['status'] = 'awaiting_grant'  # No completion authority in core stdout.
+        allowed = {'awaiting_model_grant', 'model_queued', 'model_running',
+                   'model_unknown_effect', 'model_failed', 'awaiting_grant', 'failed'}
+        if model_policy is not None and task.get('status') not in allowed:
+            raise ValueError('Core cannot claim an effect without an authoritative action')
+        if model_policy is None:
+            task['status'] = 'awaiting_grant'  # No completion authority in core stdout.
         return task
     identifier(action_id)
     action = control_request('inspect_action', dict(task_id=managed['context']['task_id'],
                                                   action_id=action_id))['action']
     context = managed['context']
-    proposal = dict(schema_version='1.0', task_id=context['task_id'],
-        resource_id=context['resource_id'], capability='terminal.run', args=plan['args'],
-        reason=plan['reason'], idempotency_key=context['operation_key'])
+    if model_policy is not None:
+        proposal = task.get('proposal')
+        if not isinstance(proposal, dict) or 'grant_id' in proposal:
+            raise ValueError('Original proposed terminal action required')
+        parsed = ActionRequest.parse(canonical(proposal | {'grant_id': '0' * 32}).encode())
+        if (parsed.task_id != context['task_id'] or parsed.resource_id != context['resource_id']
+                or parsed.idempotency_key != context['operation_key']
+                or parsed.capability != 'terminal.run'):
+            raise ValueError('Core terminal proposal changed managed task scope')
+    else:
+        proposal = dict(schema_version='1.0', task_id=context['task_id'],
+            resource_id=context['resource_id'], capability='terminal.run', args=plan['args'],
+            reason=plan['reason'], idempotency_key=context['operation_key'])
     expected = hashlib.sha256(canonical(proposal).encode()).hexdigest()
     if (action['id'] != action_id or action['task_id'] != context['task_id']
             or action['proposal_digest'] != expected):
@@ -170,10 +205,10 @@ def main(argv=None):
     import argparse
 
     parser = argparse.ArgumentParser(description='Trusted operator: bounded core lifecycle cycle')
-    parser.add_argument('--mock', action='store_true')
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--mock', action='store_true')
+    mode.add_argument('--broker-model', action='store_true')
     args = parser.parse_args(argv)
-    if not args.mock:
-        parser.error('This deterministic adapter requires explicit --mock')
     try:
         if os.geteuid() != 0 or sys.platform != 'linux':
             raise PermissionError('Trusted Linux root operator required')
@@ -181,16 +216,23 @@ def main(argv=None):
         if not 1 <= len(packet) <= 65536:
             raise ValueError('Invalid lifecycle packet size')
         value = json.loads(packet.decode('utf8'), object_pairs_hook=unique_object)
-        if not isinstance(value, dict) or set(value) not in (
-                {'managed', 'plan'}, {'prompt_id', 'plan'}, {'next_prompt', 'plan'}):
-            raise ValueError('Unknown lifecycle fields')
-        if 'next_prompt' in value:
-            if value['next_prompt'] is not True:
-                raise ValueError('Explicit bounded discovery required')
-            task = dispatch_next_mock(value['plan'])
+        if args.broker_model:
+            if (not isinstance(value, dict) or set(value) != {'managed', 'model'}
+                    or not isinstance(value['model'], dict)
+                    or set(value['model']) != {'model', 'max_output_tokens'}):
+                raise ValueError('Unknown broker lifecycle fields')
+            task = run_broker_step(value['managed'], **value['model'])
         else:
-            task = (dispatch_prompt(value['prompt_id'], value['plan']) if 'prompt_id' in value
-                    else run_mock_step(value['managed'], value['plan']))
+            if not isinstance(value, dict) or set(value) not in (
+                    {'managed', 'plan'}, {'prompt_id', 'plan'}, {'next_prompt', 'plan'}):
+                raise ValueError('Unknown lifecycle fields')
+            if 'next_prompt' in value:
+                if value['next_prompt'] is not True:
+                    raise ValueError('Explicit bounded discovery required')
+                task = dispatch_next_mock(value['plan'])
+            else:
+                task = (dispatch_prompt(value['prompt_id'], value['plan']) if 'prompt_id' in value
+                        else run_mock_step(value['managed'], value['plan']))
         print(canonical(dict(schema_version='1.0', ok=True, task=task)))
         return 0
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
