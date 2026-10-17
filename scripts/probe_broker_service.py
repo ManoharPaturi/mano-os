@@ -163,14 +163,13 @@ def provider_idle_job():
             except FileNotFoundError:
                 continue
             if pids:
-                assert len(pids) == 1
                 # Type=exec starts RuntimeMaxSec only after successful exec.
                 # A cgroup PID can still be systemd's pre-exec startup child.
                 status = dict(line.split("=", 1) for line in command("systemctl", "show",
                     child.name, "--property=ActiveState", "--property=SubState",
                     "--property=MainPID").splitlines() if "=" in line)
                 if (status.get("ActiveState") == "active" and status.get("SubState") == "running"
-                        and status.get("MainPID") == str(pids[0])):
+                        and len(pids) == 1 and status.get("MainPID") == str(pids[0])):
                     return idle, child.name, pids
         time.sleep(0.05)
     idle.terminate()
@@ -775,6 +774,11 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     assert cloud_grant["ok"]
     assert rpc("request", dict(schema_version="1.0", operation="propose",
         body=cloud_proposal | {"grant_id": cloud_grant["grant_id"]}), actor=identity.name) == denied
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        assert database.execute("SELECT used FROM grants WHERE id=?",
+                                (cloud_grant["grant_id"],)).fetchone() == (0,)
+        assert database.execute("SELECT count(*) FROM provider_jobs").fetchone() == (0,)
     terminal_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
         resource_id=terminal_task["resource_id"], capability="terminal.run",
         args=dict(argv=["/usr/bin/python3", "-c",
@@ -977,7 +981,7 @@ finally:client.close()
         native_pam_task_model_budget=True,
         budget_grant_replay_and_public_dispatch_denied=True,
         native_pam_model_disclosure_grant=True,
-        model_executor_unavailable_denied=True,
+        installed_disabled_model_policy_preserves_grant=True,
         human_prompt_claim_to_actual_task=True,
         prompt_creation_replay_denied=True,
         prompt_duplicate_and_malformed_cases_verified=True,

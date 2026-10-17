@@ -133,3 +133,13 @@ class ProviderWorkerTests(unittest.TestCase):
             self.worker.close()
         self.assertFalse(self.worker.pending)
         self.assertEqual(self.connection.close.call_count, 2)
+
+    def test_availability_validates_fixed_root_quote_for_exact_model_arguments(self):
+        policy = MagicMock()
+        args = dict(provider='openai', model='snapshot', prompt='approved', max_output_tokens=100)
+        with patch('mano_broker.provider_worker.load_policy', return_value=policy) as load:
+            self.assertIs(self.worker.check_policy(args), policy)
+            load.assert_called_once_with(wall_time=100)
+            policy.quote.assert_called_once_with(args, wall_time=100)
+        self.jobs.prepare.assert_not_called()
+        self.connection.send.assert_not_called()
