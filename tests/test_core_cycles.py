@@ -108,3 +108,31 @@ class CoreCycleTests(unittest.TestCase):
         self.assertIsNone(self.claim(now=100))
         self.assertEqual(self.state.db.execute('SELECT state FROM core_cycles').fetchone()[0],
                          'unknown')
+
+    def test_unverified_terminal_result_waits_for_journal_verification_without_core_polling(self):
+        from mano_broker.protocol import ActionRequest
+
+        claim = self.claim()
+        self.attach()
+        task = self.state.db.execute('SELECT task_id FROM human_prompts').fetchone()[0]
+        args = dict(argv=['true'], cwd='.', timeout_seconds=1)
+        grant = self.state.issue_grant(task, approved_human_uid=1002, approved_args=args,
+            capability='terminal.run', resource_id='b' * 32, expires=100, max_count=1,
+            memory_bytes=1048576, pids=4, cpu_percent=10, max_timeout_seconds=1)
+        request = ActionRequest.parse(canonical(dict(schema_version='1.0', task_id=task,
+            resource_id='b' * 32, grant_id=grant, capability='terminal.run', args=args,
+            idempotency_key=self.prompt, reason='test')).encode())
+        action, _ = self.state.authorize(request, caller_uid=1004, now=10, boot_id='boot')
+        self.state.start(action['id'], now=11, boot_id='boot')
+        self.state.transition(action['id'], 'done', exit_code=0)
+        self.finish(claim, status='verifying')
+        self.assertIsNone(self.claim(now=17))
+        import hashlib
+
+        artifact = b'checked result'
+        digest = hashlib.sha256(artifact).hexdigest()
+        self.state.db.execute('INSERT INTO artifacts VALUES(?,?,?,?)', (
+            'e' * 32, action['id'], canonical(dict(size=len(artifact), sha256=digest)), artifact))
+        self.state.record_verification(action['id'], checked_artifacts=[{
+            'artifact_id': 'e' * 32, 'sha256': digest}])
+        self.assertIsNotNone(self.claim(now=17))

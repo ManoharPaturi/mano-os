@@ -12,7 +12,9 @@ accounts and broker-owned workspaces. Its capabilities are limited to CHOWN,
 DAC_OVERRIDE, FOWNER, SETGID and SETUID; no SYS_ADMIN or network capabilities.
 NoNewPrivileges, seccomp, Unix-only sockets, private network/devices/tmp, a strict
 read-only system, 128MiB/16-PID/20%-CPU limits and a forty-second hard start timeout
-bound the oneshot. It lives in the native Stop core slice. The core remains a
+bound the oneshot. Unchanged queued/running terminal actions and unverified results
+do not cause repeated core/checkpoint writes; the broker waits for a journal state
+change or independent verification before claiming another cycle. It lives in the native Stop core slice. The core remains a
 separate cap-zero task-UID service with its original independent limits.
 
 Account tools require writable /etc for atomic account database replacement. This

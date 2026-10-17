@@ -36,7 +36,12 @@ class CoreCycles:
                 "ON p.id=c.prompt_id WHERE p.human_uid=? AND p.boot_id=? AND "
                 "((c.prompt_id IS NULL AND p.state='received') OR "
                 "(c.state='waiting' AND p.state='task_created' AND c.model_json=? "
-                "AND c.generation=? AND c.epoch=? AND c.updated<=?)) "
+                "AND c.generation=? AND c.epoch=? AND c.updated<=? "
+                "AND (c.status NOT IN ('queued','running','verifying') OR EXISTS("
+                "SELECT 1 FROM actions a WHERE a.task_id=p.task_id AND a.idempotency_key=p.id "
+                "AND ((c.status='queued' AND a.state!='intent') OR "
+                "(c.status='running' AND a.state!='executing') OR "
+                "(c.status='verifying' AND (a.state!='done' OR a.verified=1))))))) "
                 "ORDER BY COALESCE(c.updated,-1),p.rowid LIMIT 1",
                 (human_uid, boot_id, encoded, generation, epoch, now - 5)).fetchone()
             if row is None:
