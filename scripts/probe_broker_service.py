@@ -32,6 +32,7 @@ PAM = Path("/etc/pam.d/mano-approve")
 PROVIDER_POLICY = Path("/etc/mano/provider.json")
 PRICING_POLICY = Path("/etc/mano/pricing.json")
 CONTROLLER_POLICY = Path("/etc/mano/controller.json")
+EGRESS_POLICY = Path("/etc/mano/egress.json")
 PROVIDER_SECRETS = Path("/etc/mano/credentials")
 PROVIDER_SOCKET = Path("/run/mano-provider/request.sock")
 SOCKETS = {
@@ -56,6 +57,8 @@ UNITS = (
     "mano-provider@.service",
     "mano-controller.service",
     "mano-controller.timer",
+    "mano-egress.socket",
+    "mano-egress@.service",
 )
 assert (
     os.geteuid() == 0 and Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
@@ -66,7 +69,7 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
 }
 assert all(
     not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, GUARD, BASE,
-                           CONTROLLER_POLICY,
+                           CONTROLLER_POLICY, EGRESS_POLICY,
                            LOCK, STOP_NATIVE, STOP_STATE, *SOCKETS.values())
 )
 assert all(not p.exists() for p in
@@ -76,6 +79,7 @@ old_mode = STATE.parent.stat().st_mode & 0o777
 installed = []
 created_user = False
 created_provider_user = False
+created_egress_user = False
 created_group = False
 joined = False
 identity = None
@@ -235,6 +239,9 @@ try:
     subprocess.run(["useradd", "--system", "--user-group", "--no-create-home",
         "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "mano-provider"], check=True)
     created_provider_user = True
+    subprocess.run(["useradd", "--system", "--user-group", "--no-create-home",
+        "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "mano-egress"], check=True)
+    created_egress_user = True
     provider_uid = pwd.getpwnam("mano-provider").pw_uid
     account = pwd.getpwnam("mano-broker")
     broker_uid = account.pw_uid
@@ -243,7 +250,7 @@ try:
     joined = True
     CODE.mkdir(mode=0o755)
     for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core", "mano_protocol",
-                    "mano_provider"):
+                    "mano_provider", "mano_egress"):
         shutil.copytree(
             ROOT / "src" / package, CODE / package, ignore=shutil.ignore_patterns("__pycache__")
         )
@@ -320,6 +327,8 @@ try:
     PRICING_POLICY.chmod(0o600)
     shutil.copyfile(ROOT / "packaging/config/controller.json", CONTROLLER_POLICY)
     CONTROLLER_POLICY.chmod(0o600)
+    shutil.copyfile(ROOT / "packaging/config/egress.json", EGRESS_POLICY)
+    EGRESS_POLICY.chmod(0o600)
     PROVIDER_SECRETS.mkdir(mode=0o700)
     (PROVIDER_SECRETS / "openai").write_text("ci-synthetic-provider-key")
     (PROVIDER_SECRETS / "openai").chmod(0o600)
@@ -352,6 +361,7 @@ try:
             "mano-launcher-prepare.socket",
             "mano-launcher-control.socket",
             "mano-provider.socket",
+            "mano-egress.socket",
         ],
         check=True,
     )
@@ -423,6 +433,43 @@ else:raise AssertionError('pricing unexpectedly enabled')
             "try:Path('/etc/mano/credentials/openai').read_bytes()\n"
             "except PermissionError:pass\nelse:raise AssertionError('credential read')"],
             capture_output=True, text=True, timeout=5, check=True)
+    egress_disabled_probe = """import socket
+from mano_protocol.transport import CREDENTIALS,Peer
+with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as s:
+ s.settimeout(10);s.connect('/run/mano-egress/tls.sock')
+ peer=Peer(*CREDENTIALS.unpack(s.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,CREDENTIALS.size)))
+ assert peer.pid>0 and peer.uid==0 and peer.gid==0
+ assert s.recv(1)==b''
+print('root-egress-closed')
+"""
+    egress_denial = subprocess.run(["/usr/sbin/runuser", "-u", "mano-provider", "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "python3", "-c", egress_disabled_probe],
+        capture_output=True, text=True, timeout=15, check=True)
+    assert egress_denial.stdout.strip() == "root-egress-closed"
+    assert "egress-request-denied code=policy-disabled" in command("journalctl", "-u",
+        "mano-egress@*.service", "-o", "cat", "--no-pager")
+    wrong_egress = subprocess.run(["/usr/sbin/runuser", "-u", "mano-agent", "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "python3", "-c", egress_disabled_probe],
+        capture_output=True, text=True, timeout=5, check=False)
+    assert wrong_egress.returncode != 0 and "PermissionError" in wrong_egress.stderr
+    EGRESS_POLICY.write_text(json.dumps(dict(schema_version="1.0", enabled=True)))
+    EGRESS_POLICY.chmod(0o600)
+    egress_tls_probe = """import ssl,time
+from mano_provider.https import PinnedHTTPS
+c=PinnedHTTPS(time.monotonic()+30)
+try:
+ c.connect()
+ assert c.sock.context.check_hostname and c.sock.context.verify_mode==ssl.CERT_REQUIRED
+ assert c.sock.getpeercert()
+ print('fixed-provider-tls-handshake-only')
+finally:c.close()
+"""
+    tls_handshake = subprocess.run(["/usr/sbin/runuser", "-u", "mano-provider", "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "python3", "-c", egress_tls_probe],
+        capture_output=True, text=True, timeout=35, check=True)
+    assert tls_handshake.stdout.strip() == "fixed-provider-tls-handshake-only"
+    shutil.copyfile(ROOT / "packaging/config/egress.json", EGRESS_POLICY)
+    EGRESS_POLICY.chmod(0o600)
     provider_timer_client, provider_timer_unit, provider_timer_pids = provider_idle_job()
     provider_started = time.monotonic()
     try:
@@ -1085,6 +1132,9 @@ finally:client.close()
         installed_recurring_controller_service=True,
         controller_root_policy_and_network_kernel_denials=True,
         controller_provider_key_source_hidden=True,
+        installed_egress_disabled_policy_denied=True,
+        egress_wrong_uid_and_provider_key_source_denied=True,
+        fixed_provider_unix_tls_handshake_without_http=True,
         installed_bounded_lifecycle_controller=True,
         durable_prompt_context_dispatch_reused=True,
         installed_root_task_factory=True,
@@ -1554,6 +1604,8 @@ except BaseException:
             "mano-provider@*.service",
             "-u",
             "mano-controller.service",
+            "-u",
+            "mano-egress@*.service",
             "--no-pager",
             "-n",
             "80",
@@ -1566,7 +1618,8 @@ except BaseException:
     raise
 finally:
     provider_units = [line.split()[0] for line in command("systemctl", "list-units", "--all",
-        "--plain", "--no-legend", "mano-provider@*.service").splitlines() if line.strip()]
+        "--plain", "--no-legend", "mano-provider@*.service",
+        "mano-egress@*.service").splitlines() if line.strip()]
     if provider_units:
         subprocess.run(["systemctl", "stop", *provider_units], check=False, capture_output=True,
                        timeout=5)
@@ -1574,7 +1627,7 @@ finally:
                    check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
     for file in (LIBRARY, NATIVE, STOP_NATIVE, POLICY, PAM, GUARD, PROVIDER_POLICY,
-                 PRICING_POLICY, CONTROLLER_POLICY, *installed):
+                 PRICING_POLICY, CONTROLLER_POLICY, EGRESS_POLICY, *installed):
         file.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     subprocess.run(
@@ -1601,9 +1654,15 @@ finally:
         )
     if created_user:
         subprocess.run(["userdel", "mano-broker"], check=False, capture_output=True)
+    if created_egress_user:
+        subprocess.run(["userdel", "mano-egress"], check=False, capture_output=True)
+        subprocess.run(["groupdel", "mano-egress"], check=False, capture_output=True)
     if created_provider_user:
         subprocess.run(["userdel", "mano-provider"], check=False, capture_output=True)
         subprocess.run(["groupdel", "mano-provider"], check=False, capture_output=True)
+    egress_dir = Path("/run/mano-egress")
+    if egress_dir.exists():
+        egress_dir.rmdir()
     provider_dir = Path("/run/mano-provider")
     if provider_dir.exists():
         provider_dir.rmdir()
