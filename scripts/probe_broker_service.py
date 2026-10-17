@@ -30,6 +30,7 @@ STOP_STATE = Path("/var/lib/mano-stopd")
 POLICY = Path("/etc/mano/human.uid")
 PAM = Path("/etc/pam.d/mano-approve")
 PROVIDER_POLICY = Path("/etc/mano/provider.json")
+PRICING_POLICY = Path("/etc/mano/pricing.json")
 PROVIDER_SECRETS = Path("/etc/mano/credentials")
 PROVIDER_SOCKET = Path("/run/mano-provider/request.sock")
 SOCKETS = {
@@ -64,7 +65,8 @@ assert all(
     not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, GUARD, BASE,
                            LOCK, STOP_NATIVE, STOP_STATE, *SOCKETS.values())
 )
-assert all(not p.exists() for p in (PROVIDER_POLICY, PROVIDER_SECRETS, PROVIDER_SOCKET))
+assert all(not p.exists() for p in
+           (PROVIDER_POLICY, PROVIDER_SECRETS, PROVIDER_SOCKET, PRICING_POLICY))
 assert all(not (Path("/etc/systemd/system") / u).exists() for u in UNITS)
 old_mode = STATE.parent.stat().st_mode & 0o777
 installed = []
@@ -311,6 +313,8 @@ try:
     PROVIDER_POLICY.write_text(json.dumps(dict(provider="openai", model="ci-health-snapshot",
         max_output_tokens=100, enabled=False)))
     PROVIDER_POLICY.chmod(0o600)
+    shutil.copyfile(ROOT / "packaging/config/pricing.json", PRICING_POLICY)
+    PRICING_POLICY.chmod(0o600)
     PROVIDER_SECRETS.mkdir(mode=0o700)
     (PROVIDER_SECRETS / "openai").write_text("ci-synthetic-provider-key")
     (PROVIDER_SECRETS / "openai").chmod(0o600)
@@ -360,6 +364,30 @@ try:
     assert set(map(int, fields["Uid"].split())) == {broker_uid}
     assert fields["NoNewPrivs"].strip() == "1" and fields["Seccomp"].strip() == "2"
     assert int(fields["CapEff"].strip(), 16) == 0
+    price_probe = """from mano_broker.price_config import load_policy
+from mano_broker.state import Denied
+try:load_policy(wall_time=100)
+except Denied as error:
+ assert str(error)=='Root model pricing policy disabled'
+ print('disabled-root-price-policy')
+else:raise AssertionError('pricing unexpectedly enabled')
+"""
+    def broker_price_snapshot():
+        result = subprocess.run(["/usr/bin/nsenter", "--target", str(pid), "--mount", "--",
+            "/usr/sbin/runuser", "-u", "mano-broker", "--", "env",
+            "PYTHONPATH=/usr/lib/mano-os",
+            "CREDENTIALS_DIRECTORY=/run/credentials/mano-broker.service",
+            "python3", "-c", price_probe], capture_output=True, text=True, timeout=10, check=True)
+        assert result.stdout.strip() == "disabled-root-price-policy"
+    broker_price_snapshot()
+    # Root source edits do not mutate systemd's already-loaded credential snapshot.
+    PRICING_POLICY.write_text(json.dumps(dict(schema_version="1.0", provider="openai", enabled=True,
+        price=dict(model="synthetic", revision="ci-only", expires_unix=1000,
+            input_context_tokens=1000, max_output_tokens=100,
+            input_micro_usd_per_million=1001, output_micro_usd_per_million=2001))))
+    broker_price_snapshot()
+    shutil.copyfile(ROOT / "packaging/config/pricing.json", PRICING_POLICY)
+    PRICING_POLICY.chmod(0o600)
     provider_packet = dict(schema_version="1.0", operation="health", body={})
     provider_result = subprocess.run(["/usr/sbin/runuser", "-u", "mano-broker", "--",
         "python3", "-c", client, str(PROVIDER_SOCKET), str(provider_uid), "-"],
@@ -1080,6 +1108,8 @@ else:raise AssertionError('task reached native Stop')
     terminal_report["native_stop_broker_and_launcher_frozen"] = True
     terminal_report["native_stop_frozen_core_and_detached_child_drained"] = True
     terminal_report["native_stop_frozen_provider_drained"] = True
+    terminal_report["installed_broker_disabled_price_policy"] = True
+    terminal_report["loaded_broker_price_policy_immutable_snapshot"] = True
     terminal_report["installed_provider_credential_health"] = True
     terminal_report["installed_provider_disabled_generation_denied"] = True
     terminal_report["provider_kernel_runtime_deadline_verified"] = True
@@ -1408,7 +1438,8 @@ finally:
     subprocess.run(["systemctl", "stop", *(unit for unit in UNITS if "@" not in unit)],
                    check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
-    for file in (LIBRARY, NATIVE, STOP_NATIVE, POLICY, PAM, GUARD, PROVIDER_POLICY, *installed):
+    for file in (LIBRARY, NATIVE, STOP_NATIVE, POLICY, PAM, GUARD, PROVIDER_POLICY,
+                 PRICING_POLICY, *installed):
         file.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     subprocess.run(
