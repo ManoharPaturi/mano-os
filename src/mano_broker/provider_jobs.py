@@ -51,6 +51,7 @@ class ProviderJobs:
                                           (request.grant_id,)).fetchone()
             if (action['state'] != 'executing' or job['state'] != 'prepared'
                     or self.state.meta('latched') or grant['revoked']
+                    or grant['native_generation'] < 0
                     or grant['epoch'] != self.state.meta('epoch') or now >= grant['expires']):
                 raise Denied('Provider job cannot be dispatched or repeated')
             price = self.state.db.execute('SELECT policy_json FROM model_prices WHERE action_id=?',
@@ -61,6 +62,7 @@ class ProviderJobs:
             policy.quote(json.loads(request.args_json), wall_time=wall_time)
             packet = canonical(dict(schema_version='1.0', operation='generate',
                 body=dict(binding=binding, request=request.body(),
+                    native_stop_generation=grant['native_generation'],
                     grant_expires_monotonic=grant['expires'],
                     price_expires_unix=policy.expires_unix))).encode()
             if len(packet) > MAX_PACKET:

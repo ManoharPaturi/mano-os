@@ -9,6 +9,7 @@ import time
 from mano_protocol.actions import MAX_PACKET, ActionRequest, Capability, canonical
 from mano_protocol.provider import decode
 from mano_protocol.provider_handoff import send_response, validate_binding
+from mano_protocol.stop_state import snapshot
 
 from .https import generate
 
@@ -27,9 +28,15 @@ def authorize(packet, peer, *, config, boot_id, now, wall_time):
             or value['schema_version'] != '1.0' or value['operation'] != 'generate'
             or not isinstance(value['body'], dict)
             or set(value['body']) != {'binding', 'request', 'grant_expires_monotonic',
-                                     'price_expires_unix'}):
+                                     'price_expires_unix', 'native_stop_generation'}):
         raise ValueError('Invalid private provider job envelope')
     body = value['body']
+    generation = body['native_stop_generation']
+    if type(generation) is not int or not 0 <= generation <= (1 << 63) - 1:
+        raise ValueError('Invalid native Stop grant generation')
+    native = snapshot()
+    if native.latched or native.generation != generation:
+        raise ValueError('Native Stop invalidated provider authority')
     for number in (now, wall_time, body['grant_expires_monotonic'], body['price_expires_unix']):
         if (type(number) not in {int, float} or not 0 <= number <= 2**53
                 or not math.isfinite(number)):

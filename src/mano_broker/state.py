@@ -58,7 +58,8 @@ class State:
                 capability TEXT NOT NULL,resource_id TEXT NOT NULL,human_uid INTEGER NOT NULL,
                 epoch INTEGER NOT NULL,expires REAL NOT NULL,max_count INTEGER NOT NULL,
                 used INTEGER NOT NULL DEFAULT 0,budget_json TEXT NOT NULL,
-                revoked INTEGER NOT NULL DEFAULT 0,approved_args_json TEXT);
+                revoked INTEGER NOT NULL DEFAULT 0,approved_args_json TEXT,
+                native_generation INTEGER NOT NULL DEFAULT -1);
             CREATE TABLE IF NOT EXISTS actions(
                 id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES tasks(id),
                 grant_id TEXT NOT NULL REFERENCES grants(id),request_digest TEXT NOT NULL,
@@ -110,6 +111,11 @@ class State:
         # Upgrade pre-binding journals without silently retaining broad authority.
         with self.transaction():
             columns = {row[1] for row in self.db.execute("PRAGMA table_info(grants)")}
+            if "native_generation" not in columns:
+                self.db.execute("ALTER TABLE grants ADD COLUMN native_generation "
+                                "INTEGER NOT NULL DEFAULT -1")
+                self.db.execute("UPDATE grants SET revoked=1 WHERE capability='model.plan'")
+                self.event(None, "native-generation-grant-migration", {})
             if "approved_args_json" not in columns:
                 self.db.execute("ALTER TABLE grants ADD COLUMN approved_args_json TEXT")
                 self.db.execute("UPDATE grants SET revoked=1")
@@ -238,9 +244,15 @@ class State:
         with self.transaction():
             if self.meta("latched"):
                 raise Denied("Emergency stop latched")
+            native = self.db.execute("SELECT value FROM meta WHERE key='native_generation'")
+            row = native.fetchone()
+            generation = int(row[0]) if row else -1
+            if not -1 <= generation <= (1 << 63) - 1:
+                raise Denied("Invalid native Stop grant generation")
             self.db.execute(
                 "INSERT INTO grants(id,task_id,capability,resource_id,human_uid,epoch,expires,"
-                "max_count,budget_json,approved_args_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "max_count,budget_json,approved_args_json,native_generation) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     grant_id,
                     task_id,
@@ -252,6 +264,7 @@ class State:
                     max_count,
                     canonical(budgets),
                     approved.args_json,
+                    generation,
                 ),
             )
             self.event(None, "grant-issued", {"grant_id": grant_id, "task_id": task_id})

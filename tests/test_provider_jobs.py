@@ -11,12 +11,16 @@ from mano_broker.model_budget import ModelBudget
 from mano_broker.model_pricing import PricePolicy
 from mano_broker.provider_jobs import ProviderJobs
 from mano_broker.state import Denied, State
+from mano_protocol.stop_state import Snapshot
 
 
 class ProviderJobTests(unittest.TestCase):
     tearDown = outcomes.ModelOutcomeTests.tearDown
 
     def setUp(self):
+        native = patch('mano_provider.job_request.snapshot', return_value=Snapshot(0, False))
+        native.start()
+        self.addCleanup(native.stop)
         outcomes.ModelOutcomeTests.setUp(self)
         self.jobs = ProviderJobs(self.state)
         ModelBudget(self.state).configure(self.task, authenticated_human_uid=1002,
@@ -155,3 +159,65 @@ class ProviderJobTests(unittest.TestCase):
             'SELECT state FROM provider_jobs').fetchone()[0], 'finished')
         self.assertEqual(tuple(self.state.db.execute(
             'SELECT money,tokens,settled FROM model_reservations').fetchone()), (1, 5, 1))
+
+    def test_original_grant_generation_is_not_refreshed_at_dispatch(self):
+        self.state.db.execute("UPDATE meta SET value=1 WHERE key='native_generation'")
+        self.prepare()
+        packet = self.claim()
+        self.assertEqual(packet['body']['native_stop_generation'], 0)
+        from types import SimpleNamespace
+
+        from mano_protocol.actions import canonical
+        from mano_protocol.transport import Peer
+        from mano_provider.job_request import authorize
+
+        with (
+            patch('mano_provider.job_request.snapshot', return_value=Snapshot(1, False)),
+            patch('mano_provider.job_request.pwd.getpwnam',
+                  return_value=SimpleNamespace(pw_uid=999, pw_gid=999)),
+        ):
+            with self.assertRaises(ValueError):
+                authorize(canonical(packet).encode(), Peer(42, 999, 999),
+                    config=dict(provider='openai', model='snapshot', enabled=True,
+                                max_output_tokens=100), boot_id='boot', now=12, wall_time=100)
+
+    def test_unbound_legacy_grant_cannot_dispatch(self):
+        self.state.db.execute('UPDATE grants SET native_generation=-1')
+        self.prepare()
+        with self.assertRaises(Denied):
+            self.claim()
+
+    def test_old_journal_migration_revokes_model_authority(self):
+        self.state.db.execute('ALTER TABLE grants DROP COLUMN native_generation')
+        self.state.close()
+        self.state = State(self.directory)
+        grant = self.state.db.execute('SELECT revoked,native_generation FROM grants').fetchone()
+        self.assertEqual(tuple(grant), (1, -1))
+
+    @unittest.skipUnless(sys.platform == 'linux' and os.geteuid() > 0,
+                         'Linux non-root sealed provider worker transport required')
+    def test_nonblocking_worker_receives_real_sealed_result_and_settles_original(self):
+        from mano_broker.provider_worker import Pending, ProviderWorker
+        from mano_protocol.provider_handoff import send_response
+
+        self.prepare()
+        binding = self.claim()['body']['binding']
+        worker = ProviderWorker(self.jobs, boot_id='boot')
+        receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        with receiver, sender:
+            receiver.setblocking(False)
+            receiver.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+            worker.pending[self.action] = Pending(receiver, os.geteuid(), os.getegid(), 52)
+            with (
+                patch('mano_broker.provider_worker.snapshot', return_value=Snapshot(0, False)),
+                patch('mano_broker.provider_worker.time.monotonic', return_value=12),
+            ):
+                self.assertIsNone(worker.poll(self.action))
+                send_response(sender, self.packet, binding=binding)
+                result = worker.poll(self.action)
+        self.assertEqual(result['usage']['total_tokens'], 5)
+        self.assertFalse(worker.pending)
+        self.assertEqual(tuple(self.state.db.execute(
+            'SELECT money,tokens,settled FROM model_reservations').fetchone()), (1, 5, 1))
+        with self.assertRaises(Denied):
+            worker.poll(self.action)

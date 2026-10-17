@@ -9,7 +9,8 @@ class EmbeddedVMProbeTests(unittest.TestCase):
     def test_broker_probe_clients_are_complete_python_programs(self):
         source = Path(__file__).resolve().parents[1] / 'scripts' / 'probe_broker_service.py'
         tree = ast.parse(source.read_text())
-        expected = {'private_denial', 'client', 'native_client', 'agent_step_code', 'price_probe'}
+        expected = {'private_denial', 'client', 'native_client', 'agent_step_code', 'price_probe',
+                    'provider_stop_probe'}
         found = set()
         for node in ast.walk(tree):
             if not isinstance(node, ast.Assign):

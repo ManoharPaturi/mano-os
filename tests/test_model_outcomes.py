@@ -17,6 +17,7 @@ class ModelOutcomeTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.directory = Path(self.temp.name).resolve() / 'journal'
         self.state = State(self.directory)
+        self.state.db.execute("INSERT INTO meta VALUES('native_generation',0)")
         self.store = ModelStore(self.state)
         self.task = self.state.create_task(human_uid=1002, caller_uid=1005, mode='supervised',
             resource_id='a' * 32, classification='sensitive', boot_id='boot')
