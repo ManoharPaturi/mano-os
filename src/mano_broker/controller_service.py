@@ -4,6 +4,7 @@ import errno
 import os
 import socket
 import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,38 +32,52 @@ def parse(packet):
     return dict(model=value['model'], max_output_tokens=value['max_output_tokens'])
 
 
+class ControllerProfileDenied(ValueError):
+    pass
+
+
 def verify_current():
     if sys.platform != 'linux' or (os.getuid(), os.geteuid(), os.getegid()) != (0, 0, 0):
-        raise ValueError('Installed Root controller service required')
+        raise ControllerProfileDenied('Installed Root controller service required')
     fields = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text().splitlines()
                   if ':' in line)
     if (fields['NoNewPrivs'].strip() != '1' or fields['Seccomp'].strip() != '2'
             or any(int(fields[key].strip(), 16) != ROOT_CAPABILITIES
                    for key in ('CapEff', 'CapPrm', 'CapBnd'))
             or any(int(fields[key].strip(), 16) for key in ('CapAmb', 'CapInh'))):
-        raise ValueError('Root controller restrictions absent')
+        raise ControllerProfileDenied('Root controller restrictions absent')
     group = next(line.split('::', 1)[1]
                  for line in Path('/proc/self/cgroup').read_text().splitlines()
                  if line.startswith('0::'))
     if group != '/mano.slice/mano-core.slice/mano-controller.service':
-        raise ValueError('Controller must share native Stop domain')
+        raise ControllerProfileDenied('Controller must share native Stop domain')
     for path in ('/etc/mano/controller.json', '/etc/mano/human.uid', '/etc/pam.d/mano-approve'):
         try:
             fd = os.open(path, os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
         except OSError as error:
             if error.errno != errno.EROFS:
-                raise ValueError('Controller policy mount is not demonstrably read-only') from error
+                raise ControllerProfileDenied(
+                    'Controller policy mount is not demonstrably read-only') from error
         else:
             os.close(fd)  # No write/truncate is attempted, even on profile failure.
-            raise ValueError('Controller can open protected policy for writing')
+            raise ControllerProfileDenied('Controller can open protected policy for writing')
+    try:
+        fd = os.open('/etc/mano/credentials/openai', os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError as error:
+        if error.errno not in {errno.ENOENT, errno.EACCES, errno.ENOTDIR}:
+            raise ControllerProfileDenied(
+                'Unexpected provider credential isolation failure') from error
+    else:
+        os.close(fd)  # Never read credential bytes, even if isolation is broken.
+        raise ControllerProfileDenied('Controller can open provider key source')
     try:
         connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except OSError as error:
         if error.errno not in {errno.EPERM, errno.EAFNOSUPPORT}:
-            raise ValueError('Unexpected controller network restriction') from error
+            raise ControllerProfileDenied('Unexpected controller network restriction') from error
     else:
         connection.close()  # No connect, DNS or network traffic.
-        raise ValueError('Controller Internet socket creation is not denied')
+        raise ControllerProfileDenied('Controller Internet socket creation is not denied')
 
 
 
@@ -89,7 +104,10 @@ def main():
             result = dict(state='idle' if cycle is None else 'cycle', cycle=cycle)
         print(canonical(dict(schema_version='1.0', ok=True, **result)))
         return 0
-    except (OSError, ValueError, KeyError, TypeError, StopIteration):
+    except (OSError, ValueError, KeyError, TypeError, StopIteration,
+            subprocess.SubprocessError) as error:
+        reason = str(error) if isinstance(error, ControllerProfileDenied) else type(error).__name__
+        print(canonical(dict(event='controller-service-denied', reason=reason)), file=sys.stderr)
         print(canonical(dict(schema_version='1.0', ok=False, error='uncertain')))
         return 1
 

@@ -1082,6 +1082,7 @@ finally:client.close()
         installed_durable_controller_cycle=True,
         installed_recurring_controller_service=True,
         controller_root_policy_and_network_kernel_denials=True,
+        controller_provider_key_source_hidden=True,
         installed_bounded_lifecycle_controller=True,
         durable_prompt_context_dispatch_reused=True,
         installed_root_task_factory=True,

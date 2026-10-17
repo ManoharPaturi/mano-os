@@ -3,6 +3,7 @@
 import argparse
 import os
 import re
+import subprocess
 import sys
 
 from mano_protocol.provider import configuration
@@ -54,7 +55,7 @@ def run_cycle(*, model, max_output_tokens):
     except BaseException:
         try:
             control_request('finish_core_cycle', binding | {'status': 'controller_uncertain'})
-        except (OSError, ValueError, KeyError, TypeError):
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
             pass  # Original claim remains unknown/running; never steal it or allocate again.
         raise
 
@@ -68,7 +69,7 @@ def main(argv=None):
         result = run_cycle(model=args.model, max_output_tokens=args.max_output_tokens)
         print(canonical(dict(schema_version='1.0', ok=True, cycle=result)))
         return 0
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print(canonical(dict(schema_version='1.0', ok=False, error='uncertain')))
         return 1
 

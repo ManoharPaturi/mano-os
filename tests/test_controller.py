@@ -87,3 +87,19 @@ class ControllerTests(unittest.TestCase):
         self.mocks['run_broker_step'].assert_not_called()
         self.assertEqual(self.mocks['control_request'].call_args.args[1]['status'],
                          'controller_uncertain')
+
+    def test_cli_reports_subprocess_uncertainty_without_traceback_or_retry(self):
+        import io
+        import json
+        import subprocess
+
+        from mano_broker.controller import main
+
+        with (
+            patch('mano_broker.controller.run_cycle',
+                  side_effect=subprocess.CalledProcessError(1, ['fixed-helper'])) as cycle,
+            patch('mano_broker.controller.sys.stdout', io.StringIO()) as output,
+        ):
+            self.assertEqual(main(['--model', 'synthetic', '--max-output-tokens', '100']), 1)
+            self.assertEqual(json.loads(output.getvalue())['error'], 'uncertain')
+            cycle.assert_called_once()

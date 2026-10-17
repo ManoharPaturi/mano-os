@@ -49,19 +49,21 @@ class ControllerServiceTests(unittest.TestCase):
         from pathlib import Path
 
         reader = self.profile()
+        def denied_open(path, flags):
+            raise OSError(errno.ENOENT if path.endswith('/openai') else errno.EROFS, 'denied')
+
         with (
             patch('mano_broker.controller_service.sys.platform', 'linux'),
             patch('mano_broker.controller_service.os.getuid', return_value=0),
             patch('mano_broker.controller_service.os.geteuid', return_value=0),
             patch('mano_broker.controller_service.os.getegid', return_value=0),
             patch.object(Path, 'read_text', autospec=True, side_effect=reader),
-            patch('mano_broker.controller_service.os.open',
-                  side_effect=OSError(errno.EROFS, 'read-only')) as opening,
+            patch('mano_broker.controller_service.os.open', side_effect=denied_open) as opening,
             patch('mano_broker.controller_service.socket.socket',
                   side_effect=OSError(errno.EAFNOSUPPORT, 'denied')) as network,
         ):
             verify_current()
-            self.assertEqual(opening.call_count, 3)
+            self.assertEqual(opening.call_count, 4)
             network.assert_called_once_with(socket.AF_INET, socket.SOCK_STREAM)
             opening.side_effect = None
             opening.return_value = 77

@@ -19,7 +19,8 @@ separate cap-zero task-UID service with its original independent limits.
 
 Account tools require writable /etc for atomic account database replacement. This
 is a trusted Root component with that access; /etc/mano, PAM, systemd and sudo policy
-are separately mounted read-only. Outside /etc, write mounts are only the fixed
+are separately mounted read-only. Provider key sources, the broker journal directory
+and direct provider socket directory are inaccessible in the controller namespace. Outside /etc, write mounts are only the fixed
 allocation lock and workspace tree. useradd no longer initializes login logs or
 mail spools for locked non-login task identities. tmpfiles creates the Root-owned
 workspace parent and allocation lock before service startup; it preserves existing
@@ -29,7 +30,8 @@ absent, never overwrite an operator policy, and apply these prerequisites first.
 Startup verifies exact Root identity, capability mask, NNP/seccomp and Stop cgroup.
 It attempts write-only opens of policy/PAM files without writing or truncating, and
 requires EROFS. It attempts an unconnected Internet socket and requires kernel
-denial. An unexpected success is closed immediately and fails startup. No probe
+denial. It also requires the provider key source to be hidden; the open probe
+never reads credential bytes. An unexpected success is closed immediately and fails startup. No probe
 sends network traffic or changes a policy file.
 
 The Debian witness starts the installed service disabled, then explicitly enables
@@ -38,6 +40,7 @@ allocate one task and wait for model disclosure approval. The actual timer must
 resume that same task with a fresh journal cycle nonce, without any model grant or
 provider job. It stops the timer/service and restores the disabled source afterward.
 Required flags: installed_recurring_controller_service and
-controller_root_policy_and_network_kernel_denials. Until final CI these are pending.
+controller_root_policy_and_network_kernel_denials and
+controller_provider_key_source_hidden. Until final CI these are pending.
 This is not live provider execution, physical input or frozen-controller validation.
 Pricing/provider generation and provider Internet access remain disabled.
