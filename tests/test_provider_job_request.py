@@ -5,12 +5,16 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from mano_protocol.actions import ActionRequest, canonical
+from mano_protocol.stop_state import Snapshot
 from mano_protocol.transport import Peer
 from mano_provider.job_request import authorize, execute
 
 
 class ProviderJobRequestTests(unittest.TestCase):
     def setUp(self):
+        native = patch('mano_provider.job_request.snapshot', return_value=Snapshot(0, False))
+        native.start()
+        self.addCleanup(native.stop)
         self.request = dict(schema_version='1.0', task_id='a' * 32, resource_id='b' * 32,
             grant_id='c' * 32, capability='model.plan', idempotency_key='one', reason='plan',
             args=dict(provider='openai', model='synthetic', prompt='approved prompt',
@@ -22,6 +26,7 @@ class ProviderJobRequestTests(unittest.TestCase):
                            max_output_tokens=100, enabled=True)
         self.packet = canonical(dict(schema_version='1.0', operation='generate',
             body=dict(binding=self.binding, request=self.request,
+                      native_stop_generation=0,
                       grant_expires_monotonic=100, price_expires_unix=1000))).encode()
 
     def call(self, packet=None, **changes):
@@ -131,3 +136,33 @@ class ProviderJobRequestTests(unittest.TestCase):
         runtime = [line.split('=', 1)[1] for line in unit if line.startswith('RuntimeMaxSec=')]
         self.assertEqual(runtime, [str(JOB_LIFETIME_SECONDS)])
         self.assertIn('KillSignal=SIGKILL', unit)
+
+    def test_native_stop_and_rearm_invalidate_original_job(self):
+        for native in (Snapshot(0, True), Snapshot(1, False), Snapshot(2, True)):
+            with self.subTest(native=native), patch(
+                'mano_provider.job_request.snapshot', return_value=native
+            ), self.assertRaises(ValueError):
+                self.call()
+
+    def test_native_stop_read_failure_never_reaches_provider(self):
+        connection = Mock(family=socket.AF_UNIX, type=socket.SOCK_SEQPACKET)
+        from mano_protocol.errors import Denied
+
+        for error in (Denied('pending'), OSError('missing')):
+            with (
+                patch('mano_provider.job_request.snapshot', side_effect=error),
+                patch('mano_provider.job_request.pwd.getpwnam',
+                      return_value=SimpleNamespace(pw_uid=999, pw_gid=999)),
+                patch('mano_provider.job_request.generate') as generate,
+            ):
+                with self.assertRaises((Denied, OSError)):
+                    self.execute(connection, Peer(42, 999, 999), config=self.config,
+                                 credential='ci-key', boot_id='boot')
+                generate.assert_not_called()
+
+    def test_native_generation_requires_exact_nonnegative_bounded_integer(self):
+        for generation in (True, -1, 1.0, '0', 1 << 63, None):
+            envelope = json.loads(self.packet)
+            envelope['body']['native_stop_generation'] = generation
+            with self.subTest(generation=generation), self.assertRaises(ValueError):
+                self.call(canonical(envelope).encode())

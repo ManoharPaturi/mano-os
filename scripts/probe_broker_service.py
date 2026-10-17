@@ -1066,6 +1066,21 @@ else:raise AssertionError('task reached native Stop')
         time.sleep(0.05)
     assert len(core_pids) == 2
     provider_idle, _provider_unit, provider_pids = provider_idle_job()
+    provider_stop_probe = """import json
+from mano_protocol.stop_state import snapshot
+state=snapshot()
+print(json.dumps(dict(generation=state.generation,latched=state.latched)))
+"""
+    observed = subprocess.run(["/usr/bin/nsenter", "--target", str(provider_pids[0]),
+        "--mount", "--", "/usr/sbin/runuser", "-u", "mano-provider", "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "python3", "-c", provider_stop_probe],
+        capture_output=True, text=True, check=True, timeout=10)
+    from mano_protocol.stop_state import snapshot as root_stop_snapshot
+
+    root_snapshot = root_stop_snapshot()
+    assert not root_snapshot.latched
+    assert json.loads(observed.stdout) == dict(generation=root_snapshot.generation, latched=False)
+    terminal_report["installed_provider_native_stop_snapshot"] = True
     core_pids.extend(provider_pids)
     subprocess.run(["kill", "-STOP", *(str(pid) for pid in core_pids)], check=True)
     subprocess.run(["kill", "-STOP", str(broker_pid), str(launcher_pid)], check=True)

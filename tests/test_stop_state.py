@@ -14,12 +14,12 @@ class NativeStopStateTests(unittest.TestCase):
         for name, value in changes.items():
             setattr(info, name, value)
         parent = SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0)
-        with patch('mano_broker.stop_state.no_pending'), \
-             patch('mano_broker.stop_state.Path.lstat', return_value=parent), \
-             patch('mano_broker.stop_state.os.open', return_value=77), \
-             patch('mano_broker.stop_state.os.fstat', return_value=info), \
-             patch('mano_broker.stop_state.os.read', return_value=data), \
-             patch('mano_broker.stop_state.os.close') as close:
+        with patch('mano_protocol.stop_state.no_pending'), \
+             patch('mano_protocol.stop_state.Path.lstat', return_value=parent), \
+             patch('mano_protocol.stop_state.os.open', return_value=77), \
+             patch('mano_protocol.stop_state.os.fstat', return_value=info), \
+             patch('mano_protocol.stop_state.os.read', return_value=data), \
+             patch('mano_protocol.stop_state.os.close') as close:
             try:
                 return latched()
             finally:
@@ -47,8 +47,8 @@ class NativeStopStateTests(unittest.TestCase):
 
     def test_pending_native_write_never_reads_armed_authority(self):
         parent = SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0)
-        with patch('mano_broker.stop_state.Path.lstat', return_value=parent), \
-             patch('mano_broker.stop_state.os.open') as opening:
+        with patch('mano_protocol.stop_state.Path.lstat', return_value=parent), \
+             patch('mano_protocol.stop_state.os.open') as opening:
             with self.assertRaises(Denied):
                 latched()
             opening.assert_not_called()
