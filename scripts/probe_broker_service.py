@@ -29,6 +29,9 @@ STOP_NATIVE = Path("/usr/libexec/mano-stopd")
 STOP_STATE = Path("/var/lib/mano-stopd")
 POLICY = Path("/etc/mano/human.uid")
 PAM = Path("/etc/pam.d/mano-approve")
+PROVIDER_POLICY = Path("/etc/mano/provider.json")
+PROVIDER_SECRETS = Path("/etc/mano/credentials")
+PROVIDER_SOCKET = Path("/run/mano-provider/request.sock")
 SOCKETS = {
     name: Path("/run/mano-broker") / (name + ".sock")
     for name in ("request", "control", "provision")
@@ -47,6 +50,8 @@ UNITS = (
     "mano-stopd.socket",
     "mano-stopd-control.socket",
     "mano-core.slice",
+    "mano-provider.socket",
+    "mano-provider@.service",
 )
 assert (
     os.geteuid() == 0 and Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
@@ -59,10 +64,12 @@ assert all(
     not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, GUARD, BASE,
                            LOCK, STOP_NATIVE, STOP_STATE, *SOCKETS.values())
 )
+assert all(not p.exists() for p in (PROVIDER_POLICY, PROVIDER_SECRETS, PROVIDER_SOCKET))
 assert all(not (Path("/etc/systemd/system") / u).exists() for u in UNITS)
 old_mode = STATE.parent.stat().st_mode & 0o777
 installed = []
 created_user = False
+created_provider_user = False
 created_group = False
 joined = False
 identity = None
@@ -140,6 +147,35 @@ def rpc(channel, body, actor="mano-worker", directory=None):
     return decoded["payload"]
 
 
+def provider_idle_job():
+    idle = subprocess.Popen(["/usr/sbin/runuser", "-u", "mano-broker", "--", "python3", "-c",
+        "import socket,time;s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);"
+        "s.connect('/run/mano-provider/request.sock');time.sleep(45)"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        for child in Path("/sys/fs/cgroup/mano.slice/mano-core.slice").glob(
+                "mano-provider@*.service"):
+            try:
+                pids = [int(pid) for pid in (child / "cgroup.procs").read_text().split()]
+            except FileNotFoundError:
+                continue
+            if pids:
+                assert len(pids) == 1
+                # Type=exec starts RuntimeMaxSec only after successful exec.
+                # A cgroup PID can still be systemd's pre-exec startup child.
+                status = dict(line.split("=", 1) for line in command("systemctl", "show",
+                    child.name, "--property=ActiveState", "--property=SubState",
+                    "--property=MainPID").splitlines() if "=" in line)
+                if (status.get("ActiveState") == "active" and status.get("SubState") == "running"
+                        and status.get("MainPID") == str(pids[0])):
+                    return idle, child.name, pids
+        time.sleep(0.05)
+    idle.terminate()
+    idle.wait(timeout=3)
+    raise AssertionError("Provider job not active")
+
+
 native_client = """import json,sys
 from mano_prompt.approve import (rpc,view_packet,confirmation_packet,
  rearm_view_packet,rearm_confirmation_packet)
@@ -191,13 +227,18 @@ try:
         check=True,
     )
     created_user = True
+    subprocess.run(["useradd", "--system", "--user-group", "--no-create-home",
+        "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "mano-provider"], check=True)
+    created_provider_user = True
+    provider_uid = pwd.getpwnam("mano-provider").pw_uid
     account = pwd.getpwnam("mano-broker")
     broker_uid = account.pw_uid
     assert broker_uid not in {0, 1001, 1002, 1003, 1004}
     subprocess.run(["usermod", "-a", "-G", "mano-request", "mano-worker"], check=True)
     joined = True
     CODE.mkdir(mode=0o755)
-    for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core", "mano_protocol"):
+    for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core", "mano_protocol",
+                    "mano_provider"):
         shutil.copytree(
             ROOT / "src" / package, CODE / package, ignore=shutil.ignore_patterns("__pycache__")
         )
@@ -267,6 +308,12 @@ try:
     POLICY.write_text("1002\n")
     POLICY.chmod(0o600)
     shutil.copyfile(ROOT / "packaging/pam/mano-approve", PAM)
+    PROVIDER_POLICY.write_text(json.dumps(dict(provider="openai", model="ci-health-snapshot",
+        max_output_tokens=100, enabled=False)))
+    PROVIDER_POLICY.chmod(0o600)
+    PROVIDER_SECRETS.mkdir(mode=0o700)
+    (PROVIDER_SECRETS / "openai").write_text("ci-synthetic-provider-key")
+    (PROVIDER_SECRETS / "openai").chmod(0o600)
     password = secrets.token_hex(24)
     subprocess.run(
         ["chpasswd"],
@@ -290,6 +337,7 @@ try:
             "mano-approve.socket",
             "mano-launcher-prepare.socket",
             "mano-launcher-control.socket",
+            "mano-provider.socket",
         ],
         check=True,
     )
@@ -312,6 +360,45 @@ try:
     assert set(map(int, fields["Uid"].split())) == {broker_uid}
     assert fields["NoNewPrivs"].strip() == "1" and fields["Seccomp"].strip() == "2"
     assert int(fields["CapEff"].strip(), 16) == 0
+    provider_packet = dict(schema_version="1.0", operation="health", body={})
+    provider_result = subprocess.run(["/usr/sbin/runuser", "-u", "mano-broker", "--",
+        "python3", "-c", client, str(PROVIDER_SOCKET), str(provider_uid), "-"],
+        input=json.dumps(provider_packet), capture_output=True, text=True, timeout=10, check=True)
+    provider_reply = json.loads(provider_result.stdout)
+    assert provider_reply["sender_uid"] == provider_uid and provider_reply["creator_uid"] == 0
+    assert provider_reply["payload"] == dict(schema_version="1.0", ok=True, provider="openai",
+        model="ci-health-snapshot", credentials_present=True, execution_enabled=False)
+    for actor in ("mano-agent", "mano-core", "mano-worker", "mano-human"):
+        negative_provider = subprocess.run(["/usr/sbin/runuser", "-u", actor, "--", "python3",
+            "-c", client, str(PROVIDER_SOCKET), str(provider_uid), "-"],
+            input=json.dumps(provider_packet), capture_output=True, text=True, timeout=5,
+            check=True)
+        assert json.loads(negative_provider.stdout) == {"kernel_errno": "EACCES"}
+        secret_denial = subprocess.run(["/usr/sbin/runuser", "-u", actor, "--", "python3", "-c",
+            "from pathlib import Path\n"
+            "try:Path('/etc/mano/credentials/openai').read_bytes()\n"
+            "except PermissionError:pass\nelse:raise AssertionError('credential read')"],
+            capture_output=True, text=True, timeout=5, check=True)
+    provider_timer_client, provider_timer_unit, provider_timer_pids = provider_idle_job()
+    provider_started = time.monotonic()
+    try:
+        subprocess.run(["kill", "-STOP", *(str(pid) for pid in provider_timer_pids)], check=True)
+        provider_deadline = provider_started + 38
+        while time.monotonic() < provider_deadline:
+            result = command("systemctl", "show", provider_timer_unit,
+                             "--property=Result", "--value")
+            exit_status = command("systemctl", "show", provider_timer_unit,
+                                  "--property=ExecMainStatus", "--value")
+            if result == "timeout" and exit_status == "9":
+                break
+            time.sleep(0.1)
+        assert result == "timeout", result
+        provider_deadline_seconds = time.monotonic() - provider_started
+        assert command("systemctl", "show", provider_timer_unit,
+                       "--property=ExecMainStatus", "--value") == "9", exit_status
+    finally:
+        provider_timer_client.terminate()
+        provider_timer_client.wait(timeout=3)
     for name, mode in (("request", 0o660), ("control", 0o600), ("provision", 0o600)):
         info = SOCKETS[name].stat()
         assert info.st_uid == 0 and info.st_mode & 0o777 == mode
@@ -944,6 +1031,8 @@ else:raise AssertionError('task reached native Stop')
             break
         time.sleep(0.05)
     assert len(core_pids) == 2
+    provider_idle, _provider_unit, provider_pids = provider_idle_job()
+    core_pids.extend(provider_pids)
     subprocess.run(["kill", "-STOP", *(str(pid) for pid in core_pids)], check=True)
     subprocess.run(["kill", "-STOP", str(broker_pid), str(launcher_pid)], check=True)
     try:
@@ -980,8 +1069,14 @@ else:raise AssertionError('task reached native Stop')
         subprocess.run(["kill", "-CONT", str(broker_pid), str(launcher_pid)], check=False)
         subprocess.run(["systemctl", "stop", core_unit], check=False, capture_output=True,
                        timeout=3)
+        provider_idle.terminate()
+        provider_idle.wait(timeout=3)
     terminal_report["native_stop_broker_and_launcher_frozen"] = True
     terminal_report["native_stop_frozen_core_and_detached_child_drained"] = True
+    terminal_report["native_stop_frozen_provider_drained"] = True
+    terminal_report["installed_provider_credential_health"] = True
+    terminal_report["provider_kernel_runtime_deadline_verified"] = True
+    terminal_report["provider_frozen_job_deadline_seconds"] = provider_deadline_seconds
     terminal_report["native_stop_capabilities_zero"] = True
     terminal_report["native_stop_task_cgroup_drained"] = True
     terminal_report["native_stop_latch_written"] = True
@@ -1285,6 +1380,8 @@ except BaseException:
             "mano-broker.service",
             "-u",
             "mano-approve.service",
+            "-u",
+            "mano-provider@*.service",
             "--no-pager",
             "-n",
             "80",
@@ -1296,9 +1393,15 @@ except BaseException:
     )
     raise
 finally:
-    subprocess.run(["systemctl", "stop", *UNITS], check=False, capture_output=True)
+    provider_units = [line.split()[0] for line in command("systemctl", "list-units", "--all",
+        "--plain", "--no-legend", "mano-provider@*.service").splitlines() if line.strip()]
+    if provider_units:
+        subprocess.run(["systemctl", "stop", *provider_units], check=False, capture_output=True,
+                       timeout=5)
+    subprocess.run(["systemctl", "stop", *(unit for unit in UNITS if "@" not in unit)],
+                   check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
-    for file in (LIBRARY, NATIVE, STOP_NATIVE, POLICY, PAM, GUARD, *installed):
+    for file in (LIBRARY, NATIVE, STOP_NATIVE, POLICY, PAM, GUARD, PROVIDER_POLICY, *installed):
         file.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     subprocess.run(
@@ -1306,7 +1409,7 @@ finally:
         check=False,
         capture_output=True,
     )
-    for directory in (STATE, CODE, WORK, BASE, STOP_STATE):
+    for directory in (STATE, CODE, WORK, BASE, STOP_STATE, PROVIDER_SECRETS):
         if directory.exists():
             shutil.rmtree(directory)
     STATE.parent.chmod(old_mode)
@@ -1325,5 +1428,11 @@ finally:
         )
     if created_user:
         subprocess.run(["userdel", "mano-broker"], check=False, capture_output=True)
+    if created_provider_user:
+        subprocess.run(["userdel", "mano-provider"], check=False, capture_output=True)
+        subprocess.run(["groupdel", "mano-provider"], check=False, capture_output=True)
+    provider_dir = Path("/run/mano-provider")
+    if provider_dir.exists():
+        provider_dir.rmdir()
     if created_group:
         subprocess.run(["groupdel", "mano-request"], check=False, capture_output=True)
