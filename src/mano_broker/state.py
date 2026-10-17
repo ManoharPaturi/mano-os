@@ -94,6 +94,12 @@ class State:
                 task_id TEXT NOT NULL REFERENCES model_budgets(task_id),
                 money INTEGER NOT NULL,tokens INTEGER NOT NULL,
                 settled INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS core_cycles(
+                prompt_id TEXT PRIMARY KEY REFERENCES human_prompts(id),
+                state TEXT NOT NULL CHECK(state IN ('running','waiting','terminal','unknown')),
+                nonce TEXT NOT NULL,model_json TEXT NOT NULL,generation INTEGER NOT NULL,
+                epoch INTEGER NOT NULL,status TEXT NOT NULL,updated REAL NOT NULL,
+                human_uid INTEGER NOT NULL,CHECK(length(model_json)<=1024));
             CREATE TABLE IF NOT EXISTS provider_jobs(
                 action_id TEXT PRIMARY KEY REFERENCES model_attempts(action_id),
                 request_digest TEXT NOT NULL,binding_json TEXT NOT NULL,state TEXT NOT NULL,
@@ -423,6 +429,8 @@ class State:
             self.db.execute("UPDATE actions SET state='failed' WHERE state='intent'")
             self.db.execute("UPDATE human_prompts SET state='unknown_task_creation' "
                             "WHERE state='creating_task'")
+            self.db.execute("UPDATE core_cycles SET state='unknown',status='controller_uncertain' "
+                            "WHERE state IN ('running','waiting')")
             self.event(None, "emergency-stop", {"epoch": self.meta("epoch")})
 
     def recover(self):
@@ -432,5 +440,9 @@ class State:
             ).rowcount
             prompts = self.db.execute("UPDATE human_prompts SET state='unknown_task_creation' "
                                       "WHERE state='creating_task'").rowcount
-            self.event(None, "recovery", {"unknown_actions": changed, "unknown_prompts": prompts})
+            cycles = self.db.execute("UPDATE core_cycles SET state='unknown',"
+                                     "status='controller_uncertain' "
+                                     "WHERE state IN ('running','waiting')").rowcount
+            self.event(None, "recovery", {"unknown_actions": changed, "unknown_prompts": prompts,
+                                           "unknown_core_cycles": cycles})
         return changed

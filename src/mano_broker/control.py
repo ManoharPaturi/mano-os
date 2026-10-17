@@ -8,6 +8,7 @@ import json
 import time
 
 from .approvals import Approvals
+from .core_cycles import CoreCycles
 from .ipc import public_action, receive
 from .prompts import Prompts
 from .protocol import canonical, identifier, unique_object
@@ -27,6 +28,16 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value["operation"] == "claim_core_cycle":
+        if set(body) != {"human_uid", "model", "max_output_tokens"}:
+            raise Denied("Unexpected core cycle claim")
+        cycle = CoreCycles(state).claim(**body, now=now, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, cycle=cycle)
+    if value["operation"] == "finish_core_cycle":
+        if set(body) != {"human_uid", "prompt_id", "nonce", "status"}:
+            raise Denied("Unexpected core cycle result")
+        CoreCycles(state).finish(**body, now=now, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True)
     if value["operation"] == "inspect_action":
         if set(body) != {"task_id", "action_id"}:
             raise Denied("Unexpected protected action query")

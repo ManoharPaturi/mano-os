@@ -746,6 +746,34 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     assert queue_task["status"] == "awaiting_grant"
     assert queue_task["task_id"] != terminal_task["task_id"]
     assert rpc("control", discovery, actor="root")["prompts"] == []
+    controller_receipt = human(dict(mode="submit_prompt", key="d" * 32,
+        prompt="Controller checkpoint and disclosure approval witness"))
+    assert controller_receipt["ok"]
+    controller_tasks = []
+    for cycle_index in range(2):
+        if cycle_index:
+            time.sleep(5.1)  # Broker-owned minimum interval, not a retry of an uncertain effect.
+        controller_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+            "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.controller",
+            "--model", "synthetic-snapshot", "--max-output-tokens", "100"],
+            capture_output=True, text=True, timeout=35, check=True)
+        controller_value = json.loads(controller_result.stdout)
+        assert controller_value["ok"]
+        cycle = controller_value["cycle"]
+        assert cycle["prompt_id"] == controller_receipt["prompt"]["id"]
+        assert cycle["status"] == "awaiting_model_grant"
+        controller_tasks.append(cycle["task_id"])
+    assert controller_tasks[0] == controller_tasks[1]
+    controller_status = human(dict(mode="prompt_status", id=controller_receipt["prompt"]["id"]))
+    assert controller_status["prompt"]["task_id"] == controller_tasks[0]
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        assert database.execute("SELECT state,status FROM core_cycles WHERE prompt_id=?",
+            (controller_receipt["prompt"]["id"],)).fetchone() == (
+                "waiting", "awaiting_model_grant")
+        assert database.execute("SELECT count(*) FROM grants WHERE task_id=?",
+                                (controller_tasks[0],)).fetchone() == (0,)
+        assert database.execute("SELECT count(*) FROM provider_jobs").fetchone() == (0,)
     duplicate_creation = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
@@ -993,6 +1021,7 @@ finally:client.close()
         sqlite_agent_checkpoint_new_process_recovery=True,
         installed_core_cli_entrypoint=True,
         installed_broker_planner_core_entrypoint=True,
+        installed_durable_controller_cycle=True,
         installed_bounded_lifecycle_controller=True,
         durable_prompt_context_dispatch_reused=True,
         installed_root_task_factory=True,
