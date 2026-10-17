@@ -1,0 +1,12 @@
+[Unit]
+Description=mano bounded recurring controller
+
+[Timer]
+OnBootSec=15
+OnUnitInactiveSec=5
+AccuracySec=1
+Unit=mano-controller.service
+Persistent=false
+
+[Install]
+WantedBy=timers.target

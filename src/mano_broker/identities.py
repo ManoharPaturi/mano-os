@@ -55,6 +55,7 @@ def allocate_identity():
                 "/usr/sbin/useradd",
                 "--user-group",
                 "--no-create-home",
+                "--no-log-init",
                 "--home-dir",
                 "/nonexistent",
                 "--shell",

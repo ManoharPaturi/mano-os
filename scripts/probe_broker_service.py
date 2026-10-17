@@ -31,6 +31,7 @@ POLICY = Path("/etc/mano/human.uid")
 PAM = Path("/etc/pam.d/mano-approve")
 PROVIDER_POLICY = Path("/etc/mano/provider.json")
 PRICING_POLICY = Path("/etc/mano/pricing.json")
+CONTROLLER_POLICY = Path("/etc/mano/controller.json")
 PROVIDER_SECRETS = Path("/etc/mano/credentials")
 PROVIDER_SOCKET = Path("/run/mano-provider/request.sock")
 SOCKETS = {
@@ -53,6 +54,8 @@ UNITS = (
     "mano-core.slice",
     "mano-provider.socket",
     "mano-provider@.service",
+    "mano-controller.service",
+    "mano-controller.timer",
 )
 assert (
     os.geteuid() == 0 and Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
@@ -63,6 +66,7 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
 }
 assert all(
     not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, GUARD, BASE,
+                           CONTROLLER_POLICY,
                            LOCK, STOP_NATIVE, STOP_STATE, *SOCKETS.values())
 )
 assert all(not p.exists() for p in
@@ -314,6 +318,8 @@ try:
     PROVIDER_POLICY.chmod(0o600)
     shutil.copyfile(ROOT / "packaging/config/pricing.json", PRICING_POLICY)
     PRICING_POLICY.chmod(0o600)
+    shutil.copyfile(ROOT / "packaging/config/controller.json", CONTROLLER_POLICY)
+    CONTROLLER_POLICY.chmod(0o600)
     PROVIDER_SECRETS.mkdir(mode=0o700)
     (PROVIDER_SECRETS / "openai").write_text("ci-synthetic-provider-key")
     (PROVIDER_SECRETS / "openai").chmod(0o600)
@@ -329,6 +335,11 @@ try:
         dest = Path("/etc/systemd/system") / unit
         shutil.copyfile(ROOT / "packaging/systemd" / unit, dest)
         installed.append(dest)
+    controller_tmpfiles = Path("/etc/tmpfiles.d/mano-controller.conf")
+    assert not controller_tmpfiles.exists()
+    shutil.copyfile(ROOT / "packaging/tmpfiles/mano-controller.conf", controller_tmpfiles)
+    installed.append(controller_tmpfiles)
+    subprocess.run(["systemd-tmpfiles", "--create", str(controller_tmpfiles)], check=True)
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     subprocess.run(
         [
@@ -700,7 +711,9 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     factory_result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
-        capture_output=True, text=True, timeout=25, check=True)
+        capture_output=True, text=True, timeout=25, check=False)
+    assert factory_result.returncode == 0, (factory_result.stdout[-1024:],
+                                           factory_result.stderr[-4096:])
     managed = json.loads(factory_result.stdout)
     assert managed["ok"]
     managed = managed["task"]
@@ -774,6 +787,53 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
         assert database.execute("SELECT count(*) FROM grants WHERE task_id=?",
                                 (controller_tasks[0],)).fetchone() == (0,)
         assert database.execute("SELECT count(*) FROM provider_jobs").fetchone() == (0,)
+    subprocess.run(["systemctl", "start", "mano-controller.service"],
+                   capture_output=True, text=True, timeout=45, check=True)
+    assert command("systemctl", "show", "mano-controller.service",
+                   "--property=ExecMainStatus", "--value").strip() == "0"
+    assert '"state":"disabled"' in command("journalctl", "-u", "mano-controller.service",
+                                               "-o", "cat", "--no-pager")
+    CONTROLLER_POLICY.write_text(json.dumps(dict(schema_version="1.0", enabled=True,
+        model="synthetic-snapshot", max_output_tokens=100)))
+    CONTROLLER_POLICY.chmod(0o600)
+    service_receipt = human(dict(mode="submit_prompt", key="e" * 32,
+        prompt="Recurring controller service approval witness"))
+    assert service_receipt["ok"]
+    subprocess.run(["systemctl", "start", "mano-controller.service"],
+                   capture_output=True, text=True, timeout=45, check=True)
+    service_prompt = service_receipt["prompt"]["id"]
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        original_cycle = database.execute("SELECT nonce,state,status FROM core_cycles "
+            "WHERE prompt_id=?", (service_prompt,)).fetchone()
+        original_task = database.execute("SELECT task_id FROM human_prompts WHERE id=?",
+                                         (service_prompt,)).fetchone()[0]
+    assert original_cycle[1:] == ("waiting", "awaiting_model_grant")
+    subprocess.run(["systemctl", "start", "mano-controller.timer"], check=True)
+    deadline = time.monotonic() + 35
+    repeated_cycle = original_cycle
+    while time.monotonic() < deadline:
+        with contextlib.closing(sqlite3.connect(
+                f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+            repeated_cycle = database.execute("SELECT nonce,state,status FROM core_cycles "
+                "WHERE prompt_id=?", (service_prompt,)).fetchone()
+        if repeated_cycle[0] != original_cycle[0] and repeated_cycle[1:] == (
+                "waiting", "awaiting_model_grant"):
+            break
+        time.sleep(0.25)
+    subprocess.run(["systemctl", "stop", "mano-controller.timer", "mano-controller.service"],
+                   capture_output=True, text=True, timeout=5, check=True)
+    assert repeated_cycle[0] != original_cycle[0]
+    assert repeated_cycle[1:] == ("waiting", "awaiting_model_grant")
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        assert database.execute("SELECT task_id FROM human_prompts WHERE id=?",
+                                (service_prompt,)).fetchone() == (original_task,)
+        assert database.execute("SELECT count(*) FROM grants WHERE task_id=?",
+                                (original_task,)).fetchone() == (0,)
+        assert database.execute("SELECT count(*) FROM provider_jobs").fetchone() == (0,)
+    shutil.copyfile(ROOT / "packaging/config/controller.json", CONTROLLER_POLICY)
+    CONTROLLER_POLICY.chmod(0o600)
     duplicate_creation = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
         "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.task_factory"],
         input=json.dumps(dict(prompt_id=human_receipt["prompt"]["id"])),
@@ -1022,6 +1082,9 @@ finally:client.close()
         installed_core_cli_entrypoint=True,
         installed_broker_planner_core_entrypoint=True,
         installed_durable_controller_cycle=True,
+        installed_recurring_controller_service=True,
+        controller_root_policy_and_network_kernel_denials=True,
+        controller_provider_key_source_hidden=True,
         installed_bounded_lifecycle_controller=True,
         durable_prompt_context_dispatch_reused=True,
         installed_root_task_factory=True,
@@ -1489,6 +1552,8 @@ except BaseException:
             "mano-approve.service",
             "-u",
             "mano-provider@*.service",
+            "-u",
+            "mano-controller.service",
             "--no-pager",
             "-n",
             "80",
@@ -1509,7 +1574,7 @@ finally:
                    check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
     for file in (LIBRARY, NATIVE, STOP_NATIVE, POLICY, PAM, GUARD, PROVIDER_POLICY,
-                 PRICING_POLICY, *installed):
+                 PRICING_POLICY, CONTROLLER_POLICY, *installed):
         file.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     subprocess.run(
