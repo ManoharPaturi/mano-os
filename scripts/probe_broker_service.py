@@ -163,14 +163,13 @@ def provider_idle_job():
             except FileNotFoundError:
                 continue
             if pids:
-                assert len(pids) == 1
                 # Type=exec starts RuntimeMaxSec only after successful exec.
                 # A cgroup PID can still be systemd's pre-exec startup child.
                 status = dict(line.split("=", 1) for line in command("systemctl", "show",
                     child.name, "--property=ActiveState", "--property=SubState",
                     "--property=MainPID").splitlines() if "=" in line)
                 if (status.get("ActiveState") == "active" and status.get("SubState") == "running"
-                        and status.get("MainPID") == str(pids[0])):
+                        and len(pids) == 1 and status.get("MainPID") == str(pids[0])):
                     return idle, child.name, pids
         time.sleep(0.05)
     idle.terminate()
