@@ -99,3 +99,12 @@ class CoreCycleTests(unittest.TestCase):
             with self.assertRaises(Denied):
                 dispatch(self.state, packet, peer=Peer(42, 1004, 1004), now=10, boot_id='boot')
         self.assertEqual(self.state.db.execute('SELECT count(*) FROM core_cycles').fetchone()[0], 0)
+
+    def test_broker_recovery_invalidates_waiting_resource_authority(self):
+        claim = self.claim()
+        self.attach()
+        self.finish(claim)
+        self.state.recover()
+        self.assertIsNone(self.claim(now=100))
+        self.assertEqual(self.state.db.execute('SELECT state FROM core_cycles').fetchone()[0],
+                         'unknown')

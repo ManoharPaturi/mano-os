@@ -62,3 +62,28 @@ class ControllerTests(unittest.TestCase):
             self.run_cycle()
         self.mocks['control_request'].assert_not_called()
         self.mocks['create_from_prompt'].assert_not_called()
+
+    def test_resume_reuses_original_broker_context_without_task_allocation(self):
+        self.claim['prompt_state'] = 'task_created'
+        self.mocks['control_request'].side_effect = lambda operation, body: (
+            {'cycle': self.claim} if operation == 'claim_core_cycle'
+            else {'managed': self.managed} if operation == 'prompt_context' else {'ok': True})
+        self.run_cycle()
+        self.mocks['create_from_prompt'].assert_not_called()
+        self.mocks['run_broker_step'].assert_called_once_with(self.managed,
+            model='synthetic', max_output_tokens=100)
+
+    def test_busy_or_empty_claim_does_not_allocate_or_launch(self):
+        self.mocks['control_request'].return_value = {'cycle': None}
+        self.mocks['control_request'].side_effect = None
+        self.assertIsNone(self.run_cycle())
+        self.mocks['create_from_prompt'].assert_not_called()
+        self.mocks['run_broker_step'].assert_not_called()
+
+    def test_changed_original_prompt_cannot_launch_core(self):
+        self.managed['context']['operation_key'] = 'd' * 32
+        with self.assertRaises(ValueError):
+            self.run_cycle()
+        self.mocks['run_broker_step'].assert_not_called()
+        self.assertEqual(self.mocks['control_request'].call_args.args[1]['status'],
+                         'controller_uncertain')
