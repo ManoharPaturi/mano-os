@@ -7,7 +7,7 @@ from mano_protocol.actions import MAX_PACKET, canonical
 from mano_protocol.provider_handoff import receive_response, validate_binding
 
 from .approvals import clock
-from .model_pricing import begin_priced, finish_priced
+from .model_pricing import PricePolicy, begin_priced, finish_priced
 from .models import ModelStore
 from .state import Denied
 
@@ -43,7 +43,7 @@ class ProviderJobs:
                              dict(request_sha256=request.digest))
             return args
 
-    def claim(self, action_id, *, now, boot_id):
+    def claim(self, action_id, *, now, wall_time, boot_id):
         clock(now)
         with self.state.transaction():
             action, request, job, binding = self.original(action_id, boot_id)
@@ -53,6 +53,12 @@ class ProviderJobs:
                     or self.state.meta('latched') or grant['revoked']
                     or grant['epoch'] != self.state.meta('epoch') or now >= grant['expires']):
                 raise Denied('Provider job cannot be dispatched or repeated')
+            price = self.state.db.execute('SELECT policy_json FROM model_prices WHERE action_id=?',
+                                          (action_id,)).fetchone()
+            if price is None:
+                raise Denied('Original provider price policy missing')
+            policy = PricePolicy(**json.loads(price['policy_json']))
+            policy.quote(json.loads(request.args_json), wall_time=wall_time)
             packet = canonical(dict(schema_version='1.0', operation='generate',
                 body=dict(binding=binding, request=request.body()))).encode()
             if len(packet) > MAX_PACKET:

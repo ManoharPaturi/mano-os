@@ -27,7 +27,7 @@ class ProviderJobTests(unittest.TestCase):
                                  boot_id='boot')
 
     def claim(self):
-        return json.loads(self.jobs.claim(self.action, now=12, boot_id='boot'))
+        return json.loads(self.jobs.claim(self.action, now=12, wall_time=100, boot_id='boot'))
 
     def test_once_only_claim_binds_original_request_and_settles_original_quote(self):
         self.assertEqual(self.prepare(), self.proposal['args'])
@@ -77,8 +77,28 @@ class ProviderJobTests(unittest.TestCase):
     def test_stop_or_expired_grant_before_claim_prevents_dispatch(self):
         self.prepare()
         with self.assertRaises(Denied):
-            self.jobs.claim(self.action, now=1000, boot_id='boot')
+            self.jobs.claim(self.action, now=1000, wall_time=100, boot_id='boot')
         self.state.emergency_stop()
+        with self.assertRaises(Denied):
+            self.claim()
+        self.assertEqual(self.state.db.execute(
+            'SELECT state FROM provider_jobs').fetchone()[0], 'prepared')
+
+    def test_price_expiry_between_preparation_and_dispatch_denies_claim(self):
+        self.prepare()
+        with self.assertRaises(Denied):
+            self.jobs.claim(self.action, now=12, wall_time=1000, boot_id='boot')
+        self.assertEqual(self.state.db.execute(
+            'SELECT state FROM provider_jobs').fetchone()[0], 'prepared')
+        self.assertEqual(tuple(self.state.db.execute(
+            'SELECT money,tokens,settled FROM model_reservations').fetchone()), (2, 1100, 0))
+
+    def test_saved_price_mismatch_cannot_be_replaced_by_another_model_at_dispatch(self):
+        self.prepare()
+        saved = json.loads(self.state.db.execute(
+            'SELECT policy_json FROM model_prices').fetchone()[0])
+        saved['model'] = 'other-model'
+        self.state.db.execute('UPDATE model_prices SET policy_json=?', (json.dumps(saved),))
         with self.assertRaises(Denied):
             self.claim()
         self.assertEqual(self.state.db.execute(
