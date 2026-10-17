@@ -2,10 +2,13 @@
 
 import json
 import pwd
+import socket
 
 from mano_protocol.actions import MAX_PACKET, ActionRequest, Capability, canonical
 from mano_protocol.provider import decode
-from mano_protocol.provider_handoff import validate_binding
+from mano_protocol.provider_handoff import send_response, validate_binding
+
+from .https import generate
 
 
 def authorize(packet, peer, *, config, boot_id):
@@ -34,3 +37,12 @@ def authorize(packet, peer, *, config, boot_id):
             or not 16 <= ceiling <= 8192 or args['max_output_tokens'] > ceiling):
         raise ValueError('Provider job exceeds fixed model policy')
     return dict(binding), args
+
+
+def execute(connection, packet, peer, *, config, credential, boot_id):
+    """One authorized fixed-provider invocation, then one sealed handoff; no retry."""
+    if connection.family != socket.AF_UNIX or connection.type != socket.SOCK_SEQPACKET:
+        raise ValueError('Private provider response connection required before dispatch')
+    binding, args = authorize(packet, peer, config=config, boot_id=boot_id)
+    response = generate(args, credential)
+    send_response(connection, response, binding=binding)

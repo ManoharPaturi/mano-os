@@ -1,4 +1,7 @@
 import json
+import os
+import socket
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -116,3 +119,35 @@ class ProviderJobTests(unittest.TestCase):
             self.claim()
         self.assertEqual(self.state.db.execute(
             'SELECT state FROM provider_jobs').fetchone()[0], 'prepared')
+
+    @unittest.skipUnless(sys.platform == 'linux' and os.getuid() != 0,
+                         'Linux non-root sealed handoff required')
+    def test_provider_handler_to_sealed_receipt_and_original_priced_settlement(self):
+        from types import SimpleNamespace
+
+        from mano_protocol.actions import canonical
+        from mano_protocol.transport import Peer
+        from mano_provider.job_request import execute
+
+        self.prepare()
+        envelope = self.claim()
+        sender, receiver = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        with sender, receiver:
+            receiver.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+            receiver.settimeout(1)
+            sender.settimeout(1)
+            with patch('mano_provider.job_request.pwd.getpwnam',
+                       return_value=SimpleNamespace(pw_uid=999, pw_gid=999)), \
+                 patch('mano_provider.job_request.generate', return_value=self.packet) as call:
+                execute(sender, canonical(envelope).encode(), Peer(42, 999, 999),
+                    config=dict(provider='openai', model='snapshot', enabled=True,
+                                max_output_tokens=100),
+                    credential='ci-synthetic-key', boot_id='boot')
+                call.assert_called_once_with(self.proposal['args'], 'ci-synthetic-key')
+            result = self.jobs.receive(receiver, self.action, expected_uid=os.getuid(),
+                                       expected_gid=os.getgid(), boot_id='boot')
+        self.assertEqual(result['usage']['total_tokens'], 5)
+        self.assertEqual(self.state.db.execute(
+            'SELECT state FROM provider_jobs').fetchone()[0], 'finished')
+        self.assertEqual(tuple(self.state.db.execute(
+            'SELECT money,tokens,settled FROM model_reservations').fetchone()), (1, 5, 1))

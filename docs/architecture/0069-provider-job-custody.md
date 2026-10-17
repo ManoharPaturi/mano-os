@@ -28,3 +28,11 @@ original digest/task and current boot before returning only disclosure arguments
 It performs no credential read or network call. A combined test passes the real
 broker claim envelope through this provider validator. The installed main entry
 remains health-only; this validator alone does not authorize activation.
+
+job_request.execute joins the validator to exactly one fixed HTTPS helper call
+and one sealed response. It validates the private connection before the call and
+never retries failures. A Linux component test joins actual job preparation,
+claim envelope, provider validation, sealed socket transfer, original priced
+result custody and settlement. Only the HTTPS response is mocked. This is not
+an installed service or live API proof: main remains health-only, with the current
+AF_UNIX/private-network profile, until provisioning/egress/activation gates pass.
