@@ -746,7 +746,7 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     assert queue_task["status"] == "awaiting_grant"
     assert queue_task["task_id"] != terminal_task["task_id"]
     assert rpc("control", discovery, actor="root")["prompts"] == []
-    controller_receipt = human(dict(mode="prompt", request_key="d" * 32,
+    controller_receipt = human(dict(mode="submit_prompt", key="d" * 32,
         prompt="Controller checkpoint and disclosure approval witness"))
     assert controller_receipt["ok"]
     controller_tasks = []
