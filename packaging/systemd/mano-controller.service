@@ -8,7 +8,7 @@ Type=oneshot
 User=root
 Group=root
 Slice=mano-core.slice
-ExecStart=/usr/bin/python3 -m mano_broker.controller_service
+ExecStart=/usr/bin/setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all /usr/bin/python3 -m mano_broker.controller_service
 Environment=PYTHONPATH=/usr/lib/mano-os
 Environment=PYTHONDONTWRITEBYTECODE=1
 LoadCredential=config:/etc/mano/controller.json

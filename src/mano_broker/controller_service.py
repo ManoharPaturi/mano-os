@@ -45,7 +45,9 @@ def verify_current():
             or any(int(fields[key].strip(), 16) != ROOT_CAPABILITIES
                    for key in ('CapEff', 'CapPrm', 'CapBnd'))
             or any(int(fields[key].strip(), 16) for key in ('CapAmb', 'CapInh'))):
-        raise ControllerProfileDenied('Root controller restrictions absent')
+        observed = {key: fields[key].strip() for key in (
+            'NoNewPrivs', 'Seccomp', 'CapEff', 'CapPrm', 'CapBnd', 'CapAmb', 'CapInh')}
+        raise ControllerProfileDenied('Root controller restrictions absent: ' + canonical(observed))
     group = next(line.split('::', 1)[1]
                  for line in Path('/proc/self/cgroup').read_text().splitlines()
                  if line.startswith('0::'))
