@@ -21,13 +21,15 @@ class ProviderClientTests(unittest.TestCase):
         self.socket = MagicMock()
         self.socket.return_value.__enter__.return_value = self.connection
 
-    def call(self):
+    def call(self, price_error=None):
         def account(name):
             return SimpleNamespace(pw_uid=999 if name == 'mano-broker' else 998,
                                    pw_gid=999 if name == 'mano-broker' else 998)
         with (
             patch('mano_broker.provider_client.pwd.getpwnam', side_effect=account),
             patch('mano_broker.provider_client.os.geteuid', return_value=999),
+            patch('mano_broker.provider_client.load_policy', return_value=object(),
+                  side_effect=price_error),
             patch('mano_broker.provider_client.socket.socket', self.socket),
             patch('mano_broker.provider_client.socket.SO_PASSCRED',
                   getattr(socket, 'SO_PASSCRED', 16), create=True),
@@ -36,7 +38,7 @@ class ProviderClientTests(unittest.TestCase):
             patch('mano_broker.provider_client.time.monotonic', return_value=12),
             patch('mano_broker.provider_client.time.time', return_value=100),
         ):
-            return run(self.jobs, 'a' * 32, policy=object(), boot_id='boot')
+            return run(self.jobs, 'a' * 32, boot_id='boot')
 
     def test_fixed_root_listener_one_claim_send_and_authenticated_receipt(self):
         self.assertEqual(self.call(), {'saved': 'result'})
@@ -76,3 +78,15 @@ class ProviderClientTests(unittest.TestCase):
                 self.jobs.claim.assert_called_once()
                 self.connection.send.assert_called_once()
                 self.jobs.uncertain.assert_called_once_with('a' * 32, boot_id='boot')
+
+    def test_disabled_root_policy_never_reserves_or_sends(self):
+        with self.assertRaises(Denied):
+            self.call(price_error=Denied('Root model pricing policy disabled'))
+        self.jobs.prepare.assert_not_called()
+        self.connection.send.assert_not_called()
+        self.jobs.uncertain.assert_not_called()
+
+    def test_caller_cannot_supply_its_own_price_policy(self):
+        with self.assertRaises(TypeError):
+            run(self.jobs, 'a' * 32, policy=object(), boot_id='boot')
+        self.jobs.prepare.assert_not_called()

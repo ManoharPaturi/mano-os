@@ -13,6 +13,7 @@ Group=mano-broker
 ExecStart=/usr/bin/python3 -m mano_broker.service
 Environment=PYTHONPATH=/usr/lib/mano-os
 Environment=PYTHONDONTWRITEBYTECODE=1
+LoadCredential=pricing:/etc/mano/pricing.json
 StateDirectory=mano-broker/runtime
 StateDirectoryMode=0700
 UMask=0077

@@ -7,12 +7,13 @@ import time
 
 from mano_protocol.transport import CREDENTIALS, Peer
 
+from .price_config import load_policy
 from .state import Denied
 
 PATH = '/run/mano-provider/request.sock'
 
 
-def run(jobs, action_id, *, policy, boot_id):
+def run(jobs, action_id, *, boot_id):
     broker = pwd.getpwnam('mano-broker')
     provider = pwd.getpwnam('mano-provider')
     if (broker.pw_uid == 0 or os.geteuid() != broker.pw_uid or provider.pw_uid == 0
@@ -30,6 +31,7 @@ def run(jobs, action_id, *, policy, boot_id):
         if creator.uid != 0 or creator.gid != 0 or creator.pid <= 0:
             raise Denied('Provider listener is not root activated')
         try:
+            policy = load_policy(wall_time=int(time.time()))
             jobs.prepare(action_id, policy=policy, now=time.monotonic(),
                          wall_time=int(time.time()), boot_id=boot_id)
             prepared = True
