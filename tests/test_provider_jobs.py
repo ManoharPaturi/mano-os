@@ -193,3 +193,31 @@ class ProviderJobTests(unittest.TestCase):
         self.state = State(self.directory)
         grant = self.state.db.execute('SELECT revoked,native_generation FROM grants').fetchone()
         self.assertEqual(tuple(grant), (1, -1))
+
+    @unittest.skipUnless(sys.platform == 'linux' and os.geteuid() > 0,
+                         'Linux non-root sealed provider worker transport required')
+    def test_nonblocking_worker_receives_real_sealed_result_and_settles_original(self):
+        from mano_broker.provider_worker import Pending, ProviderWorker
+        from mano_protocol.provider_handoff import send_response
+
+        self.prepare()
+        binding = self.claim()['body']['binding']
+        worker = ProviderWorker(self.jobs, boot_id='boot')
+        receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        with receiver, sender:
+            receiver.setblocking(False)
+            receiver.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+            worker.pending[self.action] = Pending(receiver, os.geteuid(), os.getegid(), 52)
+            with (
+                patch('mano_broker.provider_worker.snapshot', return_value=Snapshot(0, False)),
+                patch('mano_broker.provider_worker.time.monotonic', return_value=12),
+            ):
+                self.assertIsNone(worker.poll(self.action))
+                send_response(sender, self.packet, binding=binding)
+                result = worker.poll(self.action)
+        self.assertEqual(result['usage']['total_tokens'], 5)
+        self.assertFalse(worker.pending)
+        self.assertEqual(tuple(self.state.db.execute(
+            'SELECT money,tokens,settled FROM model_reservations').fetchone()), (1, 5, 1))
+        with self.assertRaises(Denied):
+            worker.poll(self.action)

@@ -124,3 +124,12 @@ class ProviderWorkerTests(unittest.TestCase):
         self.connection.send.assert_called_once()
         self.connection.close.assert_called_once()
         self.assertFalse(self.worker.pending)
+
+    def test_close_releases_all_sockets_even_if_journal_settlement_fails(self):
+        self.worker.launch('one')
+        self.worker.launch('two')
+        self.jobs.original.side_effect = OSError('journal unavailable')
+        with self.assertRaises(OSError):
+            self.worker.close()
+        self.assertFalse(self.worker.pending)
+        self.assertEqual(self.connection.close.call_count, 2)

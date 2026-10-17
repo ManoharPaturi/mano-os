@@ -108,5 +108,12 @@ class ProviderWorker:
 
     def close(self):
         self.closed = True
+        first_error = None
         for action_id in list(self.pending):
-            self.cancel(action_id)
+            try:
+                self.cancel(action_id)
+            except BaseException as error:
+                if first_error is None:
+                    first_error = error
+        if first_error is not None:
+            raise first_error
