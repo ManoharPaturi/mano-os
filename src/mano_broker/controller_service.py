@@ -15,7 +15,7 @@ from .controller import run_cycle
 from .protocol import canonical
 
 DIRECTORY = Path('/run/credentials/mano-controller.service')
-ROOT_CAPABILITIES = (1 << 0) | (1 << 1) | (1 << 3) | (1 << 6)
+ROOT_CAPABILITIES = (1 << 0) | (1 << 1) | (1 << 3) | (1 << 4) | (1 << 6)
 
 
 def parse(packet):
@@ -108,7 +108,15 @@ def main():
         return 0
     except (OSError, ValueError, KeyError, TypeError, StopIteration,
             subprocess.SubprocessError) as error:
-        reason = str(error) if isinstance(error, ControllerProfileDenied) else type(error).__name__
+        fixed_codes = {
+            'Workspace policy mismatch': 'workspace-policy',
+            'Untrusted workspace parent': 'workspace-parent',
+            'Task account isolation mismatch; account retained': 'account-policy',
+            'Core cycle failed; no implicit retry': 'core-step',
+            'Core returned different task context': 'core-context',
+        }
+        reason = (str(error) if isinstance(error, ControllerProfileDenied)
+                  else fixed_codes.get(str(error), type(error).__name__))
         print(canonical(dict(event='controller-service-denied', reason=reason)), file=sys.stderr)
         print(canonical(dict(schema_version='1.0', ok=False, error='uncertain')))
         return 1
