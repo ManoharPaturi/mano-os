@@ -36,3 +36,18 @@ claim envelope, provider validation, sealed socket transfer, original priced
 result custody and settlement. Only the HTTPS response is mocked. This is not
 an installed service or live API proof: main remains health-only, with the current
 AF_UNIX/private-network profile, until provisioning/egress/activation gates pass.
+
+provider_client.run is the trusted broker's fixed socket transaction. It requires
+separate broker/provider identities and root listener credentials before creating
+any reservation. It prepares, claims and sends one bounded packet, then consumes
+the sealed receipt under the original provider UID/GID. Send or receipt failure
+marks an unresolved original job unknown without refund or retry. The connection
+has a 40-second receive bound in addition to the provider's independent 35-second
+unit deadline. No caller-selected path, endpoint or provider UID enters the wire.
+This helper is not registered for public model.plan dispatch yet; the installed
+service and generation route remain disabled pending the activation gates.
+Before installed generation activation, carry the authoritative grant and price
+expiry to the service and recheck them immediately before the actual provider
+call. A claim-time check alone cannot cover a delayed service startup or queued
+packet. The enabled service path must also enforce its remaining operation bound;
+the current helper composition is not permission to bypass these deadline gates.
