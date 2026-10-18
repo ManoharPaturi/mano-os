@@ -3,15 +3,19 @@
 
 import base64
 import contextlib
+import errno
+import fcntl
 import hashlib
 import json
 import os
 import pwd
 import secrets
+import select
 import shutil
 import sqlite3
 import subprocess
 import sys
+import termios
 import time
 from pathlib import Path
 
@@ -183,6 +187,75 @@ def provider_idle_job():
     idle.terminate()
     idle.wait(timeout=3)
     raise AssertionError("Provider job not active")
+
+
+
+def native_key_setup(value=None):
+    master, slave = os.openpty()
+    child = os.fork()
+    if child == 0:
+        try:
+            os.close(master)
+            os.setsid()
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+            for target in (0, 1, 2):
+                os.dup2(slave, target)
+            if slave > 2:
+                os.close(slave)
+            os.execve('/usr/bin/python3', ['python3', '-m', 'mano_broker.provider_setup'], {
+                'PYTHONPATH': '/usr/lib/mano-os', 'PYTHONDONTWRITEBYTECODE': '1',
+                'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'})
+        except BaseException:
+            os._exit(125)  # Never run the Root test parent's cleanup from its child.
+    os.close(slave)
+    transcript = bytearray()
+    phase = 0
+    status = None
+    closed = False
+    deadline = time.monotonic() + 15
+    try:
+        while time.monotonic() < deadline:
+            readable, _, _ = select.select([] if closed else [master], [], [], 0.1)
+            if readable:
+                try:
+                    chunk = os.read(master, 4096)
+                except OSError as error:
+                    if error.errno != errno.EIO:
+                        raise
+                    chunk = b''
+                if not chunk:
+                    closed = True
+                transcript.extend(chunk)
+                assert len(transcript) <= 8192
+                if value is not None and phase == 0 and b'Provider API key:' in transcript:
+                    os.write(master, value.encode('ascii') + b'\n')
+                    phase = 1
+                if value is not None and phase == 1 and b'Confirm API key:' in transcript:
+                    os.write(master, value.encode('ascii') + b'\n')
+                    phase = 2
+            if status is None:
+                exited, result = os.waitpid(child, os.WNOHANG)
+                if exited:
+                    status = result
+            if status is not None and closed:
+                break
+        if status is None:
+            exited, result = os.waitpid(child, os.WNOHANG)
+            if exited:
+                status = result
+            else:
+                os.kill(child, 9)
+                _, status = os.waitpid(child, 0)
+                raise AssertionError('Native key setup exceeded bounded test deadline')
+    finally:
+        os.close(master)
+        if status is None:
+            try:
+                os.kill(child, 9)
+            except ProcessLookupError:
+                pass
+            os.waitpid(child, 0)
+    return os.waitstatus_to_exitcode(status), bytes(transcript)
 
 
 native_client = """import json,sys
@@ -1439,6 +1512,44 @@ s.close()
         stop_client, "S", "stopped", str(stop_pid)], check=True, capture_output=True,
         text=True, timeout=5)
     assert (STOP_STATE / "state").read_text() == "v1:7:latched\n"
+    key_path = PROVIDER_SECRETS / "openai"
+    preserved_key = PROVIDER_SECRETS / "openai-ci-preserved"
+    assert not preserved_key.exists()
+    original_key_bytes = key_path.read_bytes()  # Synthetic fixture only, never an operator key.
+    native_code, native_output = native_key_setup()
+    assert native_code == 1 and b'Provider API key:' not in native_output
+    assert key_path.read_bytes() == original_key_bytes
+    key_path.rename(preserved_key)
+    fake_setup_key = "ci-native-terminal-provisioned-key"
+    config_before_setup = {path: path.read_bytes() for path in (
+        PROVIDER_POLICY, PRICING_POLICY, CONTROLLER_POLICY, EGRESS_POLICY)}
+    try:
+        rejected_pipe = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os", "python3", "-m",
+            "mano_broker.provider_setup"], input="not-a-terminal", capture_output=True,
+            text=True, timeout=5, check=False)
+        assert rejected_pipe.returncode == 1 and not key_path.exists()
+        native_code, native_output = native_key_setup(fake_setup_key)
+        assert native_code == 0 and b'"credential_installed":true' in native_output
+        # No secret echo, even in fixture output.
+        assert fake_setup_key.encode() not in native_output
+        info = key_path.lstat()
+        assert info.st_uid == 0 and info.st_gid == 0 and info.st_nlink == 1
+        assert info.st_mode & 0o777 == 0o600
+        assert key_path.read_bytes() == fake_setup_key.encode()
+        assert set(path.name for path in PROVIDER_SECRETS.iterdir()) == {
+            "openai", "openai-ci-preserved"}
+        native_code, native_output = native_key_setup()
+        assert native_code == 1 and b'Provider API key:' not in native_output
+        assert key_path.read_bytes() == fake_setup_key.encode()
+        assert all(path.read_bytes() == value for path, value in config_before_setup.items())
+        assert (STOP_STATE / "state").read_text() == "v1:7:latched\n"
+    finally:
+        if key_path.exists():
+            assert key_path.read_bytes() == fake_setup_key.encode()
+            key_path.unlink()  # Only the known synthetic key created by this test.
+        preserved_key.rename(key_path)
+    terminal_report["native_root_tty_key_provisioning_no_echo"] = True
+    terminal_report["key_setup_no_overwrite_no_activation_no_rearm"] = True
     expired_view = human(dict(mode="rearm_view"))["view"]
     time.sleep(61)  # Real monotonic expiry; no configurable shortcut or clock spoof.
     assert human(dict(mode="rearm_confirm", view=expired_view, password=password)) == {"ok": False}
