@@ -23,8 +23,8 @@ def profile_packet(prompt_id, request_key, args):
             + args['max_timeout_seconds'].to_bytes(2, 'big'))
 
 
-def request_profile(prompt_id, request_key, args):
-    result = rpc(profile_packet(prompt_id, request_key, args))
+def parse_profile_ack(result, prompt_id):
+    identifier(prompt_id)
     if (not isinstance(result, dict) or set(result) != {
             'schema_version', 'ok', 'prompt_id', 'task_id', 'approval'}
             or result['schema_version'] != '1.0' or result['ok'] is not True
@@ -42,8 +42,8 @@ def request_profile(prompt_id, request_key, args):
     return result
 
 
-def read_profile_status(prompt_id):
-    result = rpc(b'\x01\x09' + identifier(prompt_id).encode('ascii'))
+def parse_profile_status(result, prompt_id):
+    identifier(prompt_id)
     if (not isinstance(result, dict) or set(result) != {
             'schema_version', 'ok', 'prompt_id', 'task_id', 'profile'}
             or result['schema_version'] != '1.0' or result['ok'] is not True
@@ -68,6 +68,14 @@ def read_profile_status(prompt_id):
                                             or value['seconds_remaining']))):
         raise ValueError('Inconsistent permission status')
     return result
+
+
+def request_profile(prompt_id, request_key, args):
+    return parse_profile_ack(rpc(profile_packet(prompt_id, request_key, args)), prompt_id)
+
+
+def read_profile_status(prompt_id):
+    return parse_profile_status(rpc(b'\x01\x09' + identifier(prompt_id).encode('ascii')), prompt_id)
 
 
 def main():

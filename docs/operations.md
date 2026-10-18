@@ -61,3 +61,15 @@ when a count is exhausted; use independent Stop to revoke them. Full Access rema
 prototype, with no additional host data, network, credentials or privilege. These
 commands require the installed Linux human TTY; they are not runnable on this Mac.
 See architecture/0083-trusted-mode-selection.md for protocol and acceptance limits.
+
+## Prompt permission management
+
+Once Check request status shows a provisioned task, open Permissions to inspect
+availability for new automatic grants and propose a bounded mode. Selecting a mode
+or requesting review does not activate it. The pending approval ID and fixed
+terminal-review command are shown; review the exact broker-owned terms and complete
+PAM only in your trusted human terminal. The window never asks for your password.
+Refresh permissions after terminal approval. An old approval does not prove current
+authority. Keep the same limits when explicitly retrying an uncertain request.
+Closing the window leaves any server-side pending challenge to expire; it does not
+approve or revoke it. Independent Stop revokes authority and running work.

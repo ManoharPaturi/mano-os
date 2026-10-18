@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -103,6 +104,51 @@ def main():
     assert any('Workspace ready; journal status below' in str(node.name)
                for node in tree)
     assert len(receipt.read_text().splitlines()) == prior + 1  # Status never resubmits.
+    def wait_file(name):
+        path = ROOT / name
+        deadline = time.monotonic() + 6
+        while not path.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        return json.loads(path.read_text())
+
+    def accessible(name, roles):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            matches = [node for node in nodes(pyatspi.Registry.getDesktop(0))
+                       if node.name == name and node.getRoleName() in roles]
+            if len(matches) == 1 and matches[0].getState().contains(pyatspi.STATE_SENSITIVE):
+                return matches[0]
+            time.sleep(0.05)
+        raise AssertionError('Missing sensitive accessible control: ' + name)
+
+    def click(name, roles=frozenset({'button', 'push button'})):
+        action = accessible(name, roles).queryAction()
+        assert action.nActions and action.doAction(0)
+
+    click('Permissions')
+    assert wait_file('permissions-ready.json')['ready'] is True
+    duration = accessible('Duration (seconds)', {'spin button', 'spinbutton'}).queryValue()
+    duration.currentValue = 900
+    click('Full Access', {'radio button', 'check box'})
+    deadline = time.monotonic() + 3
+    while duration.maximumValue != 300 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert duration.maximumValue == 300 and duration.currentValue <= 300
+    click('Auto', {'radio button', 'check box'})
+    duration.currentValue = 60
+    click('Request profile approval')
+    permissions = wait_file('permissions-complete.json')
+    assert permissions['read_ticks'] >= 2 and permissions['request_ticks'] >= 2
+    assert permissions['automatic_activated'] is False
+    assert 'Pending terminal review' in permissions['review'] and 'e'*32 in permissions['review']
+    tree = list(nodes(pyatspi.Registry.getDesktop(0)))
+    assert any('Pending terminal review' in str(node.name) for node in tree)
+    assert not any(node.getRoleName() in {'password text', 'password entry'} for node in tree)
+    subprocess.run(['env', 'WAYLAND_DISPLAY=wayland-1', 'grim', str(ROOT / 'permissions.png')],
+                   check=True, timeout=10, capture_output=True)
+    click('Close permissions')
+    assert wait_file('permissions-closed.json')['closed'] is True
+    assert len(receipt.read_text().splitlines()) == prior + 1
     result = {
         "gtk_version": ".".join(
             str(value)
@@ -115,6 +161,7 @@ def main():
         "model_connected": False,
         "submission_responsiveness": response,
         "read_only_intake_status": intake_status,
+        "permission_management": permissions,
     }
     (ROOT / "prompt-test.json").write_text(json.dumps(result, indent=2) + "\n")
 

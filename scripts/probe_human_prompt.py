@@ -212,6 +212,8 @@ def human_session():
         )
         assert image.returncode == 0
         shutil.copyfile(RUNTIME / "prompt.png", OUT / "human-prompt.png")
+        shutil.copyfile(RUNTIME / "permissions.png", OUT / "human-permissions.png")
+        assert test["permission_management"]["automatic_activated"] is False
         sway_pid = int(
             subprocess.check_output(["pgrep", "-u", "mano-human", "-x", "sway"], text=True).strip()
         )
