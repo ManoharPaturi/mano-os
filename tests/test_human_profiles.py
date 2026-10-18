@@ -3,7 +3,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from mano_broker.approvals import Approvals
 from mano_broker.control import dispatch_control
@@ -30,6 +30,7 @@ class HumanProfileTests(unittest.TestCase):
             resource_id='b'*32, classification='internal', boot_id='boot')
         prompts.claim(self.prompt, human_uid=1002, boot_id='boot')
         prompts.attach(self.prompt, self.task, human_uid=1002, boot_id='boot')
+        self.runtime = Mock()
         self.body = dict(human_uid=1002, prompt_id=self.prompt, request_key='c'*32, args=ARGS)
 
     def tearDown(self):
@@ -38,7 +39,8 @@ class HumanProfileTests(unittest.TestCase):
 
     def call(self, operation, body, uid=0, now=10):
         packet = canonical(dict(schema_version='1.0', operation=operation, body=body)).encode()
-        return dispatch_control(self.state, packet, peer=Peer(1, uid, uid), now=now, boot_id='boot')
+        return dispatch_control(self.state, packet, peer=Peer(1, uid, uid), now=now,
+                                boot_id='boot', runtime=self.runtime)
 
     def test_human_request_only_creates_pending_exact_idempotent_challenge(self):
         first = self.call('request_profile', self.body)
@@ -144,3 +146,14 @@ class HumanProfileTests(unittest.TestCase):
                 self.assertEqual(rpc.call_count, 1)
                 if case != 'no_echo':
                     secret.assert_not_called()
+
+    def test_orphaned_runtime_cannot_create_a_profile_challenge(self):
+        before = self.state.db.total_changes
+        self.runtime.live_task.side_effect = Denied('Descriptors lost after restart')
+        with self.assertRaises(Denied):
+            self.call('request_profile', self.body)
+        self.assertEqual(self.state.db.total_changes, before)
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM approvals').fetchone()[0], 0)
+        self.runtime = None
+        with self.assertRaises(Denied):
+            self.call('request_profile', self.body)

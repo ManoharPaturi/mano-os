@@ -19,7 +19,7 @@ Native operation08 is exactly72 bytes: version/op, prompt ID32, request key32,
 mode byte, duration u16be, count byte, timeout u16be. The Root adapter authenticates
 the configured human's kernel credentials, validates fields/bounds and forwards
 only those fixed fields plus its own human UID. Root broker control derives the
-task/caller/resource from the human-owned current-boot prompt. An unallocated task,
+task/caller/resource from the human-owned current-boot prompt and requires its live provisioned descriptors. An unallocated task,
 wrong human/boot, unexpected selector, malformed packet or invalid bound denies.
 The request creates only an exact pending policy.set_profile challenge.
 
@@ -52,8 +52,8 @@ not a physical keyboard acceptance claim.
 
 The VM also adds an active lease at the existing broker SIGKILL/restart point.
 Before and after restart, lease/grant expiry must still be in the future; the
-recovered lease must be exhausted/revoked, old automatic grant denied, new request
-pending and old profile approval replay denied. Stop testing now checks a fresh
+recovered lease must be exhausted/revoked, old automatic grant denied, new requests
+denied until fresh provisioning and old profile approval replay denied. Stop testing now checks a fresh
 unused/unrevoked profile grant immediately before Stop, then rejects it after PAM
 rearm and checks the revoked record. No authority is silently restored or resource
 rebound. Required flags: installed_active_profile_lease_restart_revoked,

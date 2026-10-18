@@ -3,6 +3,7 @@
 from mano_protocol.profiles import configuration
 
 from .approvals import Approvals
+from .ipc import Peer
 from .prompts import Prompts
 from .protocol import identifier
 from .state import Denied
@@ -29,11 +30,15 @@ def profile_status(state, *, human_uid, prompt_id, now, boot_id):
                     profile=Profiles(state).status(task, now=now, boot_id=boot_id))
 
 
-def request_profile(state, *, human_uid, prompt_id, request_key, args, now, boot_id):
+def request_profile(state, *, human_uid, prompt_id, request_key, args, now, boot_id, runtime):
     identifier(request_key)
     args = configuration(args)
     with state.transaction():
         task = owned_task(state, human_uid=human_uid, prompt_id=prompt_id, boot_id=boot_id)
+        if runtime is None:
+            raise Denied('Profile request requires a live provisioned runtime')
+        runtime.live_task(dict(task_id=task['id'], resource_id=task['resource_id']),
+                          Peer(1, task['caller_uid'], task['caller_uid']))
         proposal = dict(schema_version='1.0', task_id=task['id'], resource_id=task['resource_id'],
             capability='policy.set_profile', args=args,
             idempotency_key='human-profile:' + request_key,

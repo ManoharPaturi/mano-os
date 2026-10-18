@@ -91,7 +91,9 @@ Current trusted-mode-selection work adds native08 pending-only profile request,
 args checked before password; separate native PAM activates; cancel/wrongpass/noecho
 failure do not. Print/reuse request key for explicit uncertain-ack retry; no automatic
 retry. Existing approve/rearm refactored to shared guarded review; packet clear kept.
-Local318tests pass/28Linux skips,Ruff/diff/shell/compile. Actual human-UID PTY CLI,
+Local319tests pass/28Linux skips,Ruff/diff/shell/compile. Actual human-UID PTY CLI,
 active unexpired-lease installed SIGKILL/restart and live-before-Stop/rearm rejection
 witnesses await finalCI. No physical keyboard/GUI mode/host-network/release claim.
 See architecture/0083-trusted-mode-selection.md and workspace outputs for live state.
+
+First PR99 head6830b78 CI39107689316 failed restart witness expecting pending; actual Runtime.live_task correctly denies orphaned task after lost descriptors. Preserve denial, require fresh provisioning. Human mode requests now require the same live runtime before creating a challenge. Regression test added; all319localtests pass. Final-head CI still required.

@@ -790,8 +790,8 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
         body=restart_read | dict(grant_id=restart_auto["grant_id"]))) == denied
     after_restart = rpc("request", dict(schema_version="1.0", operation="request_approval",
         body=proposal | dict(args=dict(path="retained"),
-                             idempotency_key="profile-read-after-restart")))["approval"]
-    assert after_restart["state"] == "pending" and after_restart["grant_id"] is None
+                             idempotency_key="profile-read-after-restart")))
+    assert after_restart == denied  # Lost descriptors require fresh provisioning.
     assert human(dict(mode="confirm", view=restart_view, password=password)) == {"ok": False}
     status = rpc(
         "request",

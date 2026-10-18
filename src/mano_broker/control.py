@@ -73,7 +73,7 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
         from .human_profiles import request_profile
 
         return dict(schema_version='1.0', ok=True,
-                    **request_profile(state, **body, now=now, boot_id=boot_id))
+                    **request_profile(state, **body, now=now, boot_id=boot_id, runtime=runtime))
     if value["operation"] == "human_task_status":
         if set(body) != {"human_uid", "prompt_id"}:
             raise Denied("Unexpected human task status fields")
