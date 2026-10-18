@@ -100,7 +100,7 @@ python3 scripts/build_runtime_deb.py --wheelhouse wheelhouse --output dist
 ```
 
 On a disposable Debian test installation, install the generated unsigned prototype
-with `sudo apt install ./mano-runtime_0.1.0~prototype1_amd64.deb`. Installation creates
+with `sudo apt install ./mano-runtime_0.1.0~prototype2_amd64.deb`. Installation creates
 locked service accounts and fixed directories; it starts no runtime service, ships
 no API key, and leaves provider/model/pricing/controller/egress defaults disabled.
 Existing manual runtime files require explicit operator reconciliation first.
@@ -126,3 +126,16 @@ Removal disables/stops the runtime and removes its code while retaining generate
 human policy, credentials, workspaces and journal data. No package removal script
 deletes those data or recycles task identities. Signed distribution, cross-version
 migration, full workflow/release and physical installation gates remain unfinished.
+
+## Clean Debian package/reboot CI witness
+
+The additional CI stage boots a separate untouched Debian13 image, installs the
+prototype with apt and no recommendations, and enrolls the existing ordinary CI
+login. Only the .deb and explicit private test scripts enter that VM. Driver-only
+python3-pyatspi is installed separately after runtime dependency resolution.
+The packaged Sway config and prompt wrapper run unchanged, without an app observer
+or Python-path override. The stage checks actual GUI/PAM/mock task behavior, powers
+off, boots again, and requires automatic runtime-target activation and denial of an
+old, still-unexpired unused grant while task data persist. It then checks a fresh
+postboot workflow and native human Stop. Physical input, login-manager integration,
+hardware performance and the full original distribution gates remain separate.

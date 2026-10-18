@@ -28,7 +28,9 @@ def native_terminal(module, arguments=(), *, actor=None, answers=()):
             if actor is not None:
                 account = pwd.getpwnam(actor)
                 os.fchown(slave, account.pw_uid, account.pw_gid)
-                os.setgroups([])
+                # Mirror a real login, replacing inherited Root groups with this account
+                # membership; the enrolled human socket group may be supplementary.
+                os.initgroups(account.pw_name, account.pw_gid)
                 os.setgid(account.pw_gid)
                 os.setuid(account.pw_uid)
             for target in (0, 1, 2):

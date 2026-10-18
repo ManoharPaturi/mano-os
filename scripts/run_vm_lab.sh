@@ -20,6 +20,10 @@ curl --fail --location --retry 3 "$base/SHA512SUMS" -o "$lab_dir/SHA512SUMS"
 curl --fail --location --retry 3 "$base/$image" -o "$lab_dir/$image"
 (cd "$lab_dir"; awk '$2 == "debian-13-genericcloud-amd64.qcow2"' SHA512SUMS | sha512sum -c -)
 cp "$lab_dir/SHA512SUMS" "$repo_root/evidence/image-SHA512SUMS"
+# Preserve the checksum-verified untouched image for a separate clean package VM.
+cp --reflink=auto --sparse=always "$lab_dir/$image" "$lab_dir/runtime-pristine.qcow2"
+chmod 0444 "$lab_dir/runtime-pristine.qcow2"
+sha256sum "$lab_dir/runtime-pristine.qcow2" > "$repo_root/evidence/runtime-pristine-before.sha256"
 qemu-img resize "$lab_dir/$image" 12G
 qemu-img create -f qcow2 "$lab_dir/data.qcow2" 2G
 qemu-img create -f qcow2 "$lab_dir/root.qcow2" 6G
@@ -220,6 +224,75 @@ if [ "$result" = 0 ]; then
     'sudo env PYTHONPATH=/opt/mano-lab/src PYTHONDONTWRITEBYTECODE=1 python3 /opt/mano-lab/scripts/probe_runtime_package.py' \
     > "$repo_root/evidence/runtime-package.json"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
-    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json mano-runtime_0.1.0~prototype1_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
+    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json mano-runtime_0.1.0~prototype2_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
+
+fi
+if [ "$result" = 0 ]; then
+  stop_vm
+  vm_pid=
+  free_kib=$(df -Pk "$repo_root" | awk 'NR==2 {print $4}')
+  if [ "$free_kib" -lt 10485760 ]; then
+    echo 'Stop: less than 10 GiB free; clean package VM refused.' >&2
+    exit 2
+  fi
+  qemu-img create -f qcow2 -F qcow2 -b "$lab_dir/runtime-pristine.qcow2" "$lab_dir/runtime-stock.qcow2"
+  qemu-img resize "$lab_dir/runtime-stock.qcow2" 12G
+  printf 'instance-id: mano-runtime-stock
+local-hostname: mano-runtime-stock
+' > "$lab_dir/stock-meta-data"
+  cloud-localds "$lab_dir/stock-seed.img" "$lab_dir/user-data" "$lab_dir/stock-meta-data"
+  ssh_opts=(-i "$lab_dir/key" -p 2222 -o BatchMode=yes -o ConnectTimeout=5 \
+    -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$lab_dir/known_hosts-stock")
+  start_stock_vm() {
+    local stage=$1
+    if [ "$accel" = kvm ]; then
+      sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      test -r /dev/kvm && test -w /dev/kvm
+    fi
+    qemu-system-x86_64 -accel "$accel" -cpu "$cpu_model" -m 4096 -smp 2 -display none \
+      -chardev "socket,id=console,path=$lab_dir/serial-$stage.sock,server=on,wait=off,logfile=$repo_root/evidence/serial-$stage.log" \
+      -serial chardev:console \
+      -drive "file=$lab_dir/runtime-stock.qcow2,format=qcow2,if=virtio" \
+      -drive "file=$lab_dir/stock-seed.img,format=raw,if=virtio" \
+      -netdev user,id=n0,hostfwd=tcp:127.0.0.1:2222-:22 -device virtio-net-pci,netdev=n0 \
+      > "$repo_root/evidence/qemu-$stage.log" 2>&1 &
+    vm_pid=$!
+  }
+  start_stock_vm stock-first
+  wait_ssh
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo cloud-init status --wait'
+  # Only the package and explicit test scripts enter this clean VM; no src/ or lab config.
+  tar -cf - -C "$repo_root" scripts/guest_guard.sh scripts/ci_tty.py scripts/probe_stock_runtime.py \
+    scripts/install_stock_runtime.sh tests/desktop/stock_prompt_contract.py | \
+    ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo mkdir -p /opt/mano-lab; sudo tar -xf - -C /opt/mano-lab'
+  cat "$repo_root/evidence/mano-runtime_0.1.0~prototype2_amd64.deb" | \
+    ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo tee /var/tmp/mano-runtime.deb > /dev/null'
+  package_sha=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["package"]["sha256"])' \
+    "$repo_root/evidence/runtime-package.json")
+  [[ "$package_sha" =~ ^[0-9a-f]{64}$ ]]
+  set +e
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    "sudo bash /opt/mano-lab/scripts/install_stock_runtime.sh '$package_sha'" \
+    2>&1 | tee "$repo_root/evidence/stock-runtime-first.log"
+  stock_result=${PIPESTATUS[0]}
+  set -e
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+  if [ "$stock_result" != 0 ]; then exit "$stock_result"; fi
+  stop_vm
+  vm_pid=
+  start_stock_vm stock-reboot
+  wait_ssh
+  set +e
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONDONTWRITEBYTECODE=1 python3 /opt/mano-lab/scripts/probe_stock_runtime.py after' \
+    2>&1 | tee "$repo_root/evidence/stock-runtime-reboot.log"
+  stock_result=${PIPESTATUS[0]}
+  set -e
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+  sha256sum "$lab_dir/runtime-pristine.qcow2" > "$repo_root/evidence/runtime-pristine-after.sha256"
+  cmp "$repo_root/evidence/runtime-pristine-before.sha256" "$repo_root/evidence/runtime-pristine-after.sha256"
+  if [ "$stock_result" != 0 ]; then exit "$stock_result"; fi
 fi
 exit "$result"

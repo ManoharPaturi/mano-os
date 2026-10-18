@@ -177,3 +177,47 @@ noauthority resurrection, removal/no data deletion. New runtime-package.json/.de
 artifacts required; exact-headCI/allchecks/full artifact acceptance BEFORE merge.
 No local Linux build/install attempted. Local330tests/28Linuxskips/Ruff/shell/compile
 pass so far. Packaging remains unaccepted until actual CI passes.
+
+PR103 merged37f7fde after final29fa56f/CI39133946798 ALL3SUCCESS/art12138669855;
+54architecture+2packagedGUI hashes and9.54MBprototype1.deb accepted. Two sameguest
+builds matched,1716payloadfilesverified; package install/GUI/PAM/mock/reinstall/
+remove passed. Postmain39134831166 pendingverification. Fullgoal stillACTIVE.
+
+Current clean-debian-runtime-reboot work preserves pristine verifiedcloudbase before
+lab preparation, then separate freshoverlay boot with only genericCIlogin/marker.
+Only.deb+explicittestwhitelist enter; no src/labconfig/externalvendor. Apt install
+--no-install-recommends then driver-onlypyatspi. Prototype2 explicitlydependsPAM
+modules/CAcerts. Genericloginlab UID1000 (no mano-human account), fixedgroup via
+RootTTYenrollment --enable. Actualunmodified packagedSway/Prompt wrapper noobserver/
+PYTHONPATH override; AT-SPIreadsvisibleIDs, nativeRootview/PAM cancels+wrongpass+success,
+actualmockfileeffect. Prebootunusedunrevoked/unexpiredexactgrant savedprivateRoot0600
+NEVERexported. Realpoweroff+bootIDchange: targetandStopmustactivatewithoutsetup,
+oldprompt/grant replaydenied andgrantrevoked whiledeadlinefuture, taskdataretained;
+newGUI/PAM/mocktask+nativeStop.900spreboot/120spostlease excludesexpiryconfound.
+Pristineimagehashunchanged, noVMimage/key uploaded. Freshheadlessmanualuserlaunch,
+NOTphysical/displaymanager/8GB/livepaid/signedimage proof. Exact-headCI/artifacts
+and new before/after screenshots required before merge. See ADR0088.
+
+PR104 initial79a4b94/CI39136499881 FAILED during ordinary-login TTY cancellation.
+Freshimage/packageAPTinstall/UI/nativepending succeeded. ci_tty helper clearedall
+supplementarygroups, previouslyhiddenbecause mano-human primarygroup=socketgroup;
+normalLab's human socket membership is supplementary. ReplaceinheritedRootgroups
+with os.initgroups(targetname,primarygid) then dropgid/uid, matching actuallogin.
+Addreturncode/permission-error-only diagnostics, no nonce/password/transcript dump.
+Keepallsocket/PAM/boot/grant checks; newheadCIrequired, failedheadunmerged.
+
+PR104 8954dd8/CI39137448469 ALL3SUCCESS/art12140284002; functionalfresh/reboot,
+54architecture+package+6GUI hashes verified. GenericUID1000/targetboot/noOldGrant
+whenfuturedeadline/data/newtask/nativeStop passed. VisualQA REJECTED postbootpending
+PNG: partiallydrawn/missingletters/digits; other3stockstatesclear. Capture nowwaits1s
+then requiresconsecutiveidenticalPNGframes (8sbounded), unchangedunmodifiedapp/
+allfunctionalassertions. NewexactheadCI/pixelsrequired;8954notmerged.
+
+PR10495b40fb/CI39138555266 ALL3SUCCESS/art12141131665, fullfunctional/boot/hashes
+verified, but visualQA REJECTED stockafterpending +preparedpending persistentmissing
+glyphs evenidenticalframes. Notcapturetiming. OfficialGTK4.18 sourcegskrenderer.c
+full-redraw skips render-node diff; wlroots0.18.2scene fullrerender skipsdamage.
+Nowallhumanheadlessharnesses setGSK_DEBUG=full-redraw andWLR_SCENE_DEBUG_DAMAGE=rerender
+onlyalongsideexistingCairo/Pixmanprofile. No productconfig/permissions/GUI observer
+changes. Reportexplicitrenderingprofile+incrementalvisualacceptanceFalse; no physical/
+defaultbackend claim. NewheadCI/pixelsrequired;95b NOTmerged. PrimarysourceslinksADR88.

@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.0~prototype1"
+VERSION = "0.1.0~prototype2"
 VENDOR = "/usr/lib/mano-runtime/vendor"
 
 
@@ -227,10 +227,11 @@ def build(wheelhouse, output, *, revision=None, epoch=None):
             "Maintainer: mano-OS project <noreply@mano.invalid>\n"
             "Section: utils\nPriority: optional\n"
             "Depends: python3 (>= 3.13), python3 (<< 3.14), python3-gi, gir1.2-gtk-4.0, "
-            "systemd (>= 257), libc6 (>= 2.41), libpam0g, libjson-c5, libsystemd0, libseccomp2, "
+            "systemd (>= 257), libc6 (>= 2.41), libpam0g, libpam-modules, "
+            "libjson-c5, libsystemd0, libseccomp2, "
             "bubblewrap (>= 0.12.0-1~deb13u1), xdg-dbus-proxy (>= 0.1.6-1+deb13u3), "
             "acl, passwd, util-linux, dbus-user-session, at-spi2-core, sway, foot, grim, "
-            "fonts-dejavu-core\n"
+            "fonts-dejavu-core, ca-certificates\n"
             "Description: mano prototype trusted broker, prompt and isolated runtime\n"
             " Disabled cloud/controller defaults; explicit Root human enrollment required.\n"
         )
