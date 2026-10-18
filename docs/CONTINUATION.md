@@ -122,3 +122,16 @@ PR100 b8f620e/run39114543246 failed the new compositor visibility assertion;
 no merge. Explicitly leave main fullscreen while the modal exists, restore main
 fullscreen/focus on close using GTK. Retain strict visibility assertion and include
 full compositor tree on failure. New exact-head VM and pixel acceptance required.
+
+PR100 merged7fd7239 after final38348e3/CI39114869208 all3SUCCESS, artifact12132410882,
+54hashes and actual visiblemodal/restoredfullscreen PNGs accepted. The earlier
+5fb green-but-parent-only screenshot was rejected; b8 visibility assertion failed.
+Postmain39115563601 pending verification. Full original scope remains active.
+
+Current live-human-permissions integration uses production Prompt() defaults after
+installed native broker/PAM setup, separate private Sway/runtime, accessible submit,
+exact task factory, pending profile and separate human-UID TTY cancel/wrongpassword/
+PAM then actual GUI refresh. Root-only harness holds the synthetic guest password;
+UI driver receives no password/grant/control socket. Pending/effective PNG hashes
+and new broker flag require exact-head CI and actual visual acceptance. No model
+call, physical provenance or release completion claim. See ADR0085.
