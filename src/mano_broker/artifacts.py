@@ -30,21 +30,23 @@ class Artifact:
             self.fd = -1
 
 
-def seal(pin):
+def seal(pin, *, maximum=MAX_BYTES):
+    if type(maximum) is not int or not 0 <= maximum <= MAX_BYTES:
+        raise ValueError('Invalid capture byte limit')
     source = pin.read_fd()
     target = -1
     try:
         before = os.fstat(source)
-        if not 0 <= before.st_size <= MAX_BYTES:
+        if not 0 <= before.st_size <= maximum:
             raise Denied("Artifact byte quota exceeded")
         target = os.memfd_create("mano-artifact", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
         offset = 0
         while True:
-            data = os.pread(source, min(65536, MAX_BYTES + 1 - offset), offset)
+            data = os.pread(source, min(65536, maximum + 1 - offset), offset)
             if not data:
                 break
             offset += len(data)
-            if offset > MAX_BYTES:
+            if offset > maximum:
                 raise Denied("Growing artifact exceeded byte quota")
             written = 0
             while written < len(data):

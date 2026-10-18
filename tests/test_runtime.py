@@ -1,3 +1,4 @@
+import base64
 import os
 import sys
 import tempfile
@@ -7,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from mano_broker.approvals import Approvals
+from mano_broker.file_reads import MAX_READ, execute
 from mano_broker.ipc import Peer
 from mano_broker.protocol import canonical
 from mano_broker.provision import provision_task
@@ -93,6 +95,134 @@ class RuntimeTests(unittest.TestCase):
             boot_id="boot-a",
         )
         return self.body | {"grant_id": grant}
+
+    def read_action(self):
+        body = self.approved()
+        result = self.call('propose', body, now=12)
+        self.assertEqual(result['action']['state'], 'intent')
+        self.assertFalse(self.call('propose', body, now=12)['fresh'])
+        self.assertEqual(list(self.runtime.file_pending), [result['action']['id']])
+        return result['action']['id']
+
+    def file_result(self, action, **updates):
+        return self.call('file_result', dict(task_id=self.body['task_id'], action_id=action,
+                         offset=0, length=4096) | updates, now=12)
+
+    def test_scheduled_file_read_sealed_result_and_no_reexecution(self):
+        action = self.read_action()
+        with self.assertRaises(Denied):
+            self.file_result(action)
+        with patch('mano_broker.file_reads.time.monotonic', return_value=12):
+            self.runtime.tick()
+            self.runtime.tick()
+        first = self.file_result(action)
+        self.assertEqual(base64.b64decode(first['data']), b'original')
+        self.assertTrue(first['eof'])
+        self.assertFalse(first['artifact']['effect_verified'])
+        (self.root / 'file').write_text('later content')
+        self.assertEqual(self.file_result(action), first)
+        self.assertFalse(self.runtime.registry.leases)
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM artifacts').fetchone()[0], 1)
+        row = self.state.db.execute('SELECT state,verified FROM actions WHERE id=?',
+                                    (action,)).fetchone()
+        self.assertEqual(tuple(row), ('done', 0))
+        for updates in ({'task_id': 'a' * 32}, {'action_id': 'b' * 32}, {'length': 4097},
+                        {'offset': True}, {'offset': 999}, {'unexpected': 1}):
+            with self.assertRaises(ValueError):
+                self.file_result(action, **updates)
+        with self.assertRaises(Denied):
+            self.call('file_result', dict(task_id=self.body['task_id'], action_id=action,
+                                         offset=0, length=4096), uid=1005)
+
+    def test_replaced_path_reads_original_pinned_inode_only(self):
+        action = self.read_action()
+        (self.root / 'file').rename(self.root / 'old')
+        (self.root / 'file').write_text('replacement must not be read')
+        execute(self.runtime, action, clock=lambda: 12)
+        self.assertEqual(base64.b64decode(self.file_result(action)['data']), b'original')
+
+    def test_unlinked_pin_and_oversized_file_fail_without_result_or_retry(self):
+        action = self.read_action()
+        (self.root / 'file').unlink()
+        with self.assertRaises(OSError):
+            execute(self.runtime, action, clock=lambda: 12)
+        self.assertEqual(self.state.db.execute('SELECT state FROM actions').fetchone()[0],
+                         'unknown')
+        with self.assertRaises(Denied):
+            self.file_result(action)
+        self.assertFalse(self.runtime.registry.leases)
+
+    def test_oversize_never_publishes_partial_bytes(self):
+        (self.root / 'file').write_bytes(b'x' * (MAX_READ + 1))
+        action = self.read_action()
+        with self.assertRaises(Denied):
+            execute(self.runtime, action, clock=lambda: 12)
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM artifacts').fetchone()[0], 0)
+        self.assertFalse(self.runtime.registry.leases)
+
+    def test_stop_during_capture_suppresses_publication(self):
+        from mano_broker.artifacts import seal
+
+        action = self.read_action()
+        def stop_after_seal(*args, **kwargs):
+            sealed = seal(*args, **kwargs)
+            self.runtime.stop_reader = lambda: True
+            return sealed
+        with patch('mano_broker.file_reads.seal', side_effect=stop_after_seal):
+            with self.assertRaises(Denied):
+                execute(self.runtime, action, clock=lambda: 12)
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM artifacts').fetchone()[0], 0)
+        self.assertFalse(self.runtime.registry.leases)
+
+    def test_stop_before_dispatch_and_close_discard_read_queue(self):
+        action = self.read_action()
+        self.state.emergency_stop()
+        with patch('mano_broker.file_reads.time.monotonic', return_value=12):
+            self.runtime.tick()
+        self.assertFalse(self.runtime.file_pending)
+        self.assertFalse(self.runtime.registry.leases)
+        self.assertEqual(self.state.db.execute('SELECT state FROM actions WHERE id=?',
+                                               (action,)).fetchone()[0], 'failed')
+
+    def test_expiry_during_capture_prevents_publication(self):
+        action = self.read_action()
+        with self.assertRaises(Denied):
+            execute(self.runtime, action, clock=Mock(side_effect=[12, 12, 99999]))
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM artifacts').fetchone()[0], 0)
+
+    def test_artifact_insert_failure_rolls_back_done_and_closes_descriptors(self):
+        action = self.read_action()
+        self.state.db.execute("CREATE TRIGGER reject_read BEFORE INSERT ON artifacts "
+                              "BEGIN SELECT RAISE(ABORT,'injected storage failure'); END")
+        import sqlite3
+
+        before = len(os.listdir('/proc/self/fd'))
+        with self.assertRaises(sqlite3.IntegrityError):
+            execute(self.runtime, action, clock=lambda: 12)
+        self.assertLess(len(os.listdir('/proc/self/fd')), before)  # Lease also closed.
+        self.assertEqual(self.state.db.execute('SELECT state FROM actions WHERE id=?',
+                                               (action,)).fetchone()[0], 'unknown')
+        self.assertFalse(self.runtime.registry.leases)
+
+    def test_empty_and_exact_boundary_files_are_complete_results(self):
+        for content in (b'', b'x' * MAX_READ):
+            with self.subTest(size=len(content)):
+                (self.root / 'file').write_bytes(content)
+                self.body['idempotency_key'] = 'size-' + str(len(content))
+                action = self.read_action()
+                execute(self.runtime, action, clock=lambda: 12)
+                self.runtime.file_pending.clear()
+                first = self.file_result(action)
+                self.assertEqual(first['artifact']['size'], len(content))
+                self.assertEqual(base64.b64decode(first['data']), content[:4096])
+
+    def test_close_queued_read_fails_intent_and_releases_pin(self):
+        action = self.read_action()
+        self.runtime.close()
+        self.assertEqual(self.state.db.execute('SELECT state FROM actions WHERE id=?',
+                                               (action,)).fetchone()[0], 'failed')
+        self.assertFalse(self.runtime.file_pending)
+        self.assertFalse(self.runtime.registry.leases)
 
     def test_propose_prepares_before_journal_replay_without_another_fd(self):
         body = self.approved()

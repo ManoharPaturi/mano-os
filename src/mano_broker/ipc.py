@@ -34,6 +34,15 @@ def dispatch(state, packet, *, peer, now, boot_id):
         raise Denied("Unknown request envelope")
     if value["schema_version"] != "1.0":
         raise Denied("Unknown IPC version")
+    if value['operation'] == 'file_result':
+        from .file_reads import result_chunk
+
+        body = value['body']
+        if not isinstance(body, dict) or set(body) != {'task_id', 'action_id', 'offset', 'length'}:
+            raise Denied('Unknown file result fields')
+        result = result_chunk(state, **body, caller_uid=peer.uid, boot_id=boot_id)
+        return dict(schema_version='1.0', ok=True, artifact=result['metadata'],
+                    data=base64.b64encode(result['data']).decode('ascii'), eof=result['eof'])
     if value["operation"] == "model_result":
         from .models import ModelStore
 
