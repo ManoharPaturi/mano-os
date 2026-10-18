@@ -5,6 +5,7 @@ import json
 import sys
 
 from mano_protocol.actions import MAX_PACKET, canonical, unique_object
+from mano_protocol.plans import parse_plan
 from mano_protocol.provider import configuration
 
 from .broker import BrokerClient
@@ -31,8 +32,8 @@ def parse_input(packet, *, broker_model=False):
         if set(value['model']) != {'model', 'max_output_tokens'}:
             raise ValueError('Unknown broker model configuration')
         configuration(value['model']['model'], value['model']['max_output_tokens'])
-    elif set(value['plan']) != {'args', 'reason'}:
-        raise ValueError('Unknown mock plan fields')
+    else:
+        parse_plan(value['plan'])
     return value
 
 

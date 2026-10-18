@@ -12,6 +12,9 @@ import time
 from pathlib import Path
 
 from mano_protocol.actions import ActionRequest, canonical, identifier, text, unique_object
+from mano_protocol.file_results import metadata as read_metadata
+from mano_protocol.plans import EXECUTABLE, parse_plan
+from mano_protocol.plans import proposal as make_proposal
 from mano_protocol.provider import configuration
 
 from .stop_state import snapshot
@@ -88,8 +91,7 @@ def run_step(managed, *, plan=None, model_policy=None):
     if before.latched:
         raise ValueError('Native Stop is latched')
     if model_policy is None:
-        if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
-            raise ValueError('Explicit mock plan required')
+        parse_plan(plan)
         payload = canonical(dict(context=managed['context'], plan=plan))
     else:
         if (not isinstance(model_policy, dict)
@@ -112,6 +114,7 @@ def run_step(managed, *, plan=None, model_policy=None):
     task = value['task']
     if any(task.get(key) != expected for key, expected in managed['context'].items()):
         raise ValueError('Core returned different task context')
+    task.pop('read_result', None)  # Core/checkpoint metadata cannot establish byte custody.
     action_id = task.get('action_id')
     if action_id is None:
         allowed = {'awaiting_model_grant', 'model_queued', 'model_running',
@@ -128,16 +131,14 @@ def run_step(managed, *, plan=None, model_policy=None):
     if model_policy is not None:
         proposal = task.get('proposal')
         if not isinstance(proposal, dict) or 'grant_id' in proposal:
-            raise ValueError('Original proposed terminal action required')
+            raise ValueError('Original proposed action required')
         parsed = ActionRequest.parse(canonical(proposal | {'grant_id': '0' * 32}).encode())
         if (parsed.task_id != context['task_id'] or parsed.resource_id != context['resource_id']
                 or parsed.idempotency_key != context['operation_key']
-                or parsed.capability != 'terminal.run'):
-            raise ValueError('Core terminal proposal changed managed task scope')
+                or parsed.capability not in EXECUTABLE):
+            raise ValueError('Core proposal changed managed task scope')
     else:
-        proposal = dict(schema_version='1.0', task_id=context['task_id'],
-            resource_id=context['resource_id'], capability='terminal.run', args=plan['args'],
-            reason=plan['reason'], idempotency_key=context['operation_key'])
+        proposal = make_proposal(plan, context)
     expected = hashlib.sha256(canonical(proposal).encode()).hexdigest()
     if (action['id'] != action_id or action['task_id'] != context['task_id']
             or action['proposal_digest'] != expected):
@@ -145,7 +146,14 @@ def run_step(managed, *, plan=None, model_policy=None):
     states = {'intent': 'queued', 'executing': 'running', 'failed': 'failed',
               'unknown': 'unknown_effect'}
     if action['state'] == 'done':
-        task['status'] = 'completed' if action['verified'] else 'verifying'
+        if proposal['capability'] == 'files.read':
+            captured = control_request('inspect_file_read', dict(
+                task_id=context['task_id'], action_id=action_id))['artifact']
+            task['read_result'] = read_metadata(captured, task_id=context['task_id'],
+                action_id=action_id, path=proposal['args']['path'])
+            task['status'] = 'read_ready'  # A bounded snapshot, never goal completion.
+        else:
+            task['status'] = 'completed' if action['verified'] else 'verifying'
     elif action['state'] in states:
         task['status'] = states[action['state']]
     else:
@@ -175,12 +183,8 @@ def dispatch_prompt(prompt_id, plan):
 def dispatch_next_mock(plan):
     if os.geteuid() != 0 or sys.platform != 'linux':
         raise PermissionError('Trusted Linux root operator required')
-    if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
-        raise ValueError('Explicit mock plan required')
     # Validate the supplied test plan before claiming or allocating anything.
-    ActionRequest.parse(canonical(dict(schema_version='1.0', task_id='0' * 32,
-        resource_id='0' * 32, grant_id='0' * 32, capability='terminal.run',
-        args=plan['args'], reason=plan['reason'], idempotency_key='mock-validation')).encode())
+    parse_plan(plan)
     before = snapshot()
     if before.latched:
         raise ValueError('Native Stop is latched')

@@ -96,3 +96,38 @@ def read_model_result(client, *, task_id, action_id):
             if hashlib.sha256(data).hexdigest() != metadata['sha256']:
                 raise ValueError('Model custody digest mismatch')
             return decode(bytes(data), 131072)
+
+
+def read_file_result(client, *, task_id, action_id, path):
+    """Retrieve exact bounded bytes; do not disclose them to a model or interpret them."""
+    from mano_protocol.actions import identifier, relative_path
+    from mano_protocol.file_results import metadata as parse_metadata
+
+    identifier(task_id)
+    identifier(action_id)
+    relative_path(path)
+    data, metadata = bytearray(), None
+    while True:
+        response = client(dict(schema_version='1.0', operation='file_result',
+            body=dict(task_id=task_id, action_id=action_id, offset=len(data), length=4096)))
+        if (not isinstance(response, dict) or response.get('ok') is not True
+                or response.get('schema_version') != '1.0'
+                or type(response.get('eof')) is not bool
+                or not isinstance(response.get('data'), str)):
+            raise ValueError('Invalid file custody response')
+        current = parse_metadata(response.get('artifact'), task_id=task_id,
+                                 action_id=action_id, path=path)
+        if metadata is None:
+            metadata = current
+        elif current != metadata:
+            raise ValueError('File custody changed during retrieval')
+        piece = base64.b64decode(response['data'], validate=True)
+        if len(piece) != min(4096, metadata['size'] - len(data)):
+            raise ValueError('Invalid file custody chunk')
+        data.extend(piece)
+        if response['eof'] != (len(data) == metadata['size']):
+            raise ValueError('Invalid file custody end')
+        if response['eof']:
+            if hashlib.sha256(data).hexdigest() != metadata['sha256']:
+                raise ValueError('File custody digest mismatch')
+            return dict(metadata=metadata, data=bytes(data))

@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import tempfile
 import unittest
@@ -109,3 +110,35 @@ class AgentRuntimeTests(unittest.TestCase):
             proposal=queued['proposal'] | {'idempotency_key': 'different-operation'})
         with self.assertRaisesRegex(ValueError, 'Journal action does not match'):
             self.step(forged)
+
+    def test_typed_read_waits_and_returns_only_verified_custody_reference(self):
+        self.runtime.model = lambda _: dict(capability='files.read',
+            args=dict(path='notes.txt'), reason='Read notes')
+        pending = self.step(self.input)
+        self.assertEqual(pending['status'], 'awaiting_grant')
+        self.assertEqual(pending['proposal']['capability'], 'files.read')
+        self.approve(pending)
+        queued = self.step(pending)
+        action = queued['action_id']
+        self.journal.start(action, now=10, boot_id='boot')
+        self.journal.transition(action, 'done', exit_code=0)
+        data = b'local data must not become model input' * 250
+        meta = dict(artifact_id='c' * 32, action_id=action, task_id=self.task,
+            boot_id='boot', relative_path='notes.txt', effect_verified=False, size=len(data),
+            sha256=hashlib.sha256(data).hexdigest(), source_device=1, source_inode=2)
+        self.journal.db.execute('INSERT INTO artifacts VALUES(?,?,?,?)',
+                                (meta['artifact_id'], action, canonical(meta), data))
+        ready = self.step(queued)
+        self.assertEqual(ready['status'], 'read_ready')
+        self.assertEqual(ready['read_result'], meta)
+        self.assertNotIn(data.decode(), canonical(ready))
+        self.runtime.model = lambda _: self.fail('Replayed result must not invoke model')
+        count = self.calls.count('propose')
+        replay = self.step(ready | dict(read_result=dict(sha256='forged'), status='completed'))
+        self.assertEqual(replay['status'], 'read_ready')
+        self.assertEqual(replay['read_result'], meta)
+        self.assertEqual(self.calls.count('propose'), count)
+        self.journal.db.execute("UPDATE actions SET state='unknown' WHERE id=?", (action,))
+        unknown = self.step(replay)
+        self.assertEqual(unknown['status'], 'unknown_effect')
+        self.assertIsNone(unknown['read_result'])

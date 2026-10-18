@@ -14,6 +14,35 @@ class CoreLifecycleGuards(unittest.TestCase):
         self.managed = dict(context=self.context, workspace='/var/lib/mano-workspaces/' + 'c' * 32,
                             caller_uid=1005, caller_name='mano-task-test', mode='supervised')
 
+    def test_read_ready_uses_protected_custody_not_core_metadata_or_completion_claim(self):
+        import hashlib
+
+        from mano_protocol.plans import proposal
+
+        plan = dict(capability='files.read', args=dict(path='notes.txt'), reason='Read notes')
+        digest = hashlib.sha256(canonical(proposal(plan, self.context)).encode()).hexdigest()
+        action = dict(id='e' * 32, task_id=self.context['task_id'], state='done', verified=0,
+                      proposal_digest=digest)
+        artifact = dict(artifact_id='f' * 32, action_id=action['id'],
+            task_id=self.context['task_id'],
+            boot_id='boot', relative_path='notes.txt', effect_verified=False, size=0,
+            sha256=hashlib.sha256(b'').hexdigest(), source_device=1, source_inode=2)
+        task = self.context | dict(action_id=action['id'], status='completed',
+                                   read_result=dict(sha256='forged'))
+        with (
+            patch('mano_broker.lifecycle.command', return_value=['fixed-core']),
+            patch('mano_broker.lifecycle.snapshot', return_value=Snapshot(0, False)),
+            patch('mano_broker.lifecycle.subprocess.run', return_value=SimpleNamespace(
+                returncode=0, stdout=canonical(dict(ok=True, task=task)))),
+            patch('mano_broker.lifecycle.control_request',
+                  side_effect=[dict(action=action), dict(artifact=artifact)]) as control,
+        ):
+            result = run_mock_step(self.managed, plan)
+            self.assertEqual(result['status'], 'read_ready')
+            self.assertEqual(result['read_result'], artifact)
+            self.assertEqual([call.args[0] for call in control.call_args_list],
+                             ['inspect_action', 'inspect_file_read'])
+
     def test_queue_cycle_selects_one_receipt_and_never_retries_uncertain_dispatch(self):
         plan = dict(args=dict(argv=['/usr/bin/true'], cwd='.', timeout_seconds=1), reason='test')
         receipts = [dict(id=key * 32, state='received', task_id=None) for key in ('a', 'b')]
@@ -71,7 +100,7 @@ class CoreLifecycleGuards(unittest.TestCase):
                 command(self.managed | {'caller_uid': 0})
 
     def test_latched_or_changed_stop_never_retries_a_core_service(self):
-        plan = dict(args={}, reason='mock')
+        plan = dict(args=dict(argv=['true'], cwd='.', timeout_seconds=1), reason='mock')
         with patch('mano_broker.lifecycle.command', return_value=['fixed-core']), \
              patch('mano_broker.lifecycle.snapshot', return_value=Snapshot(1, True)), \
              patch('mano_broker.lifecycle.subprocess.run') as run:
@@ -94,7 +123,8 @@ class CoreLifecycleGuards(unittest.TestCase):
              patch('mano_broker.lifecycle.snapshot', return_value=Snapshot(0, False)), \
              patch('mano_broker.lifecycle.subprocess.run', return_value=result) as run:
             with self.assertRaises(ValueError):
-                run_mock_step(self.managed, dict(args={}, reason='mock'))
+                run_mock_step(self.managed, dict(args=dict(argv=['true'], cwd='.',
+                    timeout_seconds=1), reason='mock'))
             with self.assertRaises(ValueError):
                 run_mock_step(self.managed, dict(args={}, reason='mock', env={'KEY': 'x'}))
             self.assertEqual(run.call_count, 1)

@@ -57,6 +57,14 @@ class CoreCycleTests(unittest.TestCase):
             count = self.state.db.execute(f'SELECT count(*) FROM {table}').fetchone()[0]
             self.assertEqual(count, 0)
 
+    def test_read_ready_settles_one_cycle_without_claiming_goal_completion(self):
+        claim = self.claim()
+        self.attach()
+        self.finish(claim, status='read_ready')
+        self.assertIsNone(self.claim(now=100))
+        row = self.state.db.execute('SELECT state,status FROM core_cycles').fetchone()
+        self.assertEqual(tuple(row), ('terminal', 'read_ready'))
+
     def test_restart_keeps_interrupted_claim_unknown_without_reallocation(self):
         self.claim()
         self.state.recover()

@@ -1,5 +1,15 @@
 # mano-OS continuation
 
+Current typed-core-workspace-reads adds shared strict terminal/READ plans, two
+strict provider proposal tools, separate broker-approved read execution and
+bounded immutable result retrieval. Core checkpoint/stdout keeps metadata only;
+read_ready is not verifiedtaskcompletion and no bytes are sent to a model.
+Root lifecycle independently reconstructs metadata via protectedinspect_file_read,
+and controller settles onecycle atread_ready. Actual allocated-task coreCLI/PAM/
+SQLite-reopen/sourcemutationreplay witness and exact-headCI required beforemerge.
+See architecture/0090. PR105 alreadymergedb7330209 afterCI39157530116 ALLSUCCESS;
+full originalgoal ACTIVE, postmain39158576226 stillpending lastcheck. Disk21GiB90%.
+
 Latest accepted: PR104 merged0647830b1fa42406bf91b4d20bfc4af90ca02efa after
 CI39155979584 all3SUCCESS/art12147163329; 54 architecture hashes, package SHA and
 six individually inspected raw GUI captures accepted. Clean stock Debian ordinary

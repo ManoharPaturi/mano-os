@@ -104,6 +104,30 @@ class BrokerPlannerTests(unittest.TestCase):
         self.assertFalse(any(call['operation'] == 'model_result' for call in self.calls))
         self.assertEqual(self.state.db.execute('SELECT count(*) FROM grants').fetchone()[0], 1)
 
+    def test_saved_provider_read_plan_needs_separate_file_authorization(self):
+        self.step()
+        self.approve_model()
+        self.step()
+        action = self.state.db.execute('SELECT id FROM actions').fetchone()[0]
+        store = ModelStore(self.state)
+        store.begin(action, now=10, boot_id='boot')
+        plan = dict(args=dict(path='notes.txt'), reason='Read local notes')
+        response = dict(object='response', model='synthetic-snapshot', status='completed',
+            usage=dict(input_tokens=2, output_tokens=3, total_tokens=5), output=[dict(
+                type='function_call', name='propose_file_read', status='completed',
+                arguments=canonical(plan))])
+        store.finish(action, canonical(response).encode(), boot_id='boot')
+        pending = self.step()
+        self.assertEqual(pending['status'], 'awaiting_grant')
+        self.assertEqual(pending['proposal']['capability'], 'files.read')
+        self.assertEqual(pending['proposal']['args'], plan['args'])
+        self.assertEqual(self.state.db.execute('SELECT count(*) FROM actions').fetchone()[0], 1)
+        self.assertEqual(self.state.db.execute("SELECT count(*) FROM grants "
+                                             "WHERE capability='files.read'").fetchone()[0], 0)
+        self.step(pending)
+        self.assertEqual(self.state.db.execute(
+            'SELECT count(*) FROM model_attempts').fetchone()[0], 1)
+
     @unittest.skipIf(os.geteuid() == 0, 'Core session requires unprivileged identity')
     def test_sqlite_checkpoint_reopen_retains_disclosure_and_unknown_state(self):
         from mano_core.checkpoints import Session

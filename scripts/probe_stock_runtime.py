@@ -280,6 +280,30 @@ def mock_effect(managed, filename):
         assert result["status"] in {"queued", "running"} and time.monotonic() < deadline, result
         time.sleep(0.1)
     assert (Path(managed["workspace"]) / filename).read_text() == "stock-ok"
+    read_context = managed | dict(context=managed["context"] | dict(
+        operation_key="typed-read-" + filename))
+    read_packet = dict(managed=read_context, plan=dict(capability="files.read",
+        args=dict(path=filename), reason="Read the packaged mock result as a typed action"))
+    deadline = time.monotonic() + 30
+    while True:
+        read = json.loads(command("/usr/sbin/mano-core-step", "--mock",
+                                 input=json.dumps(read_packet)).stdout)["task"]
+        if read["status"] == "read_ready":
+            break
+        assert read["status"] in {"queued", "running"} and time.monotonic() < deadline, read
+    assert read["read_result"]["sha256"] == hashlib.sha256(b"stock-ok").hexdigest()
+    assert read["read_result"]["size"] == len(b"stock-ok")
+    assert read["read_result"]["effect_verified"] is False
+    assert "stock-ok" not in json.dumps(read)
+    replay = json.loads(command("/usr/sbin/mano-core-step", "--mock",
+                                input=json.dumps(read_packet)).stdout)["task"]
+    assert replay["status"] == "read_ready" and replay["action_id"] == read["action_id"]
+    assert replay["read_result"] == read["read_result"]
+    (OUT / ("stock-typed-read-" + filename + ".json")).write_text(
+        json.dumps(dict(status="read_ready", artifact=read["read_result"],
+            replay_no_execution=True, provider_disclosure=False,
+            scope="packaged core CLI/native broker/PAM-approved profile on stock Debian"),
+            indent=2) + "\n")
     return result
 
 
@@ -367,6 +391,7 @@ def phase(after_reboot):
                 app_observer_injected=False,
                 native_pam_before_and_after_boot=True,
                 package_owned_mock_effect_before_and_after_boot=True,
+                package_owned_typed_core_read_before_and_after_boot=True,
                 effect_verified=False,
                 unexpired_unused_old_grant_revoked_after_real_boot=True,
                 old_grant_replay_denied=True,

@@ -28,12 +28,31 @@ class ProviderContractTests(unittest.TestCase):
         self.assertIs(body['store'], False)
         self.assertIs(body['parallel_tool_calls'], False)
         self.assertEqual(body['input'][1], dict(role='user', content='human goal'))
-        self.assertEqual(body['tool_choice'], dict(type='function', name='propose_terminal'))
+        self.assertEqual(body['tool_choice'], 'required')
+        self.assertEqual({tool['name'] for tool in body['tools']},
+                         {'propose_terminal', 'propose_file_read'})
         tool = body['tools'][0]
         self.assertIs(tool['strict'], True)
         self.assertEqual(set(tool['parameters']['properties']), {'args', 'reason'})
         self.assertNotIn('grant_id', canonical(body))
         self.assertEqual(self.parse(self.response), self.plan)
+
+    def test_read_tool_selects_capability_without_accepting_authority_or_escape(self):
+        plan = dict(args=dict(path='notes.txt'), reason='Read workspace notes')
+        def response(arguments):
+            return self.response | dict(output=[dict(type='function_call',
+                name='propose_file_read', status='completed', arguments=canonical(arguments))])
+        self.assertEqual(self.parse(response(plan)), plan | dict(capability='files.read'))
+        for invalid in (plan | dict(capability='terminal.run'), plan | dict(grant_id='a' * 32),
+                        plan | dict(args=dict(path='/etc/passwd')),
+                        plan | dict(args=dict(path='../escape')),
+                        plan | dict(args=dict(path='notes.txt', argv=['true']))):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                self.parse(response(invalid))
+        mixed = response(plan)
+        mixed['output'].append(self.response['output'][1])
+        with self.assertRaises(ValueError):
+            self.parse(mixed)
 
     def test_failures_refusals_extra_tools_and_model_substitution_are_denied(self):
         mutations = [dict(status=status) for status in ('incomplete', 'failed', 'queued')]

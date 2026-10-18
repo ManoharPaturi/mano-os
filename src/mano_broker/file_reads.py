@@ -9,12 +9,12 @@ import os
 import secrets
 import time
 
+from mano_protocol.file_results import MAX_READ as MAX_READ
+
 from .artifacts import MAX_ARTIFACTS, durable_chunk, seal
 from .profiles import Profiles
 from .protocol import ActionRequest, Capability, canonical, identifier
 from .state import Denied
-
-MAX_READ = 32768
 
 
 def authority(runtime, action_id, expected, now):

@@ -4,7 +4,10 @@ import hashlib
 from typing import TypedDict
 
 from mano_protocol.actions import ActionRequest, canonical, identifier, text
+from mano_protocol.plans import EXECUTABLE
+from mano_protocol.plans import proposal as make_proposal
 
+from .broker import read_file_result
 from .planner import PlanningPending
 
 
@@ -17,6 +20,7 @@ class TaskState(TypedDict, total=False):
     approval_id: str
     action_id: str
     status: str
+    read_result: dict | None
 
 
 class AgentRuntime:
@@ -48,18 +52,14 @@ class AgentRuntime:
                 plan = self.model(state['prompt'])
             except PlanningPending as pending:
                 return dict(status=pending.status)
-            if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
-                raise ValueError('Unexpected model plan fields')
-            proposal = dict(schema_version='1.0', task_id=state['task_id'],
-                resource_id=state['resource_id'], capability='terminal.run',
-                args=plan['args'], reason=plan['reason'], idempotency_key=state['operation_key'])
+            proposal = make_proposal(plan, state)
         # Validate both initial and checkpointed proposals with the broker schema.
         parsed = ActionRequest.parse(canonical(proposal | {'grant_id': '0' * 32}).encode())
         if (parsed.task_id != state['task_id'] or parsed.resource_id != state['resource_id']
                 or parsed.idempotency_key != state['operation_key']
-                or parsed.capability != 'terminal.run' or 'grant_id' in proposal):
+                or parsed.capability not in EXECUTABLE or 'grant_id' in proposal):
             raise ValueError('Checkpoint proposal changed task scope')
-        update = dict(proposal=proposal)
+        update = dict(proposal=proposal, read_result=None)
         action_id = state.get('action_id')
         if action_id is None:
             approval_id = state.get('approval_id')
@@ -85,7 +85,13 @@ class AgentRuntime:
             raise ValueError('Journal action does not match the original proposal')
         status = action['state']
         if status == 'done':
-            update['status'] = 'completed' if action['verified'] else 'verifying'
+            if parsed.capability == 'files.read':
+                captured = read_file_result(self.broker, task_id=state['task_id'],
+                    action_id=action_id, path=proposal['args']['path'])
+                # Keep only a custody reference in checkpoint/stdout, never source bytes.
+                update.update(status='read_ready', read_result=captured['metadata'])
+            else:
+                update['status'] = 'completed' if action['verified'] else 'verifying'
         elif status == 'unknown':
             update['status'] = 'unknown_effect'
         elif status == 'failed':
