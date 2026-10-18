@@ -23,7 +23,10 @@ def main():
     def delayed_status(prompt_id):
         assert prompt_id == 'a' * 32
         time.sleep(1)  # Test-only slow read, never a production delay.
-        return dict(id=prompt_id, state='task_created', task_id='b' * 32)
+        return dict(prompt=dict(id=prompt_id, state='task_created', task_id='b' * 32),
+            action_count=1, actions=[dict(action_id='d' * 32, capability='terminal.run',
+                                         state='done', effect_verified=False)],
+            approvals=[dict(approval_id='c' * 32, capability='terminal.run', state='pending')])
 
     app = Prompt(submit=delayed_recorder, status=delayed_status)
     status_ticks = 0
@@ -39,6 +42,7 @@ def main():
             (ROOT / 'status-response.json').write_text(json.dumps(dict(
                 responsive_during_slow_status=True, ui_ticks=status_ticks,
                 display=app.details.get_text(), intake=app.intake.current,
+                journal=app.intake.activity,
                 scope='synthetic local status UI fixture', physical_input_provenance=None)) + '\n')
             return False
         return True

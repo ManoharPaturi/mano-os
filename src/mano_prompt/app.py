@@ -7,8 +7,9 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mano_prompt.dispatch import SubmissionWorker  # noqa: E402
-from mano_prompt.intake import Intake, read_status  # noqa: E402
+from mano_prompt.intake import Intake  # noqa: E402
 from mano_prompt.submit import Submission  # noqa: E402
+from mano_prompt.task_status import read_task_status  # noqa: E402
 from mano_protocol.actions import text  # noqa: E402
 
 
@@ -17,7 +18,7 @@ class Prompt(Gtk.Application):
         super().__init__(application_id="org.mano.Prompt")
         self.submit = submit if submit is not None else Submission().submit
         self.worker = SubmissionWorker(self.submit, GLib.idle_add)
-        self.status_worker = SubmissionWorker(status or read_status, GLib.idle_add)
+        self.status_worker = SubmissionWorker(status or read_task_status, GLib.idle_add)
         self.intake = Intake()
         self.connect("activate", self.activate_window)
 
@@ -48,6 +49,13 @@ class Prompt(Gtk.Application):
         details = Gtk.Label(label='')
         details.set_selectable(True)
         details.set_wrap(True)
+        details.set_xalign(0)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(50)
+        scroll.set_max_content_height(180)
+        scroll.set_propagate_natural_height(True)
+        scroll.set_child(details)
         refresh = Gtk.Button(label='Check request status')
         refresh.set_sensitive(False)
 
@@ -61,7 +69,7 @@ class Prompt(Gtk.Application):
                 if self.worker.busy or token != self.intake.token():
                     return
                 try:
-                    if error or not self.intake.update(token, result):
+                    if error or not self.intake.update_snapshot(token, result):
                         raise ValueError('Status unavailable')
                 except ValueError:
                     status.set_text('Status unavailable. Your request was not resubmitted.')
@@ -117,7 +125,7 @@ class Prompt(Gtk.Application):
         send.connect("clicked", submit)
         row.append(entry)
         row.append(send)
-        for widget in (title, subtitle, row, status, details, refresh):
+        for widget in (title, subtitle, row, status, scroll, refresh):
             outer.append(widget)
         self.entry, self.window = entry, window
         self.details, self.refresh = details, refresh

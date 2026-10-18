@@ -9,6 +9,7 @@ import time
 
 from .approvals import Approvals
 from .core_cycles import CoreCycles
+from .human_status import snapshot as human_snapshot
 from .ipc import public_action, receive
 from .prompts import Prompts
 from .protocol import canonical, identifier, unique_object
@@ -59,6 +60,11 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
             raise Denied("Unexpected prompt discovery fields")
         prompts = Prompts(state).pending(**body, boot_id=boot_id)
         return dict(schema_version="1.0", ok=True, prompts=prompts)
+    if value["operation"] == "human_task_status":
+        if set(body) != {"human_uid", "prompt_id"}:
+            raise Denied("Unexpected human task status fields")
+        result = human_snapshot(state, **body, now=now, boot_id=boot_id)
+        return dict(schema_version="1.0", ok=True, snapshot=result)
     if value["operation"] == "prompt_status":
         if set(body) != {"human_uid", "prompt_id"}:
             raise Denied("Unexpected prompt status fields")

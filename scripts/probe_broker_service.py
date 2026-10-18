@@ -263,11 +263,14 @@ from mano_prompt.approve import (rpc,view_packet,confirmation_packet,
  rearm_view_packet,rearm_confirmation_packet)
 from mano_prompt.submit import prompt_packet
 from mano_prompt.intake import read_status
+from mano_prompt.task_status import read_task_status
 body=json.loads(sys.stdin.read())
 try:
  if body['mode']=='submit_prompt':result=rpc(prompt_packet(body['prompt'],body['key']))
  elif body['mode']=='prompt_status':
   result=dict(schema_version='1.0',ok=True,prompt=read_status(body['id']))
+ elif body['mode']=='task_status':
+  result=dict(schema_version='1.0',ok=True,snapshot=read_task_status(body['id']))
  elif body['mode']=='raw_prompt':result=rpc(bytes.fromhex(body['wire']))
  elif body['mode']=='view':result=rpc(view_packet(body['id']))
  elif body['mode']=='rearm_view':result=rpc(rearm_view_packet())
@@ -1019,6 +1022,22 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
         reason="actual PAM-bound terminal integration")
     terminal_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
         body=terminal_proposal), actor=identity.name)["approval"]
+    task_snapshot_query = dict(mode="task_status", id=human_receipt["prompt"]["id"])
+    task_snapshot = human(task_snapshot_query)["snapshot"]
+    assert task_snapshot["prompt"]["task_id"] == terminal_task["task_id"]
+    assert task_snapshot["action_count"] == 0 and task_snapshot["actions"] == []
+    assert any(item == dict(approval_id=terminal_pending["approval_id"],
+        capability="terminal.run", state="pending") for item in task_snapshot["approvals"])
+    for private in ("nonce", "grant_id", "operation_digest", "args", "reason_untrusted",
+                    "pam-terminal-ok"):
+        assert private not in json.dumps(task_snapshot)
+    for actor in ("mano-agent", "mano-core", "mano-worker", identity.name):
+        assert human(task_snapshot_query, actor=actor) == {"ok": False}
+    cross_human = dict(schema_version="1.0", operation="human_task_status", body=dict(
+        human_uid=pwd.getpwnam("mano-worker").pw_uid, prompt_id=human_receipt["prompt"]["id"]))
+    assert rpc("control", cross_human, actor="root") == denied
+    malformed_status = b"\x01\x07" + human_receipt["prompt"]["id"].encode() + b"extra"
+    assert human(dict(mode="raw_prompt", wire=malformed_status.hex())) == {"ok": False}
     terminal_view = human(dict(mode="view", id=terminal_pending["approval_id"]))["view"]
     assert human(dict(mode="confirm", view=terminal_view, password="wrong-ci-password")) == {
         "ok": False
@@ -1045,6 +1064,12 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
         time.sleep(0.1)
     assert terminal_status["state"] == "done", terminal_status
     assert terminal_status["verified"] == 0
+    completed_snapshot = human(task_snapshot_query)["snapshot"]
+    assert any(item == dict(action_id=terminal_action["action"]["id"],
+        capability="terminal.run", state="done", effect_verified=False)
+        for item in completed_snapshot["actions"])
+    assert any(item["approval_id"] == terminal_pending["approval_id"]
+               and item["state"] == "approved" for item in completed_snapshot["approvals"])
     assert (terminal_workspace / "live-result").read_text() == "pam-terminal-ok"
     captured = rpc("control", dict(schema_version="1.0", operation="capture_artifact",
         body=dict(action_id=terminal_action["action"]["id"], path="live-result")), actor="root")
@@ -1178,6 +1203,9 @@ finally:client.close()
     checked = rpc("control", dict(schema_version="1.0", operation="check_artifact_contract",
         body=verifier_body), actor="root")
     assert checked["ok"] and checked["verification"]["predicate"] == "exact-file-v1"
+    verified_snapshot = human(task_snapshot_query)["snapshot"]
+    assert any(item["action_id"] == agent_action_id and item["state"] == "done"
+               and item["effect_verified"] is True for item in verified_snapshot["actions"])
     assert agent_step(agent_state)["status"] == "completed"
     assert rpc("request", artifact_query) == denied
     assert rpc("request", artifact_query | {"body": artifact_query["body"] | {"length": 4097}},
@@ -1215,6 +1243,7 @@ finally:client.close()
         installed_root_task_factory=True,
         authenticated_native_human_prompt_queue=True,
         read_only_intake_client_actual_native_transport=True,
+        human_task_snapshot_pending_done_scope_and_redaction=True,
         default_prompt_handler_actual_native_transport=True,
         protected_pending_prompt_discovery=True,
         installed_bounded_queue_cycle=True,
@@ -1385,6 +1414,13 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
     revoked = rpc("request", dict(schema_version="1.0", operation="approval_status",
         body=dict(approval_id=pending_revoke["approval_id"])), actor=identity.name)
     assert revoked["approval"]["state"] == "revoked"
+    stopped_snapshot = human(task_snapshot_query)["snapshot"]
+    assert any(item["action_id"] == stop_action["action"]["id"]
+               and item["state"] == "unknown" and item["effect_verified"] is False
+               for item in stopped_snapshot["actions"])
+    assert any(item["approval_id"] == pending_revoke["approval_id"]
+               and item["state"] == "revoked" for item in stopped_snapshot["approvals"])
+    terminal_report["human_task_snapshot_stop_unknown_and_revoked"] = True
     private_denial = """import array,json,os,sys
 from mano_broker.launch_client import Client
 packet=json.loads(sys.stdin.read());fds=[]

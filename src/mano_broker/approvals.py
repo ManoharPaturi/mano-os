@@ -19,16 +19,20 @@ def clock(now):
         raise ValueError("Expected trusted monotonic clock")
 
 
+def effective_state(state, row, now):
+    status = row['state']
+    if status == 'pending':
+        view = json.loads(row['view_json'])
+        if state.meta('latched') or state.meta('epoch') != view['epoch']:
+            status = 'revoked'
+        elif now >= view['expires']:
+            status = 'expired'
+    return status
+
+
 class Approvals:
     def __init__(self, state):
         self.state = state
-        with state.transaction():
-            state.db.execute("""CREATE TABLE IF NOT EXISTS approvals(
-                id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES tasks(id),
-                request_key TEXT NOT NULL,proposal_json TEXT NOT NULL,
-                request_digest TEXT NOT NULL,view_json TEXT NOT NULL,
-                state TEXT NOT NULL,grant_id TEXT REFERENCES grants(id),
-                UNIQUE(task_id,request_key))""")
 
     def request(self, proposal, *, caller_uid, now, boot_id):
         clock(now)
@@ -107,14 +111,8 @@ class Approvals:
             return self.public(row, now)
 
     def public(self, row, now):
-        state = row["state"]
-        if state == "pending":
-            view = json.loads(row["view_json"])
-            if self.state.meta("latched") or self.state.meta("epoch") != view["epoch"]:
-                state = "revoked"
-            elif now >= view["expires"]:
-                state = "expired"
-        return {"approval_id": row["id"], "state": state, "grant_id": row["grant_id"]}
+        return {"approval_id": row["id"], "state": effective_state(self.state, row, now),
+                "grant_id": row["grant_id"]}
 
     def status(self, approval_id, *, caller_uid, now, boot_id):
         clock(now)

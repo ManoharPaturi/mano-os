@@ -40,11 +40,13 @@ class Intake:
     def __init__(self):
         self.current = None
         self.revision = 0
+        self.activity = None
 
     def select(self, result):
         value = parse(result)
         self.revision += 1
         self.current = value
+        self.activity = None
 
     def token(self):
         if self.current is None:
@@ -55,6 +57,20 @@ class Intake:
         if token != self.token():
             return False  # A slow reply cannot replace a newer acknowledged request.
         self.current = parse(result, token[1])
+        self.activity = None
+        return True
+
+    def update_snapshot(self, token, result):
+        from .task_status import parse_snapshot
+
+        if token != self.token():
+            return False
+        value = parse_snapshot(result, token[1])
+        if self.current['task_id'] is not None and (
+                value['prompt']['task_id'] != self.current['task_id']):
+            raise ValueError('Acknowledged task identity changed')
+        self.current = value['prompt']
+        self.activity = value
         return True
 
     def display(self):
@@ -64,4 +80,17 @@ class Intake:
         lines = [LABELS[value['state']], 'Request: ' + value['id']]
         if value['task_id'] is not None:
             lines.append('Task: ' + value['task_id'])
+        if self.activity is not None:
+            if value['task_id'] is not None:
+                lines[0] = 'Workspace ready; journal status below'
+            actions = self.activity['actions']
+            lines.append(f"Recent actions: {len(actions)} of {self.activity['action_count']}"
+                         ' (newest first)')
+            for item in actions:
+                verified = 'effect verified' if item['effect_verified'] else 'effect not verified'
+                lines.append(f"{item['action_id']} · {item['capability']} · "
+                             f"{item['state']} · {verified}")
+            lines.append('Approval records (review pending IDs in the trusted terminal):')
+            for item in self.activity['approvals']:
+                lines.append(f"{item['approval_id']} · {item['capability']} · {item['state']}")
         return '\n'.join(lines)
