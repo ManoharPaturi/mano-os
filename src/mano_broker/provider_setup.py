@@ -109,7 +109,8 @@ def publish(fd, value, *, check):
             os.unlink(name, dir_fd=fd)  # Only this invocation's exclusive staging name.
             os.fsync(fd)
     # Link creates atomically without replacing another operator's destination.
-    # A crash with both links fails the provider's existing single-link guard.
+    # A crash can leave a private staging link requiring separate Root cleanup.
+    # systemd copies the source; provider link checks do not inspect source links.
 
 
 def main():

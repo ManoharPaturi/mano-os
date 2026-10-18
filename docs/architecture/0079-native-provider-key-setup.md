@@ -15,8 +15,10 @@ A private0600 exclusive staging file is fully written and fsynced. A hard link
 publishes it atomically without replacing a concurrent destination; only this
 invocation's staging file is then removed and the directory fsynced. Normal
 completion leaves a single-link Root credential. A crash between linking and
-unlinking can leave two links; the provider's single-link check then fails closed.
-Recovery and key rotation require a separate operator procedure. Python strings
+unlinking can leave two private Root-only links. The installed destination still
+blocks another setup attempt. systemd copies its source into a private credential;
+the provider's single-link check does not detect source staging links. Recovery
+and key rotation require a separate operator procedure. Python strings
 are not a claim of guaranteed memory zeroization.
 
 This command changes no activation, pricing, controller or egress configuration,
