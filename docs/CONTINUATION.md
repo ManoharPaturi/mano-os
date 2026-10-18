@@ -1,5 +1,15 @@
 # mano-OS continuation
 
+Current durable-terminal-output reusesownedprivate launcherread_output: fixed64KiB
+streams, one4096chunk/tick, Stop/grantrecheck, atomicdurablebytes+done/failed. New
+private64resultSQLitecustody, scopedreadonlymetadata/chunk APIs, SDKbinaryretrieval
+withhash/EOF/bounds+pacing, metadataonlycore/checkpoint andRootreconciliation.
+Missingoutputexplicitnull, failedcommandsretainoutput, no reexecution/disclosure.
+InstallednativePAMactualtask binaryfailure/replay andfreshstockpackagedstdout/stderr
+before/afterboot added; mustpass exactheadCI/artifact acceptancebeforemerge. ADR0091.
+PR106 merged6356c34 afterCI39159249171 allSUCCESS; fullv2.1ACTIVE, physical/paid/
+fullreleaseunproved. Disk21GiB90%warning, builds/imagesremainCIonly.
+
 Current typed-core-workspace-reads adds shared strict terminal/READ plans, two
 strict provider proposal tools, separate broker-approved read execution and
 bounded immutable result retrieval. Core checkpoint/stdout keeps metadata only;

@@ -142,3 +142,22 @@ class AgentRuntimeTests(unittest.TestCase):
         unknown = self.step(replay)
         self.assertEqual(unknown['status'], 'unknown_effect')
         self.assertIsNone(unknown['read_result'])
+
+    def test_failed_terminal_exposes_metadata_without_output_disclosure_or_model_retry(self):
+        from mano_broker.terminal_output import persist
+
+        pending = self.step(self.input)
+        self.approve(pending)
+        queued = self.step(pending)
+        action = queued['action_id']
+        self.journal.start(action, now=10, boot_id='boot')
+        persist(self.journal, action, dict(return_code=7, reason='completed'),
+                dict(stdout=b'local output', stderr=b'local failure'), boot_id='boot')
+        self.runtime.model = lambda _: self.fail('Output must not be automatically disclosed')
+        failed = self.step(queued)
+        self.assertEqual(failed['status'], 'failed')
+        self.assertEqual(failed['terminal_output']['return_code'], 7)
+        self.assertNotIn('local failure', canonical(failed))
+        replay = self.step(failed | dict(terminal_output=dict(forged=True), status='completed'))
+        self.assertEqual(replay['terminal_output'], failed['terminal_output'])
+        self.assertEqual(replay['status'], 'failed')

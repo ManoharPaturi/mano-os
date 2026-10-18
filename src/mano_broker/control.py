@@ -29,6 +29,19 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value['operation'] == 'inspect_terminal_output':
+        from .terminal_output import read
+
+        if set(body) != {'task_id', 'action_id'}:
+            raise Denied('Unexpected protected terminal output query')
+        identifier(body['task_id'])
+        identifier(body['action_id'])
+        task = state.db.execute('SELECT caller_uid FROM tasks WHERE id=? AND boot_id=?',
+                                (body['task_id'], boot_id)).fetchone()
+        if task is None:
+            raise Denied('Unknown current-boot task')
+        result = read(state, **body, caller_uid=task['caller_uid'], boot_id=boot_id)
+        return dict(schema_version='1.0', ok=True, output=None if result is None else result[0])
     if value['operation'] == 'inspect_file_read':
         from .file_reads import result_chunk
 

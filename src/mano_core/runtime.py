@@ -7,7 +7,7 @@ from mano_protocol.actions import ActionRequest, canonical, identifier, text
 from mano_protocol.plans import EXECUTABLE
 from mano_protocol.plans import proposal as make_proposal
 
-from .broker import read_file_result
+from .broker import read_file_result, terminal_output
 from .planner import PlanningPending
 
 
@@ -21,6 +21,7 @@ class TaskState(TypedDict, total=False):
     action_id: str
     status: str
     read_result: dict | None
+    terminal_output: dict | None
 
 
 class AgentRuntime:
@@ -59,7 +60,7 @@ class AgentRuntime:
                 or parsed.idempotency_key != state['operation_key']
                 or parsed.capability not in EXECUTABLE or 'grant_id' in proposal):
             raise ValueError('Checkpoint proposal changed task scope')
-        update = dict(proposal=proposal, read_result=None)
+        update = dict(proposal=proposal, read_result=None, terminal_output=None)
         action_id = state.get('action_id')
         if action_id is None:
             approval_id = state.get('approval_id')
@@ -84,6 +85,9 @@ class AgentRuntime:
                 or action.get('task_id') != state['task_id']):
             raise ValueError('Journal action does not match the original proposal')
         status = action['state']
+        if parsed.capability == 'terminal.run' and status in {'done', 'failed'}:
+            update['terminal_output'] = terminal_output(self.broker,
+                task_id=state['task_id'], action_id=action_id)
         if status == 'done':
             if parsed.capability == 'files.read':
                 captured = read_file_result(self.broker, task_id=state['task_id'],

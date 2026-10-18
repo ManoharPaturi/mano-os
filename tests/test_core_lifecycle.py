@@ -143,7 +143,8 @@ class CoreLifecycleGuards(unittest.TestCase):
         with patch('mano_broker.lifecycle.command', return_value=['fixed-core']), \
              patch('mano_broker.lifecycle.snapshot', return_value=Snapshot(0, False)), \
              patch('mano_broker.lifecycle.subprocess.run', return_value=result), \
-             patch('mano_broker.lifecycle.control_request', return_value=dict(action=action)):
+             patch('mano_broker.lifecycle.control_request',
+                   return_value=dict(action=action, output=None)):
             self.assertEqual(run_mock_step(self.managed, plan)['status'], 'verifying')
             action['proposal_digest'] = 'f' * 64
             with self.assertRaises(ValueError):
@@ -217,7 +218,8 @@ class CoreLifecycleGuards(unittest.TestCase):
             patch('mano_broker.lifecycle.snapshot', return_value=Snapshot(0, False)),
             patch('mano_broker.lifecycle.subprocess.run', return_value=SimpleNamespace(
                 returncode=0, stdout=canonical(dict(ok=True, task=task)))),
-            patch('mano_broker.lifecycle.control_request', return_value={'action': action}),
+            patch('mano_broker.lifecycle.control_request',
+                  return_value={'action': action, 'output': None}),
         ):
             result = run_broker_step(self.managed, model='synthetic-snapshot',
                                      max_output_tokens=100)

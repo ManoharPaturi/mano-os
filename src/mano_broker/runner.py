@@ -11,9 +11,9 @@ import subprocess
 import time
 from dataclasses import dataclass
 
-from .sandbox import command
+from mano_protocol.terminal_output import STREAM_LIMIT as OUTPUT_LIMIT
 
-OUTPUT_LIMIT = 64 * 1024  # Per stream; fixed, not supplied by model arguments.
+from .sandbox import command
 
 
 @dataclass(frozen=True)
