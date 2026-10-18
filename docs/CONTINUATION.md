@@ -135,3 +135,9 @@ PAM then actual GUI refresh. Root-only harness holds the synthetic guest passwor
 UI driver receives no password/grant/control socket. Pending/effective PNG hashes
 and new broker flag require exact-head CI and actual visual acceptance. No model
 call, physical provenance or release completion claim. See ADR0085.
+
+PR101 initial1415a09 CI39115820972 all3SUCCESS/artifact12132955703,54architecture
+hashes+2livePNG hashes verified; actual production GUI/PAM workflow passed. Both
+pixels viewed; effective status was correct but pending-review text looked current.
+Label pending text as acknowledgement history, since status refresh reads profile
+not approval record. New final-head CI/artifact/pixels required before merge.

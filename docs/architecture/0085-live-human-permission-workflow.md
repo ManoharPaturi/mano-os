@@ -16,6 +16,10 @@ and disabled network scope. Cancellation and a wrong password must leave native
 new-grant availability false. A separate human-UID controlling PTY then authenticates
 with the synthetic guest password; the driver never receives that password.
 
+The pending review text explicitly labels the earlier request acknowledgement;
+profile status refresh does not itself refresh the approval record. This prevents
+the historical acknowledgement from claiming the approval is still pending.
+
 The GUI refreshes its production native status and must show Auto, exactly3 remaining
 new grants and the bounded runtime/remaining time. The effective dialog is captured.
 The report binds the prompt/task and hashes both PNGs; acceptance must verify the
