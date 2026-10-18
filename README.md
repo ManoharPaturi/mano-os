@@ -3,7 +3,8 @@
 AI-native, prompt-first Linux with a trusted broker and isolated agent desktop.
 
 **Status: Phase 0 feasibility gates passed in CI; Phase 1 implementation is in progress.
-The complete agent workflow, physical acceptance, .deb and ISO remain pending.**
+The unsigned Debian13/amd64 prototype runtime package has a separate CI install/reinstall/remove witness.
+The complete agent workflow, physical acceptance and ISO remain pending.**
 
 The complete original [v2.1 specification](docs/spec-v2.1.md) is preserved verbatim.
 Its architecture and acceptance gates remain the product contract.
@@ -80,8 +81,20 @@ passed the installed broker VM probes, including source mutation, caller/range
 denials and process restart. Capturing bytes keeps effect_verified=false.
 Independent outcome verification remains a separate requirement.
 
-Draft agent PRs add a pinned LangGraph runtime and deterministic mock project test.
-Their current-head CI must pass before acceptance; no real model is connected yet.
+The pinned LangGraph runtime and deterministic mock project flow have installed CI
+witnesses, including native PAM and restart/Stop behavior. No paid model execution
+has been accepted.
 Prompt-to-agent integration, durable graph recovery, broader golden tasks and the
 original later version gates remain required. See the architecture documents and
 accepted CI artifacts for the precise scope of each implementation.
+
+## Prototype runtime package
+
+The Linux-only builder packages the broker, native adapters, human prompt and fixed
+service policies, with hash-locked private core dependencies. Installation starts
+no services and ships no key. Explicit Root-terminal enrollment binds an existing
+human; the optional runtime target and Wayland session do not replace the existing
+desktop. CI must prove actual package-owned GUI/PAM and mock-core behavior plus
+reinstall/removal data preservation. See [package operations](docs/operations.md)
+and [scope](docs/architecture/0087-prototype-runtime-package.md). The package is
+unsigned and does not satisfy the full original release/workflow gates.

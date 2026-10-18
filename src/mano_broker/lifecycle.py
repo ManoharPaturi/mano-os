@@ -18,7 +18,8 @@ from .stop_state import snapshot
 from .task_factory import control_request, create_from_prompt, human_uid
 from .workspaces import BASE
 
-CORE_PYTHON = '/usr/local/lib/mano-core/bin/python'
+CORE_PYTHON = '/usr/bin/python3'
+CORE_PATH = '/usr/lib/mano-os:/usr/lib/mano-runtime/vendor'
 
 
 def command(managed, *, mock=True):
@@ -65,7 +66,7 @@ def command(managed, *, mock=True):
         '--property=PrivateTmp=yes', '--property=RestrictNamespaces=yes',
         '--property=RestrictAddressFamilies=AF_UNIX', '--property=SystemCallFilter=@system-service',
         '--property=SystemCallErrorNumber=EPERM', '--property=MemoryDenyWriteExecute=yes',
-        'env', 'PYTHONPATH=/usr/lib/mano-os', 'PYTHONDONTWRITEBYTECODE=1', CORE_PYTHON,
+        'env', 'PYTHONPATH=' + CORE_PATH, 'PYTHONDONTWRITEBYTECODE=1', CORE_PYTHON,
         '-m', 'mano_core.cli', '--mock' if mock else '--broker-model',
         '--checkpoint-directory', str(workspace / '.mano-agent')]
 

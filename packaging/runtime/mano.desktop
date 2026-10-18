@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=mano prototype
+Comment=Prompt-first isolated mano runtime prototype
+Exec=/usr/bin/sway -c /usr/share/mano-runtime/human-sway.conf
+Type=Application
+DesktopNames=mano

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+case "$1" in
+    remove)
+        env -i PATH=/usr/sbin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/usr/lib/mano-os /usr/bin/python3 -P -m mano_runtime.administration --remove-package
+        ;;
+    upgrade|deconfigure)
+        env -i PATH=/usr/sbin:/usr/bin:/bin LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/usr/lib/mano-os /usr/bin/python3 -P -m mano_runtime.administration --stop-package
+        ;;
+esac

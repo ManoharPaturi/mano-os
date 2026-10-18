@@ -85,3 +85,44 @@ It is not a task-completion or independently verified process-exit claim. If no 
 is acknowledged, use the trusted recovery terminal. Rearm still requires separate
 protected-terminal PAM authentication, and never revives old grants. Physical key
 validation remains deferred while development uses CI VMs.
+
+## Prototype Debian runtime package
+
+The package targets Debian13 amd64 and Python3.13. Build only in the Linux CI guest
+or a matching build environment; the builder refuses this Mac. Build dependencies
+include gcc, libc6-dev, libpam0g-dev, libjson-c-dev, libsystemd-dev, libseccomp-dev,
+pkg-config, python3-pip and dpkg. Download binary wheels with the committed hashes,
+then build offline:
+
+```sh
+python3 -m pip download --only-binary=:all: --require-hashes -r packaging/runtime/requirements.lock -d wheelhouse
+python3 scripts/build_runtime_deb.py --wheelhouse wheelhouse --output dist
+```
+
+On a disposable Debian test installation, install the generated unsigned prototype
+with `sudo apt install ./mano-runtime_0.1.0~prototype1_amd64.deb`. Installation creates
+locked service accounts and fixed directories; it starts no runtime service, ships
+no API key, and leaves provider/model/pricing/controller/egress defaults disabled.
+Existing manual runtime files require explicit operator reconciliation first.
+
+From the trusted Root terminal, run `mano-runtime-setup EXISTING_LOGIN --enable`
+to enroll the existing human and explicitly enable/start the fixed runtime target.
+Use `--start` for this boot only, or omit both flags to enroll without activation.
+Log out and back in for group membership. Select the optional "mano prototype"
+Wayland session or run `sway -c /usr/share/mano-runtime/human-sway.conf` from a fresh
+human session with its own D-Bus/runtime environment. The original desktop default
+is not changed. The controller timer and paid model configuration remain separate.
+
+The package includes `mano-prompt`, `mano-mode`, `mano-approve`, Root `mano-task`
+and `mano-core-step`, and `/usr/libexec/mano-stop`. Human prompt submission is intent;
+it does not itself provision a task or approve execution. Root task provisioning
+and trusted human PAM review remain required. The accepted package witness uses an
+explicit deterministic mock plan; it is not live AI/provider execution.
+
+Reinstall/upgrade stops the runtime and latches Stop when it is active; it does not
+silently restart or rearm. Start explicitly after reviewing the preserved Root
+configuration, then use the separate authenticated rearm procedure if appropriate.
+Removal disables/stops the runtime and removes its code while retaining generated
+human policy, credentials, workspaces and journal data. No package removal script
+deletes those data or recycles task identities. Signed distribution, cross-version
+migration, full workflow/release and physical installation gates remain unfinished.
