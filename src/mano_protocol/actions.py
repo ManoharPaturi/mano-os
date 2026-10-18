@@ -17,6 +17,7 @@ class Capability(StrEnum):
     RUN = "terminal.run"
     PLAN = "model.plan"
     BUDGET = "model.set_budget"
+    PROFILE = "policy.set_profile"
 
 
 class Mode(StrEnum):
@@ -118,6 +119,10 @@ class ActionRequest:
             relative_path(args["path"])
             if capability == Capability.WRITE:
                 text(args["text"], 32768, allow_empty=True)
+        elif capability == Capability.PROFILE:
+            from .profiles import configuration
+
+            configuration(args)
         elif capability == Capability.BUDGET:
             if set(args) != {'money_micro_usd', 'tokens'}:
                 raise ValueError('Unexpected model budget fields')

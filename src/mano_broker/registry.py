@@ -66,8 +66,8 @@ class Registry:
 
     def prepare(self, state, request, *, caller_uid, now, boot_id):
         request = ActionRequest.parse(canonical(request.body()).encode())
-        if request.capability == Capability.BUDGET:
-            raise Denied('Task budgets change only through authenticated approval')
+        if request.capability in {Capability.BUDGET, Capability.PROFILE}:
+            raise Denied('Task budgets and profiles change only through authenticated approval')
         if request.capability == Capability.PLAN:
             if self.model_policy is None:
                 raise Denied('Protected provider executor is not installed')

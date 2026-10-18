@@ -93,6 +93,10 @@ class Approvals:
                 "boot_id": boot_id,
                 "epoch": self.state.meta("epoch"),
             }
+            if request.capability.value == 'policy.set_profile':
+                from mano_protocol.profiles import scope
+
+                view['profile_scope'] = scope(view['args']['mode'])
             row = dict(id=approval_id, state="pending", grant_id=None, view_json=canonical(view))
             self.state.db.execute(
                 "INSERT INTO approvals VALUES(?,?,?,?,?,?,'pending',NULL)",
@@ -108,6 +112,11 @@ class Approvals:
             self.state.event(
                 None, "approval-requested", {"approval_id": approval_id, "task_id": task["id"]}
             )
+            from .profiles import Profiles
+
+            Profiles(self.state).maybe_issue(approval_id, request, task, now=now, boot_id=boot_id)
+            row = self.state.db.execute('SELECT * FROM approvals WHERE id=?',
+                                        (approval_id,)).fetchone()
             return self.public(row, now)
 
     def public(self, row, now):
@@ -175,6 +184,11 @@ class Approvals:
                 cpu_percent=20,
                 max_timeout_seconds=300,
             )
+            if view['capability'] == 'policy.set_profile':
+                from .profiles import Profiles
+
+                Profiles(self.state).apply_grant(grant, approval_id=approval_id,
+                                                 now=now, boot_id=boot_id)
             if view["capability"] == "model.set_budget":
                 from .model_budget import ModelBudget
 
