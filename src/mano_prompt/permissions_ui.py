@@ -37,16 +37,22 @@ class PermissionsWindow(Gtk.Window):
             'use independent Stop to revoke them.', wrap=True, xalign=0)
         choice = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
         self.choices = {}
-        actions = Gio.SimpleActionGroup()
-        self.mode_action = Gio.SimpleAction.new_stateful(
-            'mode', GLib.VariantType.new('s'), GLib.Variant('s', 'supervised'))
-        self.mode_action.connect('activate', self.select_mode)
-        actions.add_action(self.mode_action)
-        self.insert_action_group('profile', actions)
+        self.mode_actions = {}
+        group = None
         for mode, name in NAMES.items():
             button = Gtk.CheckButton(label=name)
-            button.set_action_name('profile.mode')
-            button.set_action_target_value(GLib.Variant('s', mode))
+            if group is None:
+                group = button
+            else:
+                button.set_group(group)
+            actions = Gio.SimpleActionGroup()
+            action = Gio.SimpleAction.new_stateful(
+                'select', None, GLib.Variant('b', mode == 'supervised'))
+            action.connect('activate', self.select_mode, mode)
+            actions.add_action(action)
+            button.insert_action_group('choice', actions)
+            button.set_action_name('choice.select')
+            self.mode_actions[mode] = action
             self.choices[mode] = button
             choice.append(button)
         limits = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
@@ -85,9 +91,10 @@ class PermissionsWindow(Gtk.Window):
         self.set_child(scroll)
         self.start(('status',))
 
-    def select_mode(self, action, value):
-        if self.alive and self.valid() and value.get_string() in self.choices:
-            action.set_state(value)
+    def select_mode(self, _action, _value, mode):
+        if self.alive and self.valid() and mode in self.choices:
+            for key, action in self.mode_actions.items():
+                action.set_state(GLib.Variant('b', key == mode))
 
     def closed(self, *_args):
         self.alive = False
@@ -102,7 +109,8 @@ class PermissionsWindow(Gtk.Window):
         self.refresh.set_sensitive(not busy)
         self.ask.set_sensitive(not busy and self.model.status is not None)
         locked = busy or self.model.pending is not None
-        self.mode_action.set_enabled(not locked)
+        for action in self.mode_actions.values():
+            action.set_enabled(not locked)
         for widget in (*self.choices.values(), *self.limits.values()):
             widget.set_sensitive(not locked)
         self.ask.set_label('Retry same request' if self.model.pending
