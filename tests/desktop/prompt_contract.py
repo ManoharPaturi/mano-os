@@ -92,11 +92,15 @@ def main():
         time.sleep(0.05)
     intake_status = json.loads(status_path.read_text())
     assert intake_status['responsive_during_slow_status'] and intake_status['ui_ticks'] >= 2
-    assert 'Workspace ready; execution status is unavailable here' in intake_status['display']
+    assert 'Workspace ready; journal status below' in intake_status['display']
     assert 'Request: ' + 'a' * 32 in intake_status['display']
     assert 'Task: ' + 'b' * 32 in intake_status['display']
+    assert 'effect not verified' in intake_status['display']
+    assert 'c' * 32 in intake_status['display'] and 'pending' in intake_status['display']
+    assert intake_status['journal']['actions'][0]['effect_verified'] is False
+    assert intake_status['journal']['approvals'][0]['state'] == 'pending'
     tree = list(nodes(pyatspi.Registry.getDesktop(0)))
-    assert any('Workspace ready; execution status is unavailable here' in str(node.name)
+    assert any('Workspace ready; journal status below' in str(node.name)
                for node in tree)
     assert len(receipt.read_text().splitlines()) == prior + 1  # Status never resubmits.
     result = {

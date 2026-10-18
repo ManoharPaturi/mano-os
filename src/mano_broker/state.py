@@ -70,6 +70,12 @@ class State:
             CREATE TABLE IF NOT EXISTS events(
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,action_id TEXT REFERENCES actions(id),
                 event TEXT NOT NULL,details_json TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS approvals(
+                id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES tasks(id),
+                request_key TEXT NOT NULL,proposal_json TEXT NOT NULL,
+                request_digest TEXT NOT NULL,view_json TEXT NOT NULL,
+                state TEXT NOT NULL,grant_id TEXT REFERENCES grants(id),
+                UNIQUE(task_id,request_key));
             CREATE TABLE IF NOT EXISTS artifacts(
                 id TEXT PRIMARY KEY,action_id TEXT NOT NULL REFERENCES actions(id),
                 metadata_json TEXT NOT NULL,data BLOB NOT NULL,

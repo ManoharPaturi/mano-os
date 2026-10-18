@@ -52,3 +52,17 @@ refreshes are off the UI thread and cannot replace a newer acknowledged request.
 The GTK/AT-SPI fixture is synthetic; separate installed broker tests must prove the
 production status client/native transport. Local298tests/28Linux skips pass;
 final-head CI/artifact acceptance remains required. See architecture/0080.
+
+PR96 merged2e76f5be167feea2878e3fbaa7142c9bf25600a6 after exact-final-head
+CI39084715416 all success, artifact12120402273/53hashes, synthetic GTK status and
+visually inspected final PNG. Current human-task-status work extends protected
+native operation07 to a human/boot/prompt/task-bound read-only journal snapshot:
+latest16 actions with total count and all64 bounded approval records. No args,
+reason, nonce/digest/grant IDs or credentials. Existing PAM view/confirm unchanged.
+GTK uses fixed labels, revision/task binding and a bounded scroll region; status
+reads cannot submit, approve or execute. Approvals schema now initializes with
+State, so the first empty status read needs no DDL. Local306tests pass/28Linux skips.
+Installed native scope/redaction/pending/done/verified and Stop-unknown/revoked
+witnesses plus separate synthetic GTK text/responsiveness/screenshot need final CI.
+Full original version, real provider execution, policy profiles and release remain
+incomplete. See architecture/0081-human-task-journal.md and task workspace outputs.
