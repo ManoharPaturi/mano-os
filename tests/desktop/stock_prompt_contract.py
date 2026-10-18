@@ -1,6 +1,7 @@
 """Drive the unmodified installed prompt through AT-SPI on the fresh Debian VM."""
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -87,8 +88,19 @@ def main():
 
         dialogs = [node for node in walk(compositor) if node.get("name") == "Task permissions"]
         assert len(dialogs) == 1 and dialogs[0]["visible"] and dialogs[0]["focused"]
-        time.sleep(0.3)
-        subprocess.run(["grim", str(ROOT / name)], check=True, capture_output=True, timeout=10)
+        # Accessibility text can precede the compositor's final paint. Require settled
+        # pixels, rather than accepting one transitional damage/animation frame.
+        time.sleep(1)
+        previous = None
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            subprocess.run(["grim", str(ROOT / name)], check=True, capture_output=True, timeout=10)
+            digest = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+            if digest == previous:
+                return
+            previous = digest
+            time.sleep(0.35)
+        raise AssertionError("Stock GUI capture did not settle to consecutive identical frames")
 
     assert wait(editable).setTextContents("Clean Debian runtime reboot witness")
     click("Send")

@@ -205,3 +205,10 @@ normalLab's human socket membership is supplementary. ReplaceinheritedRootgroups
 with os.initgroups(targetname,primarygid) then dropgid/uid, matching actuallogin.
 Addreturncode/permission-error-only diagnostics, no nonce/password/transcript dump.
 Keepallsocket/PAM/boot/grant checks; newheadCIrequired, failedheadunmerged.
+
+PR104 8954dd8/CI39137448469 ALL3SUCCESS/art12140284002; functionalfresh/reboot,
+54architecture+package+6GUI hashes verified. GenericUID1000/targetboot/noOldGrant
+whenfuturedeadline/data/newtask/nativeStop passed. VisualQA REJECTED postbootpending
+PNG: partiallydrawn/missingletters/digits; other3stockstatesclear. Capture nowwaits1s
+then requiresconsecutiveidenticalPNGframes (8sbounded), unchangedunmodifiedapp/
+allfunctionalassertions. NewexactheadCI/pixelsrequired;8954notmerged.

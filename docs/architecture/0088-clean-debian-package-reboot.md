@@ -25,7 +25,8 @@ native view. The private controlling-TTY helper replaces inherited Root groups w
 account's actual NSS memberships, matching a login where the human socket group is
 supplementary. Human-UID TTY cancellation/wrong password leave authority
 inactive; actual PAM activates the profile. Capture the real pending/effective
-windows. An explicit LangGraph mock plan writes a workspace sentinel.
+windows only after consecutive identical compositor frames, then visually inspect
+them; accessibility text readiness alone does not prove the pixels have settled. An explicit LangGraph mock plan writes a workspace sentinel.
 
 Before shutdown, issue a genuinely unused exact read grant and verify it is currently
 unrevoked and unexpired. Keep its ID/proposal in a Root0600 private file that is never
