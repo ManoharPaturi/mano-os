@@ -570,8 +570,10 @@ finally:c.close()
         schema_version="1.0",
         task_id=provision["task_id"],
         resource_id=provision["resource_id"],
-        capability="files.read",
-        args={"path": "file"},
+        # This deliberately staged unknown-effect recovery fixture must remain
+        # unscheduled. Read actions now execute; writes still have no executor.
+        capability="files.write",
+        args={"path": "file", "text": "must never be written by this fixture"},
         idempotency_key="read",
         reason="fixed live CI",
     )
@@ -677,7 +679,7 @@ finally:c.close()
                                           body=restart_profile))["approval"]
     restart_view = human(dict(mode="view", id=restart_pending["approval_id"]))["view"]
     restart_origin = human(dict(mode="confirm", view=restart_view, password=password))["grant_id"]
-    restart_read = proposal | dict(args=dict(path="retained"),
+    restart_read = proposal | dict(capability="files.read", args=dict(path="retained"),
         idempotency_key="profile-unused-grant-before-restart")
     restart_auto = rpc("request", dict(schema_version="1.0", operation="request_approval",
                                        body=restart_read))["approval"]
@@ -724,7 +726,7 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     assert rpc("request", dict(schema_version="1.0", operation="propose",
         body=restart_read | dict(grant_id=restart_auto["grant_id"]))) == denied
     after_restart = rpc("request", dict(schema_version="1.0", operation="request_approval",
-        body=proposal | dict(args=dict(path="retained"),
+        body=proposal | dict(capability="files.read", args=dict(path="retained"),
                              idempotency_key="profile-read-after-restart")))
     assert after_restart == denied  # Lost descriptors require fresh provisioning.
     assert human(dict(mode="confirm", view=restart_view, password=password)) == {"ok": False}
@@ -1293,8 +1295,37 @@ finally:client.close()
         return proposal, approved
 
     install_profile("supervised", operator_password=password, count=1)
-    _, read_approved = profiled_request("files.read", dict(path="live-result"))
+    read_proposal, read_approved = profiled_request("files.read", dict(path="live-result"))
     assert read_approved["state"] == "approved"
+    file_request = dict(schema_version="1.0", operation="propose",
+        body=read_proposal | dict(grant_id=read_approved["grant_id"]))
+    file_action = rpc("request", file_request, actor=identity.name)["action"]["id"]
+    file_query = dict(schema_version="1.0", operation="file_result", body=dict(
+        task_id=terminal_task["task_id"], action_id=file_action, offset=0, length=4096))
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        file_result = rpc("request", file_query, actor=identity.name)
+        if file_result["ok"]:
+            break
+        time.sleep(0.1)
+    assert file_result["ok"] and file_result["eof"], file_result
+    assert base64.b64decode(file_result["data"], validate=True) == b"pam-terminal-ok"
+    assert file_result["artifact"]["action_id"] == file_action
+    assert file_result["artifact"]["effect_verified"] is False
+    assert file_result["artifact"]["sha256"] == hashlib.sha256(b"pam-terminal-ok").hexdigest()
+    # Retrieval is immutable and scoped, not another filesystem read or grant use.
+    assert rpc("request", file_query) == denied
+    for change in (dict(task_id="0" * 32), dict(action_id="0" * 32),
+                   dict(offset=True), dict(length=4097), dict(offset=999)):
+        assert rpc("request", file_query | dict(body=file_query["body"] | change),
+                   actor=identity.name) == denied
+    replayed_read = rpc("request", file_request, actor=identity.name)
+    assert not replayed_read["fresh"] and replayed_read["action"]["state"] == "done"
+    assert replayed_read["action"]["id"] == file_action
+    assert replayed_read["action"]["verified"] == 0
+    assert rpc("request", file_query, actor=identity.name) == file_result
+    terminal_report["production_authorized_workspace_read_sealed_result"] = True
+    terminal_report["file_read_result_scope_range_and_no_reexecution"] = True
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))

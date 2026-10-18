@@ -12,7 +12,7 @@ from mano_protocol.transport import CREDENTIALS, Peer, reply
 
 PATH = '/run/mano-broker/request.sock'
 OPERATIONS = {'request_approval', 'approval_status', 'propose', 'status', 'artifact_read',
-              'model_result'}
+              'model_result', 'file_result'}
 
 
 class BrokerClient:

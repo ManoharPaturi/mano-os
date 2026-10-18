@@ -7,6 +7,7 @@ from collections import deque
 
 from .artifacts import Store
 from .executor import Executor
+from .file_reads import execute as execute_file_read
 from .ipc import dispatch, public_action, receive
 from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
 from .provider_jobs import ProviderJobs
@@ -28,6 +29,7 @@ class Runtime:
         self.model_pending = deque()
         self.artifacts = Store()
         self.pending = deque()
+        self.file_pending = deque()
         self.launcher = launcher
         self.stop_reader = stop_reader or (snapshot if launcher else None)
         self.executor = (
@@ -118,6 +120,8 @@ class Runtime:
             )
             if prepared is not None and request.capability == Capability.RUN and self.executor:
                 self.pending.append(row["id"])
+            if prepared is not None and request.capability == Capability.READ:
+                self.file_pending.append(row['id'])
             if prepared is not None and request.capability == Capability.PLAN and self.model_worker:
                 self.model_pending.append(row["id"])
             return {
@@ -162,6 +166,13 @@ class Runtime:
 
     def tick(self):
         self.sync_stop()
+        if self.file_pending:
+            action_id = self.file_pending.popleft()
+            try:
+                execute_file_read(self, action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.state.event(action_id, 'file-read-denied', {
+                    'error_type': type(error).__name__})
         self.tick_models()
         if self.executor is None:
             return
@@ -195,6 +206,9 @@ class Runtime:
 
     def close_terminal(self):
         try:
+            for action_id in self.file_pending:
+                self.settle_model(action_id)
+            self.file_pending.clear()
             if self.executor:
                 for action_id, handle in list(self.executor.jobs.items()):
                     try:

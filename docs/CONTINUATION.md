@@ -1,5 +1,19 @@
 # mano-OS continuation
 
+Latest accepted: PR104 merged0647830b1fa42406bf91b4d20bfc4af90ca02efa after
+CI39155979584 all3SUCCESS/art12147163329; 54 architecture hashes, package SHA and
+six individually inspected raw GUI captures accepted. Clean stock Debian ordinary
+login install/nativePAM/mock + real reboot/boot target/unused-unexpired oldgrant
+revocation/data retention/newtask/Stop proved. Headless full-frame redraw only;
+incremental/default/physical renderer and full release remain unaccepted.
+
+Current bounded-workspace-read work adds actual scheduled files.read execution,
+original pinned inode/sealed32KiB result, Stop/expiry recheck and atomic done+saved
+artifact, caller/task/action/boot-bound file_result chunks. No file writer or core
+planner extension. See architecture/0089. Exact-head CI, real installed-task read
+and relevant artifact acceptance required before merge. Latest disk21GiBfree90%,
+warning active; CI images/builds remain remote. Fullgoal ACTIVE.
+
 Original v2.1 phases 0–7 remain active and incomplete. Frozen specification:
 docs/spec-v2.1.md, SHA256
 6d320e79ad62a44afea04fcf305432ec56dcdc5061e6cfcef55d113b7101eace.
