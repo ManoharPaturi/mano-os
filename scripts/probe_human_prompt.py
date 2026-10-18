@@ -223,6 +223,7 @@ def human_session():
             "input": test,
             "window": prompt,
             "session_backend": "CI headless Wayland",
+            "rendering_profile": "headless pixman / GTK cairo; full-frame redraw",
             "launch_to_verified_request_seconds": time.monotonic() - started,
             "human_compositor_memory_bytes": process_memory(sway_pid),
             "prompt_memory_bytes": process_memory(prompt["pid"]),

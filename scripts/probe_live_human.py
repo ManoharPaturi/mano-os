@@ -106,6 +106,7 @@ def run(native_terminal, password, register_identity, query, *, config_path=None
         assert result['prompt']['id'] == receipt['id']
         assert result['prompt']['task_id'] == managed['context']['task_id']
         result['tty_cancel_wrong_password_then_pam'] = True
+        result['rendering_profile'] = 'headless pixman / GTK cairo; full-frame redraw'
         result['artifact_sha256'] = {}
         for name in ('live-permissions-pending.png', 'live-permissions-effective.png'):
             data = (RUNTIME / name).read_bytes()
