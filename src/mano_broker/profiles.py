@@ -1,9 +1,10 @@
 """PAM-origin, time/count bounded workspace authority; never a sandbox bypass."""
 
 import json
+import math
 from pathlib import PurePosixPath
 
-from mano_protocol.profiles import AUTO_TOOLS, configuration
+from mano_protocol.profiles import AUTO_TOOLS, configuration, scope
 
 from .approvals import clock
 from .protocol import Capability, canonical, identifier
@@ -16,6 +17,27 @@ WORKSPACE = READ_ONLY | {Capability.WRITE, Capability.RUN}
 class Profiles:
     def __init__(self, state):
         self.state = state
+
+    def status(self, task, *, now, boot_id):
+        clock(now)
+        row = self.state.db.execute('SELECT p.*,g.revoked,g.used FROM task_profiles p '
+            'JOIN grants g ON p.grant_id=g.id WHERE p.task_id=?', (task['id'],)).fetchone()
+        if row is None:
+            return dict(mode='supervised', automatic=False, remaining_actions=0,
+                        seconds_remaining=0, max_timeout_seconds=0, scope=scope('supervised'))
+        if row['mode'] not in {'supervised', 'auto', 'full-access'}:
+            raise Denied('Unknown recorded profile')
+        generation = self.state.db.execute(
+            "SELECT value FROM meta WHERE key='native_generation'").fetchone()
+        active = (not row['revoked'] and row['used'] == 1 and row['remaining'] > 0
+            and not self.state.meta('latched') and now < row['expires']
+            and row['epoch'] == self.state.meta('epoch') and row['boot_id'] == boot_id
+            and generation is not None and row['generation'] == generation[0]
+            and task['mode'] == row['mode'])
+        return dict(mode=row['mode'], automatic=bool(active),
+            remaining_actions=row['remaining'] if active else 0,
+            seconds_remaining=math.ceil(row['expires']-now) if active else 0,
+            max_timeout_seconds=row['max_timeout'], scope=scope(row['mode']))
 
     def apply_grant(self, grant_id, *, approval_id, now, boot_id):
         clock(now)

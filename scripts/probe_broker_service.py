@@ -190,7 +190,7 @@ def provider_idle_job():
 
 
 
-def native_key_setup(value=None):
+def native_terminal(module, arguments=(), *, actor=None, answers=()):
     master, slave = os.openpty()
     child = os.fork()
     if child == 0:
@@ -198,11 +198,17 @@ def native_key_setup(value=None):
             os.close(master)
             os.setsid()
             fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+            if actor is not None:
+                account = pwd.getpwnam(actor)
+                os.fchown(slave, account.pw_uid, account.pw_gid)
+                os.setgroups([])
+                os.setgid(account.pw_gid)
+                os.setuid(account.pw_uid)
             for target in (0, 1, 2):
                 os.dup2(slave, target)
             if slave > 2:
                 os.close(slave)
-            os.execve('/usr/bin/python3', ['python3', '-m', 'mano_broker.provider_setup'], {
+            os.execve('/usr/bin/python3', ['python3', '-m', module, *arguments], {
                 'PYTHONPATH': '/usr/lib/mano-os', 'PYTHONDONTWRITEBYTECODE': '1',
                 'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'})
         except BaseException:
@@ -227,12 +233,9 @@ def native_key_setup(value=None):
                     closed = True
                 transcript.extend(chunk)
                 assert len(transcript) <= 8192
-                if value is not None and phase == 0 and b'Provider API key:' in transcript:
-                    os.write(master, value.encode('ascii') + b'\n')
-                    phase = 1
-                if value is not None and phase == 1 and b'Confirm API key:' in transcript:
-                    os.write(master, value.encode('ascii') + b'\n')
-                    phase = 2
+                if phase < len(answers) and answers[phase][0] in transcript:
+                    os.write(master, answers[phase][1].encode('ascii') + b'\n')
+                    phase += 1
             if status is None:
                 exited, result = os.waitpid(child, os.WNOHANG)
                 if exited:
@@ -246,7 +249,7 @@ def native_key_setup(value=None):
             else:
                 os.kill(child, 9)
                 _, status = os.waitpid(child, 0)
-                raise AssertionError('Native key setup exceeded bounded test deadline')
+                raise AssertionError('Native terminal command exceeded bounded test deadline')
     finally:
         os.close(master)
         if status is None:
@@ -258,17 +261,24 @@ def native_key_setup(value=None):
     return os.waitstatus_to_exitcode(status), bytes(transcript)
 
 
+def native_key_setup(value=None):
+    answers = () if value is None else ((b'Provider API key:', value), (b'Confirm API key:', value))
+    return native_terminal('mano_broker.provider_setup', answers=answers)
+
+
 native_client = """import json,sys
 from mano_prompt.approve import (rpc,view_packet,confirmation_packet,
  rearm_view_packet,rearm_confirmation_packet)
 from mano_prompt.submit import prompt_packet
 from mano_prompt.intake import read_status
 from mano_prompt.task_status import read_task_status
+from mano_prompt.mode import read_profile_status
 body=json.loads(sys.stdin.read())
 try:
  if body['mode']=='submit_prompt':result=rpc(prompt_packet(body['prompt'],body['key']))
  elif body['mode']=='prompt_status':
   result=dict(schema_version='1.0',ok=True,prompt=read_status(body['id']))
+ elif body['mode']=='permission_status':result=read_profile_status(body['id'])
  elif body['mode']=='task_status':
   result=dict(schema_version='1.0',ok=True,snapshot=read_task_status(body['id']))
  elif body['mode']=='raw_prompt':result=rpc(bytes.fromhex(body['wire']))
@@ -725,6 +735,26 @@ finally:c.close()
             body=proposal | {"idempotency_key": "pending-restart"},
         ),
     )["approval"]
+    restart_profile = proposal | dict(capability="policy.set_profile",
+        args=dict(mode="supervised", duration_seconds=300, max_actions=2, max_timeout_seconds=10),
+        idempotency_key="active-profile-before-restart")
+    restart_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+                                          body=restart_profile))["approval"]
+    restart_view = human(dict(mode="view", id=restart_pending["approval_id"]))["view"]
+    restart_origin = human(dict(mode="confirm", view=restart_view, password=password))["grant_id"]
+    restart_read = proposal | dict(args=dict(path="retained"),
+        idempotency_key="profile-unused-grant-before-restart")
+    restart_auto = rpc("request", dict(schema_version="1.0", operation="request_approval",
+                                       body=restart_read))["approval"]
+    assert restart_auto["state"] == "approved"
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        live_lease = database.execute('SELECT remaining,expires FROM task_profiles WHERE task_id=?',
+                                      (proposal["task_id"],)).fetchone()
+        live_grant = database.execute('SELECT expires,revoked,used FROM grants WHERE id=?',
+                                      (restart_auto["grant_id"],)).fetchone()
+        assert live_lease[0] == 1 and live_lease[1] > time.monotonic()
+        assert live_grant[0] > time.monotonic() and live_grant[1:] == (0, 0)
     seed = """import sys,time;from pathlib import Path;from mano_broker.state import State
 s=State(Path('/var/lib/mano-broker/runtime'))
 s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip());s.close()
@@ -746,6 +776,23 @@ s.start(sys.argv[1],now=time.monotonic(),boot_id=Path('/proc/sys/kernel/random/b
     )
     subprocess.run(["systemctl", "kill", "--signal=SIGKILL", "mano-broker.service"], check=True)
     replacement = ready(pid)
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        recovered_lease = database.execute(
+            'SELECT remaining,expires FROM task_profiles WHERE task_id=?',
+            (proposal["task_id"],)).fetchone()
+        assert recovered_lease[0] == 0 and recovered_lease[1] > time.monotonic()
+        assert database.execute('SELECT revoked FROM grants WHERE id=?',
+                                (restart_origin,)).fetchone() == (1,)
+        assert database.execute('SELECT expires FROM grants WHERE id=?',
+                                (restart_auto["grant_id"],)).fetchone()[0] > time.monotonic()
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=restart_read | dict(grant_id=restart_auto["grant_id"]))) == denied
+    after_restart = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=proposal | dict(args=dict(path="retained"),
+                             idempotency_key="profile-read-after-restart")))
+    assert after_restart == denied  # Lost descriptors require fresh provisioning.
+    assert human(dict(mode="confirm", view=restart_view, password=password)) == {"ok": False}
     status = rpc(
         "request",
         dict(
@@ -1220,6 +1267,7 @@ finally:client.close()
     assert terminal_replay["action"]["state"] == "done"
     assert rpc("request", terminal_query) == denied
     terminal_report = dict(actual_kernel_task_peer=True, allocated_task_uid=identity.uid,
+        installed_active_profile_lease_restart_revoked=True,
         native_pam_grant=True, wrong_password_no_effect=True, changed_arguments_denied=True,
         durable_terminal_done=True,
         workspace_effect_observed=True, effect_verified=False, replay_no_execution=True,
@@ -1308,7 +1356,39 @@ finally:client.close()
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))
     assert supervised_write["state"] == "pending"
-    install_profile("auto", operator_password=password)
+    mode_prompt = human_receipt["prompt"]["id"]
+    mode_key = secrets.token_hex(16)
+    mode_args = (mode_prompt, "auto", "--duration", "60", "--max-actions", "2",
+                 "--request-key", mode_key)
+    cancel_code, cancel_output = native_terminal('mano_prompt.mode', mode_args,
+        actor='mano-human', answers=((b'Approve this exact operation?', 'n'),))
+    assert cancel_code == 0 and b'Cancelled. No profile was activated.' in cancel_output
+    assert human(dict(mode="permission_status", id=mode_prompt))["profile"]["automatic"] is False
+    wrong_code, wrong_output = native_terminal('mano_prompt.mode', mode_args,
+        actor='mano-human', answers=((b'Approve this exact operation?', 'y'),
+                                    (b'OS authentication password:', 'wrong-ci-password')))
+    assert wrong_code == 1 and b'wrong-ci-password' not in wrong_output
+    assert human(dict(mode="permission_status", id=mode_prompt))["profile"]["automatic"] is False
+    mode_code, mode_output = native_terminal('mano_prompt.mode', mode_args,
+        actor='mano-human', answers=((b'Approve this exact operation?', 'y'),
+                                    (b'OS authentication password:', password)))
+    assert mode_code == 0 and b'Approval recorded:' in mode_output
+    assert password.encode() not in mode_output
+    current_permission = human(dict(mode="permission_status", id=mode_prompt))["profile"]
+    assert current_permission["automatic"] is True and current_permission["mode"] == "auto"
+    assert current_permission["remaining_actions"] == 2
+    status_code, status_output = native_terminal('mano_prompt.mode', (mode_prompt, '--status'),
+                                                actor='mano-human')
+    assert status_code == 0 and b'"automatic": true' in status_output
+    for actor in ("mano-agent", "mano-core", "mano-worker", identity.name):
+        assert human(dict(mode="permission_status", id=mode_prompt), actor=actor) == {"ok": False}
+    from mano_prompt.mode import profile_packet
+
+    wire = profile_packet(mode_prompt, secrets.token_hex(16), dict(mode='auto',
+        duration_seconds=60, max_actions=2, max_timeout_seconds=10))
+    for malformed in (wire[:-1], wire+b'extra', wire[:66]+b'\x03'+wire[67:]):
+        assert human(dict(mode="raw_prompt", wire=malformed.hex())) == {"ok": False}
+    terminal_report["human_mode_tty_cancel_wrong_password_retry_and_status"] = True
     _, unlisted = profiled_request("terminal.run", dict(argv=["/bin/sh", "-c", "true"],
                                                        cwd=".", timeout_seconds=2))
     assert unlisted["state"] == "pending"
@@ -1352,7 +1432,7 @@ finally:client.close()
     assert rpc("request", dict(schema_version="1.0", operation="propose",
         body=expired_proposal | dict(grant_id=expired_grant["grant_id"])),
         actor=identity.name) == denied
-    install_profile("supervised", operator_password=password, count=1)
+    install_profile("supervised", operator_password=password, count=2, duration=900)
     profile_stop_proposal, profile_stop_grant = profiled_request(
         "files.read", dict(path="live-result"))
     assert profile_stop_grant["state"] == "approved"
@@ -1447,6 +1527,14 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
     assert json.loads(observed.stdout) == dict(generation=root_snapshot.generation, latched=False)
     terminal_report["installed_provider_native_stop_snapshot"] = True
     core_pids.extend(provider_pids)
+    profile_stop_proposal, profile_stop_grant = profiled_request(
+        "files.read", dict(path="live-result"))
+    assert profile_stop_grant["state"] == "approved"
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        active_before_stop = database.execute('SELECT expires,revoked,used FROM grants WHERE id=?',
+            (profile_stop_grant["grant_id"],)).fetchone()
+        assert active_before_stop[0] > time.monotonic() and active_before_stop[1:] == (0, 0)
     subprocess.run(["kill", "-STOP", *(str(pid) for pid in core_pids)], check=True)
     subprocess.run(["kill", "-STOP", str(broker_pid), str(launcher_pid)], check=True)
     try:
@@ -1630,6 +1718,14 @@ finally:
         rearm_bad_nonce_denied=True, newer_stop_invalidates_rearm=True, rearm_replay_denied=True,
         frozen_broker_rearm=True, old_grant_not_resurrected=True,
         fresh_pam_terminal_after_rearm=True, native_stop_generation=6)
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=profile_stop_proposal | dict(grant_id=profile_stop_grant["grant_id"])),
+        actor=identity.name) == denied
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        assert database.execute('SELECT revoked FROM grants WHERE id=?',
+            (profile_stop_grant["grant_id"],)).fetchone() == (1,)
+    terminal_report["live_profile_grant_stop_rearm_no_resurrection"] = True
 
 
     grant_observer = """import sqlite3,sys

@@ -179,16 +179,41 @@ static bool field_hex(struct json_object *view,const char *name,const char *expe
         json_object_get_string_len(field)!=(int)length) return false;
     const char *value=json_object_get_string(field);return hex(value,length) && !memcmp(value,expected,length);
 }
-static struct json_object *prompt_control(uid_t human,const char *id,const char *prompt,size_t length,bool task_status) {
+static struct json_object *prompt_control(uid_t human,const char *id,const char *prompt,size_t length,unsigned query) {
     struct passwd *broker=getpwnam("mano-broker");if (!broker || !broker->pw_uid) return NULL;
     uid_t broker_uid=broker->pw_uid;
     struct json_object *request=json_object_new_object(),*body=json_object_new_object();
     json_object_object_add(request,"schema_version",json_object_new_string("1.0"));
-    json_object_object_add(request,"operation",json_object_new_string(task_status?"human_task_status":(prompt?"submit_prompt":"prompt_status")));
+    json_object_object_add(request,"operation",json_object_new_string(query==2?"permission_status":(query==1?"human_task_status":(prompt?"submit_prompt":"prompt_status"))));
     json_object_object_add(body,"human_uid",json_object_new_int64(human));
     json_object_object_add(body,prompt?"request_key":"prompt_id",json_object_new_string(id));
     if (prompt) json_object_object_add(body,"prompt",json_object_new_string_len(prompt,(int)length));
     json_object_object_add(request,"body",body);
+    const char *wire=json_object_to_json_string_ext(request,JSON_C_TO_STRING_PLAIN);
+    struct json_object *result=exchange(CONTROL_SOCKET,(const unsigned char *)wire,strlen(wire),broker_uid);
+    json_object_put(request);return result;
+}
+static struct json_object *profile_control(uid_t human,const unsigned char *packet) {
+    struct passwd *broker=getpwnam("mano-broker");if (!broker || !broker->pw_uid) return NULL;
+    uid_t broker_uid=broker->pw_uid;
+    const char *modes[]={"supervised","auto","full-access"};
+    unsigned mode=packet[66],duration=((unsigned)packet[67]<<8)|packet[68];
+    unsigned count=packet[69],timeout=((unsigned)packet[70]<<8)|packet[71];
+    if (mode>2 || !duration || duration>(mode==2?300:900) || !count || count>32 ||
+        !timeout || timeout>300) return NULL;
+    char id[33]={0},key[33]={0};memcpy(id,packet+2,32);memcpy(key,packet+34,32);
+    struct json_object *request=json_object_new_object(),*body=json_object_new_object();
+    struct json_object *args=json_object_new_object();
+    json_object_object_add(request,"schema_version",json_object_new_string("1.0"));
+    json_object_object_add(request,"operation",json_object_new_string("request_profile"));
+    json_object_object_add(body,"human_uid",json_object_new_int64(human));
+    json_object_object_add(body,"prompt_id",json_object_new_string(id));
+    json_object_object_add(body,"request_key",json_object_new_string(key));
+    json_object_object_add(args,"mode",json_object_new_string(modes[mode]));
+    json_object_object_add(args,"duration_seconds",json_object_new_int(duration));
+    json_object_object_add(args,"max_actions",json_object_new_int(count));
+    json_object_object_add(args,"max_timeout_seconds",json_object_new_int(timeout));
+    json_object_object_add(body,"args",args);json_object_object_add(request,"body",body);
     const char *wire=json_object_to_json_string_ext(request,JSON_C_TO_STRING_PLAIN);
     struct json_object *result=exchange(CONTROL_SOCKET,(const unsigned char *)wire,strlen(wire),broker_uid);
     json_object_put(request);return result;
@@ -199,6 +224,12 @@ static void handle(int fd,uid_t human) {
     if (setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout)) ||
         setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout))) goto done;
     if (!credentials(fd,packet,sizeof(packet)-1,&size,human) || size<2 || packet[0]!=1) goto done;
+    if (packet[1]==8) {
+        if (size!=72 || !hex((char *)packet+2,32) || !hex((char *)packet+34,32)) goto failed;
+        reply=profile_control(human,packet);
+        if (reply) goto send_reply;
+        goto failed;
+    }
     if (packet[1]==3 && size==2) {
         const unsigned char query='V';
         reply=exchange("/run/mano-stopd/control.sock",&query,1,0);
@@ -223,9 +254,9 @@ static void handle(int fd,uid_t human) {
     }
     if (size<34 || !hex((char *)packet+2,32)) goto done;
     char id[33]={0};memcpy(id,packet+2,32);
-    if (packet[1]==5 || packet[1]==6 || packet[1]==7) {
-        if ((packet[1]==6 || packet[1]==7) && size==34)
-            reply=prompt_control(human,id,NULL,0,packet[1]==7);
+    if (packet[1]==5 || packet[1]==6 || packet[1]==7 || packet[1]==9) {
+        if ((packet[1]==6 || packet[1]==7 || packet[1]==9) && size==34)
+            reply=prompt_control(human,id,NULL,0,packet[1]==9?2:packet[1]==7?1:0);
         else if (packet[1]==5 && size>=37) {
             unsigned length=((unsigned)packet[34]<<8)|packet[35];
             if (!length || length>8192 || size!=36+(ssize_t)length || memchr(packet+36,0,length)) goto failed;
