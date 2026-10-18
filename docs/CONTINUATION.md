@@ -66,3 +66,20 @@ Installed native scope/redaction/pending/done/verified and Stop-unknown/revoked
 witnesses plus separate synthetic GTK text/responsiveness/screenshot need final CI.
 Full original version, real provider execution, policy profiles and release remain
 incomplete. See architecture/0081-human-task-journal.md and task workspace outputs.
+
+PR97 merged e4848e1f820f554d948cedf728f5408c4b076e93 after exact-head
+CI39085949215 all success, artifact12120753199/53hashes and native journal +
+separate synthetic GTK/visual evidence. Current pam-permission-profiles work adds
+policy.set_profile exact native PAM approval, task-bound workspace leases and
+single-use exact automatic grants; no automatic profile/budget/model disclosure.
+Supervised read/health; Auto adds writes/selected development entrypoints; Full
+admits additional immutable/workspace tool entrypoints inside the SAME sandbox.
+PAM view explicitly shows workspace-only/no-network scope. Entry policy does not
+constrain child exec; kernel workspace/IPC/network isolation remains the boundary.
+Limits32 grants,900s (Full300s),300s runtime cap. New authorization/dispatch checks
+lease expiry/epoch/native generation/provenance. Replacement revokes prior leases'
+grants; changing mode while executing denies; running actions keep original runtime
+bounds, Stop stays independent. Broker recovery invalidates profiles. No host-data
+or network widening, no mode UI command/full profile product claim. Local312tests
+pass/28Linux skips; native PAM/count/expiry/Full protected-path/Stop VM witnesses
+pending. See architecture/0082-pam-workspace-profiles.md and workspace outputs.

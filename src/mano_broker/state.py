@@ -60,6 +60,16 @@ class State:
                 used INTEGER NOT NULL DEFAULT 0,budget_json TEXT NOT NULL,
                 revoked INTEGER NOT NULL DEFAULT 0,approved_args_json TEXT,
                 native_generation INTEGER NOT NULL DEFAULT -1);
+            CREATE TABLE IF NOT EXISTS task_profiles(
+                task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+                grant_id TEXT NOT NULL REFERENCES grants(id),
+                approval_id TEXT NOT NULL REFERENCES approvals(id),
+                mode TEXT NOT NULL,expires REAL NOT NULL,remaining INTEGER NOT NULL,
+                max_timeout INTEGER NOT NULL,boot_id TEXT NOT NULL,
+                epoch INTEGER NOT NULL,generation INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS profile_grants(
+                grant_id TEXT PRIMARY KEY REFERENCES grants(id),
+                source_grant_id TEXT NOT NULL REFERENCES grants(id));
             CREATE TABLE IF NOT EXISTS actions(
                 id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES tasks(id),
                 grant_id TEXT NOT NULL REFERENCES grants(id),request_digest TEXT NOT NULL,
@@ -316,6 +326,9 @@ class State:
                 raise Denied("Grant revoked")
             if now >= grant["expires"] or grant["used"] >= grant["max_count"]:
                 raise Denied("Grant expired or exhausted")
+            from .profiles import Profiles
+
+            Profiles(self).require_grant(grant['id'], now=now, boot_id=boot_id)
             budget = json.loads(grant["budget_json"])
             args = json.loads(request.args_json)
             if (
@@ -349,7 +362,8 @@ class State:
             raise Denied("Invalid trusted monotonic time")
         with self.transaction():
             row = self.db.execute(
-                "SELECT a.state,a.request_json,g.approved_args_json,g.expires,g.epoch,g.revoked,"
+                "SELECT a.state,a.grant_id,a.request_json,g.approved_args_json,"
+                "g.expires,g.epoch,g.revoked,"
                 "t.boot_id "
                 "FROM actions a "
                 "JOIN grants g ON a.grant_id=g.id JOIN tasks t ON a.task_id=t.id WHERE a.id=?",
@@ -366,6 +380,9 @@ class State:
                 or boot_id != row["boot_id"]
             ):
                 raise Denied("Dispatch grant expired/revoked or action not dispatchable")
+            from .profiles import Profiles
+
+            Profiles(self).require_grant(row['grant_id'], now=now, boot_id=boot_id)
             self.db.execute("UPDATE actions SET state='executing' WHERE id=?", (action_id,))
             self.event(action_id, "executing", {})
 
@@ -449,6 +466,9 @@ class State:
             cycles = self.db.execute("UPDATE core_cycles SET state='unknown',"
                                      "status='controller_uncertain' "
                                      "WHERE state IN ('running','waiting')").rowcount
+            self.db.execute('UPDATE grants SET revoked=1 WHERE id IN '
+                            '(SELECT grant_id FROM task_profiles)')
+            self.db.execute('UPDATE task_profiles SET remaining=0')
             self.event(None, "recovery", {"unknown_actions": changed, "unknown_prompts": prompts,
                                            "unknown_core_cycles": cycles})
         return changed

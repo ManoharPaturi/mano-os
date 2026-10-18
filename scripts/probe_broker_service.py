@@ -1267,6 +1267,98 @@ finally:client.close()
                        .splitlines() if ":" in line)
     assert int(stop_fields["CapEff"].strip(), 16) == 0
     assert stop_fields["NoNewPrivs"].strip() == "1" and stop_fields["Seccomp"].strip() == "2"
+    def install_profile(mode, *, operator_password, count=2, duration=60):
+        policy = dict(schema_version="1.0", task_id=terminal_task["task_id"],
+            resource_id=terminal_task["resource_id"], capability="policy.set_profile",
+            args=dict(mode=mode, duration_seconds=duration, max_actions=count,
+                      max_timeout_seconds=10), idempotency_key="profile-" + secrets.token_hex(8),
+            reason="Synthetic native PAM workspace profile witness")
+        pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+                                      body=policy), actor=identity.name)["approval"]
+        assert pending["state"] == "pending" and pending["grant_id"] is None
+        view = human(dict(mode="view", id=pending["approval_id"]))["view"]
+        assert view["profile_scope"]["filesystem"] == "allocated task workspace only"
+        assert view["profile_scope"]["network"] == "disabled"
+        assert view["args"] == policy["args"]
+        with contextlib.closing(sqlite3.connect(
+                f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+            before_profile = database.execute('SELECT * FROM task_profiles WHERE task_id=?',
+                                              (terminal_task["task_id"],)).fetchall()
+        assert human(dict(mode="confirm", view=view, password="wrong-ci-password")) == {"ok": False}
+        with contextlib.closing(sqlite3.connect(
+                f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+            assert database.execute('SELECT * FROM task_profiles WHERE task_id=?',
+                (terminal_task["task_id"],)).fetchall() == before_profile
+        approved = human(dict(mode="confirm", view=view, password=operator_password))
+        assert approved["ok"]
+        return approved["grant_id"]
+
+    def profiled_request(capability, args):
+        proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
+            resource_id=terminal_task["resource_id"], capability=capability, args=args,
+            idempotency_key="profile-action-" + secrets.token_hex(8), reason="CI workspace lease")
+        approved = rpc("request", dict(schema_version="1.0", operation="request_approval",
+                                       body=proposal), actor=identity.name)["approval"]
+        return proposal, approved
+
+    install_profile("supervised", operator_password=password, count=1)
+    _, read_approved = profiled_request("files.read", dict(path="live-result"))
+    assert read_approved["state"] == "approved"
+    _, exhausted = profiled_request("files.read", dict(path="live-result"))
+    assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
+    _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))
+    assert supervised_write["state"] == "pending"
+    install_profile("auto", operator_password=password)
+    _, unlisted = profiled_request("terminal.run", dict(argv=["/bin/sh", "-c", "true"],
+                                                       cwd=".", timeout_seconds=2))
+    assert unlisted["state"] == "pending"
+    auto_program = ("from pathlib import Path;"
+                    "Path('/workspace/profile-auto-ok').write_text('auto-ok')")
+    for mode, argv, filename, expected in (
+        ("auto", ["/usr/bin/python3", "-c", auto_program], "profile-auto-ok", "auto-ok"),
+        ("full-access", ["/bin/sh", "-c", "if touch /etc/mano/profile-bypass 2>/dev/null; "
+            "then exit 99; fi; test ! -e /var/lib/mano-broker/runtime/state.sqlite3 && "
+            "printf full-ok > /workspace/profile-full-ok"], "profile-full-ok", "full-ok"),
+    ):
+        if mode == "full-access":
+            install_profile(mode, operator_password=password)
+        proposal, approved = profiled_request("terminal.run", dict(argv=argv, cwd=".",
+                                                                  timeout_seconds=5))
+        assert approved["state"] == "approved" and approved["grant_id"]
+        body = proposal | dict(grant_id=approved["grant_id"])
+        assert rpc("request", dict(schema_version="1.0", operation="propose",
+            body=body | dict(args=body["args"] | dict(timeout_seconds=6))),
+            actor=identity.name) == denied
+        submitted = rpc("request", dict(schema_version="1.0", operation="propose", body=body),
+                        actor=identity.name)
+        assert submitted["ok"]
+        query = dict(schema_version="1.0", operation="status", body=dict(
+            task_id=terminal_task["task_id"], action_id=submitted["action"]["id"]))
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            status = rpc("request", query, actor=identity.name)["action"]
+            if status["state"] in {"done", "failed", "unknown"}:
+                break
+            time.sleep(0.1)
+        assert status["state"] == "done", status
+        assert (terminal_workspace / filename).read_text() == expected
+    assert not Path("/etc/mano/profile-bypass").exists()
+    _, model_outside_scope = profiled_request("model.plan", cloud_proposal["args"])
+    assert model_outside_scope["state"] == "pending"
+    install_profile("auto", operator_password=password, count=1, duration=3)
+    expired_proposal, expired_grant = profiled_request("files.read", dict(path="live-result"))
+    assert expired_grant["state"] == "approved"
+    time.sleep(3.1)  # Actual lease expiry, not a mocked trusted clock.
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=expired_proposal | dict(grant_id=expired_grant["grant_id"])),
+        actor=identity.name) == denied
+    install_profile("supervised", operator_password=password, count=1)
+    profile_stop_proposal, profile_stop_grant = profiled_request(
+        "files.read", dict(path="live-result"))
+    assert profile_stop_grant["state"] == "approved"
+    terminal_report["permission_profiles_native_pam_count_expiry_and_exact_grants"] = True
+    terminal_report["full_workspace_profile_protected_policy_kernel_denial"] = True
+
     stop_proposal = terminal_proposal | dict(idempotency_key="native-stop-task", args=dict(
         argv=["/usr/bin/python3", "-c", "import os,time;from pathlib import Path;"
               "p=os.fork()\nif p==0:\n os.setsid()\n"
@@ -1405,6 +1497,10 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
     terminal_report["native_stop_capabilities_zero"] = True
     terminal_report["native_stop_task_cgroup_drained"] = True
     terminal_report["native_stop_latch_written"] = True
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=profile_stop_proposal | dict(grant_id=profile_stop_grant["grant_id"])),
+        actor=identity.name) == denied
+    terminal_report["native_stop_revokes_permission_profile_authority"] = True
     query_stop = dict(schema_version="1.0", operation="status", body=dict(
         task_id=terminal_task["task_id"], action_id=stop_action["action"]["id"]))
     stopped_status = rpc("request", query_stop, actor=identity.name)["action"]
