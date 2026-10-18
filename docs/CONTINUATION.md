@@ -40,3 +40,15 @@ No agent /compact tool is available; use concise handoffs for automatic compacti
 The task workspace outputs/ contains the full acceptance ledger, accepted artifact
 reports and authoritative operational continuation; older source notes are archived
 there under continuation-history/repo-through-pr54.md.
+
+Next checkpoint: PR95 merged d1dff576374bb2456f576b5cc523f08494abb923 after
+CI39083234775 all checks success and artifact12120320000/53hashes acceptance.
+Native Root TTY key setup is now demonstrated with synthetic input only; real key,
+activation and live paid API flow remain pending. Crash may leave a private source
+staging link; systemd copies sources, so provider link checks do not detect it.
+Current prompt-intake-status work adds a read-only GTK view and fixed native status
+client. It shows only queue/provisioning state, not execution completion. Slow
+refreshes are off the UI thread and cannot replace a newer acknowledged request.
+The GTK/AT-SPI fixture is synthetic; separate installed broker tests must prove the
+production status client/native transport. Local298tests/28Linux skips pass;
+final-head CI/artifact acceptance remains required. See architecture/0080.

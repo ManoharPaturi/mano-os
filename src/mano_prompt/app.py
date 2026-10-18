@@ -7,15 +7,18 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mano_prompt.dispatch import SubmissionWorker  # noqa: E402
+from mano_prompt.intake import Intake, read_status  # noqa: E402
 from mano_prompt.submit import Submission  # noqa: E402
 from mano_protocol.actions import text  # noqa: E402
 
 
 class Prompt(Gtk.Application):
-    def __init__(self, *, submit=None):
+    def __init__(self, *, submit=None, status=None):
         super().__init__(application_id="org.mano.Prompt")
         self.submit = submit if submit is not None else Submission().submit
         self.worker = SubmissionWorker(self.submit, GLib.idle_add)
+        self.status_worker = SubmissionWorker(status or read_status, GLib.idle_add)
+        self.intake = Intake()
         self.connect("activate", self.activate_window)
 
     def activate_window(self, _app):
@@ -42,16 +45,58 @@ class Prompt(Gtk.Application):
         status = Gtk.Label(label="Ready")
         status.add_css_class("status")
 
+        details = Gtk.Label(label='')
+        details.set_selectable(True)
+        details.set_wrap(True)
+        refresh = Gtk.Button(label='Check request status')
+        refresh.set_sensitive(False)
+
+        def check_status(_widget):
+            if self.worker.busy or self.status_worker.busy or self.intake.current is None:
+                return
+            token = self.intake.token()
+
+            def finished(result, error):
+                refresh.set_sensitive(not self.worker.busy)
+                if self.worker.busy or token != self.intake.token():
+                    return
+                try:
+                    if error or not self.intake.update(token, result):
+                        raise ValueError('Status unavailable')
+                except ValueError:
+                    status.set_text('Status unavailable. Your request was not resubmitted.')
+                else:
+                    details.set_text(self.intake.display())
+                    status.set_text('Request status updated')
+
+            try:
+                if self.status_worker.start(token[1], finished):
+                    refresh.set_sensitive(False)
+                    status.set_text('Checking request status…')
+            except RuntimeError:
+                status.set_text('Status check could not start. Please retry.')
+
+        refresh.connect('clicked', check_status)
+
         def submit(_widget):
             if self.worker.busy:
                 return
 
-            def finished(_result, error):
+            def finished(result, error):
                 entry.set_sensitive(True)
                 send.set_sensitive(True)
+                refresh.set_sensitive(not self.status_worker.busy
+                                      and self.intake.current is not None)
+                if not error:
+                    try:
+                        self.intake.select(result)
+                    except ValueError:
+                        error = True
                 if error:
                     status.set_text("Acknowledgement uncertain. Retry the same request to check.")
                 else:
+                    details.set_text(self.intake.display())
+                    refresh.set_sensitive(not self.status_worker.busy)
                     status.set_text("Request received")
                     entry.set_text("")
                 entry.grab_focus()
@@ -61,6 +106,7 @@ class Prompt(Gtk.Application):
                 if self.worker.start(entry.get_text(), finished):
                     entry.set_sensitive(False)
                     send.set_sensitive(False)
+                    refresh.set_sensitive(False)
                     status.set_text("Sending…")
             except ValueError:
                 status.set_text("Enter a request of up to 8192 UTF-8 bytes.")
@@ -71,9 +117,10 @@ class Prompt(Gtk.Application):
         send.connect("clicked", submit)
         row.append(entry)
         row.append(send)
-        for widget in (title, subtitle, row, status):
+        for widget in (title, subtitle, row, status, details, refresh):
             outer.append(widget)
         self.entry, self.window = entry, window
+        self.details, self.refresh = details, refresh
         window.set_child(outer)
         css = Gtk.CssProvider()
         css.load_from_string("""

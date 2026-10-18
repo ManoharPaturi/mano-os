@@ -17,9 +17,31 @@ CANARY = "Human canary: agent input must leave this unchanged"
 def main():
     def delayed_recorder(prompt):
         time.sleep(1)  # CI-only slow acknowledgement, never a production delay.
-        return store_request(prompt)
+        store_request(prompt)
+        return dict(id="a" * 32, state="received", task_id=None)
 
-    app = Prompt(submit=delayed_recorder)  # Explicit local data-only fixture.
+    def delayed_status(prompt_id):
+        assert prompt_id == 'a' * 32
+        time.sleep(1)  # Test-only slow read, never a production delay.
+        return dict(id=prompt_id, state='task_created', task_id='b' * 32)
+
+    app = Prompt(submit=delayed_recorder, status=delayed_status)
+    status_ticks = 0
+
+    def status_responsiveness():
+        nonlocal status_ticks
+        if app.status_worker.busy:
+            status_ticks += 1
+        elif status_ticks:
+            assert status_ticks >= 2, 'GTK did not run during slow status lookup'
+            assert app.intake.current == dict(id='a' * 32, state='task_created', task_id='b' * 32)
+            assert app.refresh.get_sensitive()
+            (ROOT / 'status-response.json').write_text(json.dumps(dict(
+                responsive_during_slow_status=True, ui_ticks=status_ticks,
+                display=app.details.get_text(), intake=app.intake.current,
+                scope='synthetic local status UI fixture', physical_input_provenance=None)) + '\n')
+            return False
+        return True
     submission_ticks = 0
 
     def responsiveness():
@@ -116,6 +138,7 @@ def main():
         app.window.connect("notify::is-active", event)
         GLib.timeout_add(50, poll)
         GLib.timeout_add(50, responsiveness)
+        GLib.timeout_add(50, status_responsiveness)
 
     app.connect("activate", install)
     return app.run(None)
