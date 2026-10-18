@@ -199,7 +199,14 @@ def gui(password, label):
             if credential == password:
                 assert code == 0 and b"Approval recorded:" in output
             else:
-                assert code == (0 if answer == "n" else 1)
+                assert code == (0 if answer == "n" else 1), (
+                    answer,
+                    code,
+                    dict(
+                        permission_denied=b"Permission denied" in output,
+                        permission_error=b"PermissionError" in output,
+                    ),
+                )
                 assert query("status", receipt["prompt_id"])["profile"]["automatic"] is False
             if credential:
                 assert credential.encode() not in output

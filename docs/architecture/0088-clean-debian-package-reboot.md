@@ -21,7 +21,9 @@ Run the original installed Sway configuration and mano-prompt wrapper without a
 PYTHONPATH override, observer subclass or injected transport. A separate human
 AT-SPI driver reads visible request/task/approval IDs, drives bounded Auto choices,
 and checks pending-only/no-password state. Root independently validates the exact
-native view. Human-UID controlling TTY cancellation/wrong password leave authority
+native view. The private controlling-TTY helper replaces inherited Root groups with the target
+account's actual NSS memberships, matching a login where the human socket group is
+supplementary. Human-UID TTY cancellation/wrong password leave authority
 inactive; actual PAM activates the profile. Capture the real pending/effective
 windows. An explicit LangGraph mock plan writes a workspace sentinel.
 

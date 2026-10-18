@@ -197,3 +197,11 @@ newGUI/PAM/mocktask+nativeStop.900spreboot/120spostlease excludesexpiryconfound.
 Pristineimagehashunchanged, noVMimage/key uploaded. Freshheadlessmanualuserlaunch,
 NOTphysical/displaymanager/8GB/livepaid/signedimage proof. Exact-headCI/artifacts
 and new before/after screenshots required before merge. See ADR0088.
+
+PR104 initial79a4b94/CI39136499881 FAILED during ordinary-login TTY cancellation.
+Freshimage/packageAPTinstall/UI/nativepending succeeded. ci_tty helper clearedall
+supplementarygroups, previouslyhiddenbecause mano-human primarygroup=socketgroup;
+normalLab's human socket membership is supplementary. ReplaceinheritedRootgroups
+with os.initgroups(targetname,primarygid) then dropgid/uid, matching actuallogin.
+Addreturncode/permission-error-only diagnostics, no nonce/password/transcript dump.
+Keepallsocket/PAM/boot/grant checks; newheadCIrequired, failedheadunmerged.
