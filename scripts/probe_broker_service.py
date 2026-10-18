@@ -30,6 +30,7 @@ WORK = Path("/run/mano-live-workspace-ci")
 LIBRARY = Path("/usr/lib/mano-broker/libmano-resources.so")
 NATIVE = Path("/usr/libexec/mano-approve")
 STOP_NATIVE = Path("/usr/libexec/mano-stopd")
+STOP_CLIENT = Path("/usr/libexec/mano-stop")
 STOP_STATE = Path("/var/lib/mano-stopd")
 POLICY = Path("/etc/mano/human.uid")
 PAM = Path("/etc/pam.d/mano-approve")
@@ -74,7 +75,7 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
 assert all(
     not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, GUARD, BASE,
                            CONTROLLER_POLICY, EGRESS_POLICY,
-                           LOCK, STOP_NATIVE, STOP_STATE, *SOCKETS.values())
+                           LOCK, STOP_NATIVE, STOP_CLIENT, STOP_STATE, *SOCKETS.values())
 )
 assert all(not p.exists() for p in
            (PROVIDER_POLICY, PROVIDER_SECRETS, PROVIDER_SOCKET, PRICING_POLICY))
@@ -357,6 +358,10 @@ try:
         *command("pkg-config", "--cflags", "--libs", "libsystemd").split(),
         "-Wl,-z,relro,-z,now", "-o", str(STOP_NATIVE)], check=True)
     STOP_NATIVE.chmod(0o555)
+    subprocess.run(["cc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+        "-fstack-protector-strong", "-D_FORTIFY_SOURCE=2", str(ROOT / "native/mano_stop.c"),
+        "-Wl,-z,relro,-z,now", "-o", str(STOP_CLIENT)], check=True)
+    STOP_CLIENT.chmod(0o555)
     LIBRARY.parent.mkdir(mode=0o755, exist_ok=True)
     NATIVE.parent.mkdir(mode=0o755, exist_ok=True)
     subprocess.run(
@@ -1308,6 +1313,14 @@ finally:client.close()
         mock_agent_exit_alone_unverified=True, preapproval_exact_file_predicate=True,
         verifier_public_and_wrong_action_denied=True,
         artifact_capture_request_denied=True, artifact_wrong_caller_and_range_denied=True)
+    client_contract = subprocess.run(["unshare", "--mount", "--propagation", "private",
+        "python3", str(ROOT / "tests/desktop/stop_client_contract.py")],
+        capture_output=True, text=True, check=True, timeout=20)
+    assert set(json.loads(client_contract.stdout)["reply_cases"]) == {
+        "valid", "denied", "extra", "truncated", "rights", "wrong_sender", "wrong_creator",
+        "timeout"}
+    terminal_report["native_stop_client_reply_contract"] = True
+    terminal_report["native_stop_client_reply_cases"] = json.loads(client_contract.stdout)
     subprocess.run(["systemctl", "start", "mano-stopd.socket", "mano-stopd.service"], check=True)
     stop_pid = int(command(
         "systemctl", "show", "mano-stopd.service", "--property=MainPID", "--value"
@@ -1481,6 +1494,12 @@ assert reply==sys.argv[2].encode()
         stop_client, "SS", "denied", str(stop_pid)], check=True, capture_output=True,
         text=True, timeout=5)
     assert (STOP_STATE / "state").read_text() == "v1:0:armed\n"
+    for actor, arguments in (("mano-human", ["--socket", "/tmp/forged"]),
+                             (identity.name, [])):
+        rejected = subprocess.run(["/usr/sbin/runuser", "-u", actor, "--", str(STOP_CLIENT),
+                                   *arguments], capture_output=True, text=True, timeout=5)
+        assert rejected.returncode != 0 and not rejected.stdout
+    assert (STOP_STATE / "state").read_text() == "v1:0:armed\n"
     denied_client = """import errno,socket
 s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
 try:s.connect('/run/mano-stopd/human.sock')
@@ -1544,9 +1563,9 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
     subprocess.run(["kill", "-STOP", *(str(pid) for pid in core_pids)], check=True)
     subprocess.run(["kill", "-STOP", str(broker_pid), str(launcher_pid)], check=True)
     try:
-        subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
-                        stop_client, "S", "stopped", str(stop_pid)], check=True,
-                       capture_output=True, text=True, timeout=5)
+        native_stopped = subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--",
+            str(STOP_CLIENT)], check=True, capture_output=True, text=True, timeout=5)
+        assert "Emergency Stop acknowledged" in native_stopped.stdout
         deadline = time.monotonic() + 3
         while (time.monotonic() < deadline
                and "populated 1" in (group / "cgroup.events").read_text()):
@@ -1579,6 +1598,8 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
                        timeout=3)
         provider_idle.terminate()
         provider_idle.wait(timeout=3)
+    terminal_report["native_human_stop_client_frozen_core_and_authority"] = True
+    terminal_report["native_stop_client_message"] = native_stopped.stdout.strip()
     terminal_report["native_stop_broker_and_launcher_frozen"] = True
     terminal_report["native_stop_frozen_core_and_detached_child_drained"] = True
     terminal_report["native_stop_frozen_provider_drained"] = True
@@ -1974,7 +1995,7 @@ finally:
     subprocess.run(["systemctl", "stop", *(unit for unit in UNITS if "@" not in unit)],
                    check=False, capture_output=True)
     subprocess.run(["usermod", "-L", "mano-human"], check=False, capture_output=True)
-    for file in (LIBRARY, NATIVE, STOP_NATIVE, POLICY, PAM, GUARD, PROVIDER_POLICY,
+    for file in (LIBRARY, NATIVE, STOP_NATIVE, STOP_CLIENT, POLICY, PAM, GUARD, PROVIDER_POLICY,
                  PRICING_POLICY, CONTROLLER_POLICY, EGRESS_POLICY, *installed):
         file.unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)

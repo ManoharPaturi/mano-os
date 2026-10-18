@@ -28,6 +28,7 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared native/mano_resources.c -Wl,-z,relro,-z,now -o /tmp/libmano-resources.so
           cc -std=c11 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 native/mano_sandbox_guard.c -lseccomp -Wl,-z,relro,-z,now -o /tmp/mano-sandbox-guard
           cc -std=c11 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 native/mano_stopd.c $(pkg-config --cflags --libs libsystemd) -Wl,-z,relro,-z,now -o /tmp/mano-stopd
+          cc -std=c11 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 native/mano_stop.c -Wl,-z,relro,-z,now -o /tmp/mano-stop
           sudo install -d -m 0755 /usr/lib/mano-broker
           sudo install -m 0644 /tmp/libmano-resources.so /usr/lib/mano-broker/libmano-resources.so
       - run: ruff check .

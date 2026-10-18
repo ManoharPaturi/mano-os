@@ -73,3 +73,15 @@ Refresh permissions after terminal approval. An old approval does not prove curr
 authority. Keep the same limits when explicitly retrying an uncertain request.
 Closing the window leaves any server-side pending challenge to expire; it does not
 approve or revoke it. Independent Stop revokes authority and running work.
+
+## Independent human Stop
+
+On the installed Debian prototype, run `/usr/libexec/mano-stop` from the configured
+human account. Super+Shift+Backspace in the human Sway session requests the same fixed
+native operation independently of GTK and the Python core. Use the terminal command
+to see its acknowledgement; the shortcut's output is logged by the compositor.
+A successful reply means new work is latched off and task termination was requested.
+It is not a task-completion or independently verified process-exit claim. If no reply
+is acknowledged, use the trusted recovery terminal. Rearm still requires separate
+protected-terminal PAM authentication, and never revives old grants. Physical key
+validation remains deferred while development uses CI VMs.
