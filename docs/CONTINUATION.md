@@ -177,3 +177,23 @@ noauthority resurrection, removal/no data deletion. New runtime-package.json/.de
 artifacts required; exact-headCI/allchecks/full artifact acceptance BEFORE merge.
 No local Linux build/install attempted. Local330tests/28Linuxskips/Ruff/shell/compile
 pass so far. Packaging remains unaccepted until actual CI passes.
+
+PR103 merged37f7fde after final29fa56f/CI39133946798 ALL3SUCCESS/art12138669855;
+54architecture+2packagedGUI hashes and9.54MBprototype1.deb accepted. Two sameguest
+builds matched,1716payloadfilesverified; package install/GUI/PAM/mock/reinstall/
+remove passed. Postmain39134831166 pendingverification. Fullgoal stillACTIVE.
+
+Current clean-debian-runtime-reboot work preserves pristine verifiedcloudbase before
+lab preparation, then separate freshoverlay boot with only genericCIlogin/marker.
+Only.deb+explicittestwhitelist enter; no src/labconfig/externalvendor. Apt install
+--no-install-recommends then driver-onlypyatspi. Prototype2 explicitlydependsPAM
+modules/CAcerts. Genericloginlab UID1000 (no mano-human account), fixedgroup via
+RootTTYenrollment --enable. Actualunmodified packagedSway/Prompt wrapper noobserver/
+PYTHONPATH override; AT-SPIreadsvisibleIDs, nativeRootview/PAM cancels+wrongpass+success,
+actualmockfileeffect. Prebootunusedunrevoked/unexpiredexactgrant savedprivateRoot0600
+NEVERexported. Realpoweroff+bootIDchange: targetandStopmustactivatewithoutsetup,
+oldprompt/grant replaydenied andgrantrevoked whiledeadlinefuture, taskdataretained;
+newGUI/PAM/mocktask+nativeStop.900spreboot/120spostlease excludesexpiryconfound.
+Pristineimagehashunchanged, noVMimage/key uploaded. Freshheadlessmanualuserlaunch,
+NOTphysical/displaymanager/8GB/livepaid/signedimage proof. Exact-headCI/artifacts
+and new before/after screenshots required before merge. See ADR0088.
