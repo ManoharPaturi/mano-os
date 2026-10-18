@@ -2,7 +2,8 @@
 
 import hashlib
 
-from mano_protocol.actions import ActionRequest, canonical, identifier, text
+from mano_protocol.actions import canonical, identifier, text
+from mano_protocol.plans import parse_plan
 from mano_protocol.provider import configuration
 
 from .broker import read_model_result
@@ -62,9 +63,5 @@ class BrokerPlanner:
             raise ValueError('Unexpected model action state')
         result = read_model_result(self.broker, task_id=self.task_id, action_id=action_id)
         plan = result['plan']
-        if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
-            raise ValueError('Invalid saved terminal proposal')
-        ActionRequest.parse(canonical(dict(schema_version='1.0', task_id=self.task_id,
-            resource_id=self.resource_id, grant_id='0' * 32, capability='terminal.run',
-            args=plan['args'], reason=plan['reason'], idempotency_key='plan-validation')).encode())
+        parse_plan(plan)
         return plan

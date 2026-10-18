@@ -4,15 +4,15 @@ import json
 
 from mano_protocol.actions import (
     MAX_PACKET,
-    ActionRequest,
-    canonical,
     model_identifier,
     text,
     unique_object,
 )
+from mano_protocol.plans import parse_plan
 
 MAX_RESPONSE = 262144
 FUNCTION = 'propose_terminal'
+READ_FUNCTION = 'propose_file_read'
 
 
 def configuration(model, max_output_tokens):
@@ -29,12 +29,18 @@ def request_body(prompt, *, model, max_output_tokens):
             additionalProperties=False, required=['argv', 'cwd', 'timeout_seconds'],
             properties=dict(argv=dict(type='array', items=dict(type='string')),
                 cwd=dict(type='string'), timeout_seconds=dict(type='integer')))))
+    read_schema = dict(type='object', additionalProperties=False, required=['args', 'reason'],
+        properties=dict(reason=dict(type='string'), args=dict(type='object',
+            additionalProperties=False, required=['path'],
+            properties=dict(path=dict(type='string')))))
     return dict(model=model, store=False, stream=False, max_output_tokens=max_output_tokens,
-        input=[dict(role='developer', content='Propose one workspace terminal operation. '
+        input=[dict(role='developer', content='Propose one workspace terminal operation or '
+            'one workspace-relative file read of at most 32 KiB. '
             'This proposal requires separate broker authorization; do not claim completion.'),
             dict(role='user', content=prompt)],
-        tools=[dict(type='function', name=FUNCTION, strict=True, parameters=schema)],
-        tool_choice=dict(type='function', name=FUNCTION), parallel_tool_calls=False)
+        tools=[dict(type='function', name=FUNCTION, strict=True, parameters=schema),
+               dict(type='function', name=READ_FUNCTION, strict=True, parameters=read_schema)],
+        tool_choice='required', parallel_tool_calls=False)
 
 
 def decode(packet, maximum):
@@ -69,18 +75,19 @@ def response_plan(packet, *, model, max_output_tokens):
             raise ValueError('Invalid provider output item')
         if item.get('type') == 'reasoning':
             continue  # Non-authoritative model material is not forwarded or logged.
-        if (item.get('type') != 'function_call' or item.get('name') != FUNCTION
+        if (item.get('type') != 'function_call' or not isinstance(item.get('name'), str)
+                or item['name'] not in {FUNCTION, READ_FUNCTION}
                 or item.get('status') != 'completed'):
             raise ValueError('Unexpected or refused provider operation')
         calls.append(item)
     if len(calls) != 1 or not isinstance(calls[0].get('arguments'), str):
-        raise ValueError('Expected exactly one terminal proposal')
+        raise ValueError('Expected exactly one action proposal')
     plan = decode(calls[0]['arguments'].encode('utf8'), MAX_PACKET)
     if not isinstance(plan, dict) or set(plan) != {'args', 'reason'}:
         raise ValueError('Unexpected provider authority fields')
-    ActionRequest.parse(canonical(dict(schema_version='1.0', task_id='0' * 32,
-        resource_id='0' * 32, grant_id='0' * 32, capability='terminal.run',
-        args=plan['args'], reason=plan['reason'], idempotency_key='provider-validation')).encode())
+    if calls[0]['name'] == READ_FUNCTION:
+        plan['capability'] = 'files.read'
+    parse_plan(plan)
     return plan
 
 

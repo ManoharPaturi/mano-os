@@ -29,6 +29,20 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value['operation'] == 'inspect_file_read':
+        from .file_reads import result_chunk
+
+        if set(body) != {'task_id', 'action_id'}:
+            raise Denied('Unexpected protected file read query')
+        identifier(body['task_id'])
+        identifier(body['action_id'])
+        task = state.db.execute('SELECT caller_uid FROM tasks WHERE id=? AND boot_id=?',
+                                (body['task_id'], boot_id)).fetchone()
+        if task is None:
+            raise Denied('Unknown current-boot task')
+        result = result_chunk(state, **body, caller_uid=task['caller_uid'], boot_id=boot_id,
+                              offset=0, length=1)
+        return dict(schema_version='1.0', ok=True, artifact=result['metadata'])
     if value["operation"] == "claim_core_cycle":
         if set(body) != {"human_uid", "model", "max_output_tokens"}:
             raise Denied("Unexpected core cycle claim")

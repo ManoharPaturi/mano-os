@@ -7,9 +7,20 @@ from mano_core.profile import ProfileDenied, verify_current
 
 
 class CoreCLIGuards(unittest.TestCase):
+    def test_typed_read_input_and_unsupported_capability_rejection(self):
+        value = dict(context=dict(task_id='a' * 32, resource_id='b' * 32,
+            operation_key='read', prompt='Read notes'), plan=dict(capability='files.read',
+                args=dict(path='notes.txt'), reason='Read notes'))
+        self.assertEqual(parse_input(json.dumps(value).encode()), value)
+        for capability in ('files.write', 'model.plan', 'policy.set_profile'):
+            with self.assertRaises(ValueError):
+                parse_input(json.dumps(value | dict(plan=value['plan'] | dict(
+                    capability=capability))).encode())
+
     def test_strict_input_does_not_accept_authority_fields_duplicate_keys_or_unbounded_data(self):
         value = dict(context=dict(task_id='a' * 32, resource_id='b' * 32,
-            operation_key='one', prompt='build'), plan=dict(args={}, reason='test'))
+            operation_key='one', prompt='build'), plan=dict(args=dict(
+                argv=['true'], cwd='.', timeout_seconds=1), reason='test'))
         self.assertEqual(parse_input(json.dumps(value).encode()), value)
         forged_plan = json.dumps(value | {'plan': value['plan'] | {'grant_id': 'c' * 32}}).encode()
         for packet in (b'x' * 65537, b'[]', b'{"context":{},"context":{}}',

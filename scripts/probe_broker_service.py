@@ -1326,6 +1326,50 @@ finally:client.close()
     assert rpc("request", file_query, actor=identity.name) == file_result
     terminal_report["production_authorized_workspace_read_sealed_result"] = True
     terminal_report["file_read_result_scope_range_and_no_reexecution"] = True
+    read_managed = managed | dict(context=managed["context"] | dict(
+        operation_key="ci-typed-read-core-witness"))
+    read_plan = dict(capability="files.read", args=dict(path="live-result"),
+                     reason="Read the bounded local result without a terminal command")
+
+    def typed_read_step():
+        result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+            "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.lifecycle", "--mock"],
+            input=json.dumps(dict(managed=read_managed, plan=read_plan)),
+            capture_output=True, text=True, timeout=15, check=False)
+        assert result.returncode == 0, result.stderr[-4096:]
+        decoded = json.loads(result.stdout)
+        assert decoded["ok"], decoded
+        return decoded["task"]
+
+    typed_pending = typed_read_step()
+    assert typed_pending["status"] == "awaiting_grant"
+    assert typed_pending["proposal"]["capability"] == "files.read"
+    read_view = human(dict(mode="view", id=typed_pending["approval_id"]))["view"]
+    assert read_view["capability"] == "files.read" and read_view["args"] == read_plan["args"]
+    assert human(dict(mode="confirm", view=read_view, password=password))["ok"]
+    typed_ready = typed_read_step()
+    deadline = time.monotonic() + 15
+    while typed_ready["status"] in {"queued", "running"} and time.monotonic() < deadline:
+        typed_ready = typed_read_step()  # Reopen private SQLite checkpoint in a new core process.
+    assert typed_ready["status"] == "read_ready", typed_ready["status"]
+    assert typed_ready["read_result"]["sha256"] == hashlib.sha256(b"pam-terminal-ok").hexdigest()
+    assert typed_ready["read_result"]["effect_verified"] is False
+    assert "pam-terminal-ok" not in json.dumps(typed_ready)  # Metadata only, never source bytes.
+    assert rpc("request", dict(schema_version="1.0", operation="inspect_file_read", body=dict(
+        task_id=terminal_task["task_id"], action_id=typed_ready["action_id"])),
+        actor=identity.name) == denied
+    original_read_source = (terminal_workspace / "live-result").read_bytes()
+    try:
+        (terminal_workspace / "live-result").write_bytes(b"changed-after-read-canary")
+        typed_replay = typed_read_step()
+        assert typed_replay["status"] == "read_ready"
+        assert typed_replay["action_id"] == typed_ready["action_id"]
+        assert typed_replay["read_result"] == typed_ready["read_result"]
+        assert (terminal_workspace / "live-result").read_bytes() == b"changed-after-read-canary"
+    finally:
+        (terminal_workspace / "live-result").write_bytes(original_read_source)
+    terminal_report["typed_core_read_native_pam_checkpoint_and_custody"] = True
+    terminal_report["typed_core_read_replay_no_execution_or_model_disclosure"] = True
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))

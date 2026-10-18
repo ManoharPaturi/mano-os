@@ -119,6 +119,19 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(base64.b64decode(first['data']), b'original')
         self.assertTrue(first['eof'])
         self.assertFalse(first['artifact']['effect_verified'])
+        from mano_broker.control import dispatch_control
+
+        envelope = canonical(dict(schema_version='1.0', operation='inspect_file_read',
+            body=dict(task_id=self.body['task_id'], action_id=action))).encode()
+        inspected = dispatch_control(self.state, envelope, peer=Peer(40, 0, 0),
+                                     now=12, boot_id='boot-a')
+        self.assertEqual(inspected, dict(schema_version='1.0', ok=True,
+                                        artifact=first['artifact']))
+        with self.assertRaises(Denied):
+            dispatch_control(self.state, envelope, peer=Peer(40, 1004, 1004),
+                             now=12, boot_id='boot-a')
+        with self.assertRaises(Denied):
+            self.call('inspect_file_read', dict(task_id=self.body['task_id'], action_id=action))
         (self.root / 'file').write_text('later content')
         self.assertEqual(self.file_result(action), first)
         self.assertFalse(self.runtime.registry.leases)
