@@ -163,7 +163,7 @@ def main():
             break
         time.sleep(0.1)
     else:
-        raise AssertionError('Permission dialog is not visible and focused in the compositor')
+        raise AssertionError(('Permission dialog is not visible and focused', compositor))
     permissions['dialog_visible_and_focused'] = True
     # Let the independent compositor paint the mapped dialog before capturing pixels.
     time.sleep(0.3)

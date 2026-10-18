@@ -117,3 +117,8 @@ inspection rejected acceptance: modal screenshot showed only the parent. Sway's
 app-wide fullscreen rule also matched the transient. Scope fullscreen to the main
 window title and float the transient. Require compositor visible/focused/nonfullscreen
 dialog before screenshot. New head CI and actual pixels required before merge.
+
+PR100 b8f620e/run39114543246 failed the new compositor visibility assertion;
+no merge. Explicitly leave main fullscreen while the modal exists, restore main
+fullscreen/focus on close using GTK. Retain strict visibility assertion and include
+full compositor tree on failure. New exact-head VM and pixel acceptance required.

@@ -13,6 +13,11 @@ from .permissions import NAMES, Permissions  # noqa: E402
 class PermissionsWindow(Gtk.Window):
     def __init__(self, parent, prompt_id, task_id, *, valid, read=None, request=None):
         super().__init__(title='Task permissions', transient_for=parent, modal=True)
+        self.parent_window = parent
+        self.restore_fullscreen = parent.is_fullscreen()
+        # A fullscreen parent can obscure a transient on the human compositor.
+        if self.restore_fullscreen:
+            parent.unfullscreen()
         self.set_application(parent.get_application())
         self.set_default_size(800, 640)
         self.alive = True
@@ -98,6 +103,9 @@ class PermissionsWindow(Gtk.Window):
 
     def closed(self, *_args):
         self.alive = False
+        if self.restore_fullscreen:
+            self.parent_window.fullscreen()
+            self.parent_window.present()
         return False
 
     def mode_changed(self, _button):
