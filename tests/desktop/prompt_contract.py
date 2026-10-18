@@ -72,9 +72,20 @@ def main():
         time.sleep(0.05)
     response = json.loads(response_path.read_text())
     assert response['responsive_during_slow_ack'] is True and response['ui_ticks'] >= 2
-    tree = list(nodes(pyatspi.Registry.getDesktop(0)))
-    refresh = [node for node in tree if node.name == 'Check request status']
-    assert len(refresh) == 1 and refresh[0].queryAction().doAction(0)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        tree = list(nodes(pyatspi.Registry.getDesktop(0)))
+        refresh = [node for node in tree if node.name == 'Check request status'
+                   and node.getRoleName() in {'button', 'push button'}]
+        if len(refresh) == 1 and refresh[0].getState().contains(pyatspi.STATE_SENSITIVE):
+            break
+        time.sleep(0.05)  # The accessibility bridge updates asynchronously.
+    else:
+        raise AssertionError('Expected one sensitive status button: ' + str([
+            (node.name, node.getRoleName()) for node in tree
+            if node.name == 'Check request status']))
+    action = refresh[0].queryAction()
+    assert action.nActions and action.doAction(0)  # Exactly one click; no action retry.
     status_path = ROOT / 'status-response.json'
     deadline = time.monotonic() + 5
     while not status_path.exists() and time.monotonic() < deadline:
