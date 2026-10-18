@@ -146,8 +146,11 @@ def main():
     assert not any(node.getRoleName() in {'password text', 'password entry'} for node in tree)
     subprocess.run(['env', 'WAYLAND_DISPLAY=wayland-1', 'grim', str(ROOT / 'permissions.png')],
                    check=True, timeout=10, capture_output=True)
+    click('Refresh permissions')
     click('Close permissions')
-    assert wait_file('permissions-closed.json')['closed'] is True
+    closed = wait_file('permissions-closed.json')
+    assert closed['closed'] is True and closed['late_reply_ignored'] is True
+    permissions['late_reply_ignored'] = True
     assert len(receipt.read_text().splitlines()) == prior + 1
     result = {
         "gtk_version": ".".join(

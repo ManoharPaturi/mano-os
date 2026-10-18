@@ -34,6 +34,10 @@ def main():
     def permission_read(prompt_id):
         permission_reads.append(prompt_id)
         time.sleep(1)
+        if len(permission_reads) > 1:
+            return dict(schema_version='1.0', ok=True, prompt_id='a'*32, task_id='b'*32,
+                profile=dict(mode='auto', automatic=True, remaining_actions=2,
+                    seconds_remaining=40, max_timeout_seconds=10, scope=scope('auto')))
         return dict(schema_version='1.0', ok=True, prompt_id='a'*32, task_id='b'*32,
             profile=dict(mode='supervised', automatic=False, remaining_actions=0,
                 seconds_remaining=0, max_timeout_seconds=0, scope=scope('supervised')))
@@ -62,7 +66,11 @@ def main():
         if panel is None:
             return True
         if not panel.alive:
-            permission_report('permissions-closed.json', dict(closed=True))
+            if panel.worker.busy:
+                return True
+            assert len(permission_reads) == 2 and len(permission_requests) == 1
+            assert panel.model.status['automatic'] is False
+            permission_report('permissions-closed.json', dict(closed=True, late_reply_ignored=True))
             return False
         if panel.worker.busy:
             stage = 'request' if panel.model.pending is not None else 'read'

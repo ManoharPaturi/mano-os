@@ -33,7 +33,8 @@ and historical approvals. Existing worker tests retain single-inflight/UI-thread
 completion semantics. Real Debian GTK/AT-SPI tests must open the window, edit spin
 values, clamp Full Access duration, select Auto, request once, observe pending-only
 state, verify no password field and responsive ticks during slow read/request,
-close, and preserve the original submission count and cross-session focus canary.
+close during a second slow read, reject its different late status, and preserve
+the original submission count and cross-session focus canary.
 Reports are atomically published by the synthetic fixture.
 
 The UI fixture injects local synthetic status/request data, explicitly labelled in
