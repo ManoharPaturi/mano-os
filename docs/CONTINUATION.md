@@ -83,3 +83,15 @@ bounds, Stop stays independent. Broker recovery invalidates profiles. No host-da
 or network widening, no mode UI command/full profile product claim. Local312tests
 pass/28Linux skips; native PAM/count/expiry/Full protected-path/Stop VM witnesses
 pending. See architecture/0082-pam-workspace-profiles.md and workspace outputs.
+
+PR98 merged20ed8728d7576df38b5ea0c482b46024fb70f076 after finalCI39087071159
+all success, artifact12120534310/53hashes; postmain39087623623 passed this turn.
+Current trusted-mode-selection work adds native08 pending-only profile request,
+09 effective read-only status and human TTY mano_prompt.mode command. Scope/task/
+args checked before password; separate native PAM activates; cancel/wrongpass/noecho
+failure do not. Print/reuse request key for explicit uncertain-ack retry; no automatic
+retry. Existing approve/rearm refactored to shared guarded review; packet clear kept.
+Local318tests pass/28Linux skips,Ruff/diff/shell/compile. Actual human-UID PTY CLI,
+active unexpired-lease installed SIGKILL/restart and live-before-Stop/rearm rejection
+witnesses await finalCI. No physical keyboard/GUI mode/host-network/release claim.
+See architecture/0083-trusted-mode-selection.md and workspace outputs for live state.

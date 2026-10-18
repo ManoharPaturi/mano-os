@@ -41,3 +41,23 @@ an up-to-date mergeable PR, and a matching current head. No admin bypass.
 
 Revert implementation through a new tested PR. The guest is disposable; do not
 reuse its disk outside the lab. No runtime services are installed on the Mac.
+
+## Prototype human permission command
+
+On an installed Debian prototype, the configured human can use their terminal to
+review a workspace profile for a request ID from the prompt UI:
+
+```sh
+PYTHONPATH=/usr/lib/mano-os python3 -m mano_prompt.mode PROMPT_ID auto --duration 60 --max-actions 4 --max-timeout 10
+PYTHONPATH=/usr/lib/mano-os python3 -m mano_prompt.mode PROMPT_ID --status
+```
+
+Review the broker-owned scope before confirming and entering the OS password.
+Cancel makes no new profile active. Keep the printed request key after an uncertain
+acknowledgement; explicitly retry with --request-key KEY and identical arguments.
+The command never retries automatically. Status shows availability for new automatic grants;
+a historical approval is insufficient. Issued grants and running work may remain
+when a count is exhausted; use independent Stop to revoke them. Full Access remains workspace-only in this
+prototype, with no additional host data, network, credentials or privilege. These
+commands require the installed Linux human TTY; they are not runnable on this Mac.
+See architecture/0083-trusted-mode-selection.md for protocol and acceptance limits.

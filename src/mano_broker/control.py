@@ -60,6 +60,20 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
             raise Denied("Unexpected prompt discovery fields")
         prompts = Prompts(state).pending(**body, boot_id=boot_id)
         return dict(schema_version="1.0", ok=True, prompts=prompts)
+    if value['operation'] == 'permission_status':
+        if set(body) != {'human_uid', 'prompt_id'}:
+            raise Denied('Unexpected human permission query fields')
+        from .human_profiles import profile_status
+
+        return dict(schema_version='1.0', ok=True,
+                    **profile_status(state, **body, now=now, boot_id=boot_id))
+    if value['operation'] == 'request_profile':
+        if set(body) != {'human_uid', 'prompt_id', 'request_key', 'args'}:
+            raise Denied('Unexpected human profile fields')
+        from .human_profiles import request_profile
+
+        return dict(schema_version='1.0', ok=True,
+                    **request_profile(state, **body, now=now, boot_id=boot_id))
     if value["operation"] == "human_task_status":
         if set(body) != {"human_uid", "prompt_id"}:
             raise Denied("Unexpected human task status fields")

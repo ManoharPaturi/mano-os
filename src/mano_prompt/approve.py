@@ -7,6 +7,7 @@ import os
 import socket
 import struct
 import sys
+import warnings
 
 from mano_broker.protocol import identifier
 
@@ -104,21 +105,24 @@ def rpc(packet):
         return result
 
 
-def main():
-    if len(sys.argv) != 2 or not os.isatty(0) or not os.isatty(1):
-        raise ValueError("Use mano-approve APPROVAL_ID or --rearm from your human TTY")
-    rearming = sys.argv[1] == "--rearm"
-    view = rpc(rearm_view_packet() if rearming else view_packet(sys.argv[1]))["view"]
+def approve(approval_id=None, *, rearming=False, expected=None):
+    if not os.isatty(0) or not os.isatty(1):
+        raise ValueError('Use the protected approval flow from your human TTY')
+    view = rpc(rearm_view_packet() if rearming else view_packet(approval_id))["view"]
     if view["human_uid"] != os.getuid() or (
-        not rearming and view["approval_id"] != sys.argv[1]
+        not rearming and view["approval_id"] != approval_id
     ):
         raise ValueError("Approval is not bound to this human and request")
+    if expected is not None and any(view.get(key) != value for key, value in expected.items()):
+        raise ValueError('Approval differs from the requested profile/task/scope')
     print("Allow new tasks again; old permissions stay revoked:" if rearming else
           "Broker-owned operation (reason_untrusted is only model explanation):")
     print(json.dumps(view, indent=2, sort_keys=True, ensure_ascii=True))
     if input("Approve this exact operation? [y/N] ").strip().lower() != "y":
-        return
-    password = getpass.getpass("OS authentication password: ")
+        return False
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        password = getpass.getpass("OS authentication password: ")
     packet = (rearm_confirmation_packet(view, password) if rearming
               else confirmation_packet(view, password))
     del password
@@ -127,6 +131,14 @@ def main():
     finally:
         packet[:] = b"\0" * len(packet)
     print("Emergency Stop rearmed." if rearming else "Approval recorded: " + result["grant_id"])
+    return True
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise ValueError('Use mano-approve APPROVAL_ID or --rearm from your human TTY')
+    rearming = sys.argv[1] == '--rearm'
+    approve(None if rearming else sys.argv[1], rearming=rearming)
 
 
 if __name__ == "__main__":
