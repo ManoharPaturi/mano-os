@@ -141,3 +141,16 @@ hashes+2livePNG hashes verified; actual production GUI/PAM workflow passed. Both
 pixels viewed; effective status was correct but pending-review text looked current.
 Label pending text as acknowledgement history, since status refresh reads profile
 not approval record. New final-head CI/artifact/pixels required before merge.
+
+PR101 merged8c311f4, finalcf54f7c/CI39116481401 ALL3SUCCESS, artifact12132817197,
+54architecture+2livePNGhashes and actual pending/effective GUI screenshots accepted.
+Postmain39130852493 stillrunning lastcheck. Fullv2.1incomplete.
+
+Current native-human-stop-client work: fixed no-arg nonsetuid C /usr/libexec/mano-stop,
+Rootlistener+actualRootSCMreply, exactstopped/onecredential/noFDs/truncation/timeouts.
+HumanSway Super+Shift+Backspace invokesbinary independentlyofGTK/Python. Ack means
+latch+killwrites, NOTprovenprocess exit; VM retaineddrainchecks separately. Private
+mountnamespace replyfixture valid/denied/extra/truncated/rights/nonRootsender/timeout.
+Productionclient replaces test-onlyPython for actualfrozenbroker/launcher/core/provider
+Stop event; wrongUID/extraargs noarmchange; no rearm/passwordUI. See ADR0086.
+Exact-headCI/nativecompile/actualVM acceptance required before merge. Disk23GiB89%.
