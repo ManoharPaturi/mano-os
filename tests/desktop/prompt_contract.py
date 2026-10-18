@@ -122,8 +122,11 @@ def main():
         raise AssertionError('Missing sensitive accessible control: ' + name)
 
     def click(name, roles=frozenset({'button', 'push button'})):
-        action = accessible(name, roles).queryAction()
-        assert action.nActions and action.doAction(0)
+        node = accessible(name, roles)
+        action = node.queryAction()
+        names = [action.getName(index) for index in range(action.nActions)]
+        assert action.nActions, (name, node.getRoleName(), names)
+        assert action.doAction(0), (name, node.getRoleName(), names, 'activation denied')
 
     click('Permissions')
     assert wait_file('permissions-ready.json')['ready'] is True

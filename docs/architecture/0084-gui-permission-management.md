@@ -8,6 +8,7 @@ through operation08. Scope stays workspace-only, with no network or automatic
 model spending/disclosure. Exhausted counts do not cancel issued/running work;
 the window directs the human to independent Stop for revocation.
 
+A stateful GAction binds mode options for assistive-technology activation.
 Selecting a radio option changes only the proposed request. Duration/count/timeout
 are bounded by the shared profile schema; Full Access clamps duration to300s.
 Requesting creates a pending approval. The window displays its ID and a fixed

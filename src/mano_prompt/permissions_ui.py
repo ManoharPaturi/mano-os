@@ -3,7 +3,7 @@
 import gi
 
 gi.require_version('Gtk', '4.0')
-from gi.repository import GLib, Gtk  # noqa: E402
+from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 from .dispatch import SubmissionWorker  # noqa: E402
 from .mode import read_profile_status, request_profile  # noqa: E402
@@ -37,16 +37,18 @@ class PermissionsWindow(Gtk.Window):
             'use independent Stop to revoke them.', wrap=True, xalign=0)
         choice = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
         self.choices = {}
-        group = None
+        actions = Gio.SimpleActionGroup()
+        self.mode_action = Gio.SimpleAction.new_stateful(
+            'mode', GLib.VariantType.new('s'), GLib.Variant('s', 'supervised'))
+        self.mode_action.connect('activate', self.select_mode)
+        actions.add_action(self.mode_action)
+        self.insert_action_group('profile', actions)
         for mode, name in NAMES.items():
             button = Gtk.CheckButton(label=name)
-            if group is None:
-                group = button
-            else:
-                button.set_group(group)
+            button.set_action_name('profile.mode')
+            button.set_action_target_value(GLib.Variant('s', mode))
             self.choices[mode] = button
             choice.append(button)
-        self.choices['supervised'].set_active(True)
         limits = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
         self.limits = {}
         for key, label, maximum, default in (
@@ -83,6 +85,10 @@ class PermissionsWindow(Gtk.Window):
         self.set_child(scroll)
         self.start(('status',))
 
+    def select_mode(self, action, value):
+        if self.alive and self.valid() and value.get_string() in self.choices:
+            action.set_state(value)
+
     def closed(self, *_args):
         self.alive = False
         return False
@@ -96,6 +102,7 @@ class PermissionsWindow(Gtk.Window):
         self.refresh.set_sensitive(not busy)
         self.ask.set_sensitive(not busy and self.model.status is not None)
         locked = busy or self.model.pending is not None
+        self.mode_action.set_enabled(not locked)
         for widget in (*self.choices.values(), *self.limits.values()):
             widget.set_sensitive(not locked)
         self.ask.set_label('Retry same request' if self.model.pending
