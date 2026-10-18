@@ -52,7 +52,8 @@ def run(native_terminal, password, register_identity, query, *, config_path=None
     log = (OUT / 'live-human-sway.txt').open('w')
     proc = subprocess.Popen(['/usr/bin/unshare', '--net', *human(
         'WLR_BACKENDS=headless', 'WLR_RENDERER=pixman', 'WLR_HEADLESS_OUTPUTS=1',
-        'GSK_RENDERER=cairo', 'GSK_DEBUG=full-redraw', 'WLR_SCENE_DEBUG_DAMAGE=rerender', 'GDK_BACKEND=wayland', 'GTK_A11Y=atspi',
+        'GSK_RENDERER=cairo', 'GSK_DEBUG=full-redraw', 'WLR_SCENE_DEBUG_DAMAGE=rerender',
+        'GDK_BACKEND=wayland', 'GTK_A11Y=atspi',
         'dbus-run-session', '--', 'sway', '-c', str(config))], stdout=log, stderr=log)
     ipc = None
     try:
