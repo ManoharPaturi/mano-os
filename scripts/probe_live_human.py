@@ -15,7 +15,7 @@ OUT = ROOT / 'evidence'
 RUNTIME = Path('/run/mano-live-human')
 
 
-def run(native_terminal, password, register_identity, query):
+def run(native_terminal, password, register_identity, query, *, config_path=None):
     assert os.geteuid() == 0
     assert Path('/etc/mano-lab-disposable').read_text().strip() == 'mano-phase0-ci'
     assert subprocess.check_output(['systemd-detect-virt', '--vm'], text=True).strip() in {
@@ -44,7 +44,9 @@ def run(native_terminal, password, register_identity, query):
         return json.loads(path.read_text()) if path.exists() else {}
 
     config = RUNTIME / 'sway.conf'
-    config.write_text((ROOT / 'packaging/sway/human.conf').read_text().replace(
+    config.write_text((config_path or ROOT / 'packaging/sway/human.conf').read_text().replace(
+        '/usr/bin/mano-prompt',
+        '/usr/bin/python3 /opt/mano-lab/tests/desktop/live_prompt.py').replace(
         '/usr/bin/python3 -m mano_prompt',
         '/usr/bin/python3 /opt/mano-lab/tests/desktop/live_prompt.py'))
     log = (OUT / 'live-human-sway.txt').open('w')

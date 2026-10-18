@@ -90,6 +90,11 @@ ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo cloud-init status --wait'
 # Transfer only the tracked checkout; never CI credentials or host home.
 git -C "$repo_root" archive HEAD | ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo mkdir -p /opt/mano-lab; sudo tar -xf - -C /opt/mano-lab'
+source_revision=$(git -C "$repo_root" rev-parse HEAD)
+source_epoch=$(git -C "$repo_root" show -s --format=%ct HEAD)
+python3 -c 'import json,sys;print(json.dumps(dict(revision=sys.argv[1],epoch=int(sys.argv[2]))))' \
+  "$source_revision" "$source_epoch" | ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+  'sudo tee /opt/mano-lab/source-info.json > /dev/null'
 set +e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo bash /opt/mano-lab/scripts/guest_lab.sh && sudo bash /opt/mano-lab/scripts/migrate_btrfs_root.sh' \
@@ -211,5 +216,10 @@ if [ "$result" = 0 ]; then
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_delegated_cgroups.py' \
     > "$repo_root/evidence/delegated-cgroups.json"
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONPATH=/opt/mano-lab/src PYTHONDONTWRITEBYTECODE=1 python3 /opt/mano-lab/scripts/probe_runtime_package.py' \
+    > "$repo_root/evidence/runtime-package.json"
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json mano-runtime_0.1.0~prototype1_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
 fi
 exit "$result"

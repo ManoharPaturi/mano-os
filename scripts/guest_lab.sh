@@ -9,7 +9,7 @@ mkdir -p evidence
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -y upgrade
-apt-get install -y --no-install-recommends python3 python3-venv bubblewrap acl \
+apt-get install -y --no-install-recommends python3 python3-venv python3-pip bubblewrap acl \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
   libreoffice-calc libreoffice-gtk3 python3-uno poppler-utils gir1.2-gtk-4.0 fonts-dejavu-core jq procps rsync gcc libc6-dev libpam0g-dev libjson-c-dev libsystemd-dev libseccomp-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols xauth x11-utils xfonts-base
@@ -19,8 +19,14 @@ python3 -m venv /usr/local/lib/mano-browser
 /usr/local/lib/mano-browser/bin/pip install playwright==1.63.0
 /usr/local/lib/mano-browser/bin/pip freeze > evidence/browser-python-packages.txt
 python3 -m venv /usr/local/lib/mano-core
-/usr/local/lib/mano-core/bin/pip install langgraph==1.2.15 langgraph-checkpoint-sqlite==3.1.2
-/usr/local/lib/mano-core/bin/pip freeze > evidence/agent-python-packages.txt
+/usr/local/lib/mano-core/bin/pip download --only-binary=:all: --require-hashes \
+  -r packaging/runtime/requirements.lock -d /opt/mano-runtime-wheelhouse
+/usr/local/lib/mano-core/bin/pip install --no-index --find-links=/opt/mano-runtime-wheelhouse \
+  --only-binary=:all: --require-hashes --no-deps --no-compile \
+  --target=/usr/lib/mano-runtime/vendor -r packaging/runtime/requirements.lock
+cp packaging/runtime/requirements.lock evidence/agent-python-packages.lock
+/usr/local/lib/mano-core/bin/pip list --path=/usr/lib/mano-runtime/vendor --format=freeze \
+  > evidence/agent-python-packages.txt
 printf '# Task-local launcher configuration; no host policy or credential data.\n' \
   > /usr/local/lib/mano-browser/launcher-config
 chmod 0444 /usr/local/lib/mano-browser/launcher-config

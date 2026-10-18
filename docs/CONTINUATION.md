@@ -154,3 +154,26 @@ mountnamespace replyfixture valid/denied/extra/truncated/rights/nonRootsender/ti
 Productionclient replaces test-onlyPython for actualfrozenbroker/launcher/core/provider
 Stop event; wrongUID/extraargs noarmchange; no rearm/passwordUI. See ADR0086.
 Exact-headCI/nativecompile/actualVM acceptance required before merge. Disk23GiB89%.
+
+PR102 merged8453cec after finalda19289/CI39131232314 all3SUCCESS/art12138123420;
+54hashes+8replycases/actualnativeStop/frozenservices/drain/revocation accepted.
+Postmain39131966023 pending verification. Full v2.1 still incomplete.
+
+Current runtime-debian-package work adds an actual unsigned Debian13/amd64/CPython3.13
+.deb builder,41 tested dependency versions+PyPI wheel hashes, package-owned vendor
+path (core now systemPython), native adapters/systemd/PAM/default-disabled configs,
+private sysusers/tmpfiles and Root-TTY existing-human enrollment. Install never
+starts services; --start currentboot, --enable explicitpersistent target. No key,
+no Rootdefault humanUID, no automatic paid/controller activation. Account collision
+preflight, durable no-rebind UID, fixed env/-P Rootwrappers, remove/upgrade Stop and
+data retention. Old manual runtime paths firstinstall refused. ADR0087 details scope.
+
+GuestLab now hashes/downloads wheels once and uses vendor target; reusable ci_tty
+helper preserves prior actual PTY semantics with explicit guestRoot guard. Full old
+broker/core tests retained against package-owned-path architecture. Last guest step
+builds twice, verifies payload, disables old lab paths, dpkg installs, actual production
+GUI/PAM plus LangGraph mock effect, editedconffile/data/enable-state reinstall and
+noauthority resurrection, removal/no data deletion. New runtime-package.json/.deb
+artifacts required; exact-headCI/allchecks/full artifact acceptance BEFORE merge.
+No local Linux build/install attempted. Local330tests/28Linuxskips/Ruff/shell/compile
+pass so far. Packaging remains unaccepted until actual CI passes.
