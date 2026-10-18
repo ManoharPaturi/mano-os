@@ -147,6 +147,26 @@ def main():
     tree = list(nodes(pyatspi.Registry.getDesktop(0)))
     assert any('Pending terminal review' in str(node.name) for node in tree)
     assert not any(node.getRoleName() in {'password text', 'password entry'} for node in tree)
+    def compositor_nodes(node):
+        yield node
+        for child in node.get('nodes', []) + node.get('floating_nodes', []):
+            yield from compositor_nodes(child)
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        compositor = json.loads(subprocess.check_output(
+            ['swaymsg', '-t', 'get_tree', '-r'], text=True, timeout=5))
+        dialogs = [node for node in compositor_nodes(compositor)
+                   if node.get('name') == 'Task permissions']
+        if (len(dialogs) == 1 and dialogs[0].get('visible')
+                and dialogs[0].get('focused') and dialogs[0].get('fullscreen_mode') == 0):
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError('Permission dialog is not visible and focused in the compositor')
+    permissions['dialog_visible_and_focused'] = True
+    # Let the independent compositor paint the mapped dialog before capturing pixels.
+    time.sleep(0.3)
     subprocess.run(['env', 'WAYLAND_DISPLAY=wayland-1', 'grim', str(ROOT / 'permissions.png')],
                    check=True, timeout=10, capture_output=True)
     click('Refresh permissions')

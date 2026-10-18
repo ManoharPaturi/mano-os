@@ -111,3 +111,9 @@ responsiveness/noactivation/no-password screenshot acceptance pending. New
 human-permissions.png added to referenced artifact hashes. Final screenshots must
 be visually inspected; live GUI/broker integration/physical/release not claimed.
 See architecture/0084-gui-permission-management.md and workspace outputs.
+
+PR100 head5fb CI39113742648 passed all jobs and54 artifact hashes, but visual
+inspection rejected acceptance: modal screenshot showed only the parent. Sway's
+app-wide fullscreen rule also matched the transient. Scope fullscreen to the main
+window title and float the transient. Require compositor visible/focused/nonfullscreen
+dialog before screenshot. New head CI and actual pixels required before merge.
