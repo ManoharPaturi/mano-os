@@ -212,3 +212,12 @@ whenfuturedeadline/data/newtask/nativeStop passed. VisualQA REJECTED postbootpen
 PNG: partiallydrawn/missingletters/digits; other3stockstatesclear. Capture nowwaits1s
 then requiresconsecutiveidenticalPNGframes (8sbounded), unchangedunmodifiedapp/
 allfunctionalassertions. NewexactheadCI/pixelsrequired;8954notmerged.
+
+PR10495b40fb/CI39138555266 ALL3SUCCESS/art12141131665, fullfunctional/boot/hashes
+verified, but visualQA REJECTED stockafterpending +preparedpending persistentmissing
+glyphs evenidenticalframes. Notcapturetiming. OfficialGTK4.18 sourcegskrenderer.c
+full-redraw skips render-node diff; wlroots0.18.2scene fullrerender skipsdamage.
+Nowallhumanheadlessharnesses setGSK_DEBUG=full-redraw andWLR_SCENE_DEBUG_DAMAGE=rerender
+onlyalongsideexistingCairo/Pixmanprofile. No productconfig/permissions/GUI observer
+changes. Reportexplicitrenderingprofile+incrementalvisualacceptanceFalse; no physical/
+defaultbackend claim. NewheadCI/pixelsrequired;95b NOTmerged. PrimarysourceslinksADR88.

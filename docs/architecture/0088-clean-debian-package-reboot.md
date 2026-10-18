@@ -44,3 +44,15 @@ human-session launch. It is not physical input, display-manager/autologin valida
 8GB hardware performance, paid provider execution, independent image-signature
 verification or a signed mano-OS distribution. The existing complete security suite,
 package lifecycle and exact-head merge/artifact requirements remain mandatory.
+
+The95b40fb baseline passed functional/boot checks but consecutive identical PNGs
+still contained missing glyphs in pending states. That evidence was rejected. The
+headless human harness therefore uses GTK GSK_DEBUG=full-redraw and wlroots
+WLR_SCENE_DEBUG_DAMAGE=rerender for its existing Cairo/Pixman software profile.
+These documented upstream debugging modes invalidate the full frame instead of
+trusting incremental damage. They are test-only environment, not shipped user
+configuration or a permission/sandbox bypass. Report the rendering profile and keep
+incremental-software-rendering visual acceptance false; no physical/default-renderer
+claim follows. Functional/PAM/boot/grant checks and unchanged packaged GUI remain.
+References: https://docs.gtk.org/gtk4/running.html and
+https://gitlab.freedesktop.org/wlroots/wlroots/-/blob/0.18.2/types/scene/wlr_scene.c

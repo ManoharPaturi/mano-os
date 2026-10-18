@@ -129,6 +129,8 @@ def human_session():
                     "WLR_RENDERER=pixman",
                     "WLR_HEADLESS_OUTPUTS=1",
                     "GSK_RENDERER=cairo",
+                    "GSK_DEBUG=full-redraw",
+                    "WLR_SCENE_DEBUG_DAMAGE=rerender",
                     "GDK_BACKEND=wayland",
                     "GTK_A11Y=atspi",
                     "dbus-run-session",

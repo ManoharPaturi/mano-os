@@ -146,6 +146,8 @@ def gui(password, label):
                 "WLR_RENDERER=pixman",
                 "WLR_HEADLESS_OUTPUTS=1",
                 "GSK_RENDERER=cairo",
+                "GSK_DEBUG=full-redraw",
+                "WLR_SCENE_DEBUG_DAMAGE=rerender",
                 "GDK_BACKEND=wayland",
                 "GTK_A11Y=atspi",
                 "dbus-run-session",
@@ -375,6 +377,8 @@ def phase(after_reboot):
                 paid_model_execution=False,
                 physical_input_provenance=None,
                 gui_start_mode="manual headless user session; no physical/display-manager test",
+                rendering_profile="headless pixman / GTK cairo; full-frame redraw",
+                incremental_software_redraw_visual_acceptance=False,
             )
             (OUT / "stock-runtime-reboot.json").write_text(json.dumps(report, indent=2) + "\n")
             print(json.dumps(report))
