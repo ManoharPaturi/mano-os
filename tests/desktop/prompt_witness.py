@@ -9,6 +9,7 @@ from gi.repository import GLib
 
 from mano_prompt.app import Prompt
 from mano_prompt.requests import store_request
+from mano_protocol.profiles import scope
 
 ROOT = Path("/run/mano-human")
 CANARY = "Human canary: agent input must leave this unchanged"
@@ -28,7 +29,68 @@ def main():
                                          state='done', effect_verified=False)],
             approvals=[dict(approval_id='c' * 32, capability='terminal.run', state='pending')])
 
-    app = Prompt(submit=delayed_recorder, status=delayed_status)
+    permission_reads, permission_requests = [], []
+
+    def permission_read(prompt_id):
+        permission_reads.append(prompt_id)
+        time.sleep(1)
+        if len(permission_reads) > 1:
+            return dict(schema_version='1.0', ok=True, prompt_id='a'*32, task_id='b'*32,
+                profile=dict(mode='auto', automatic=True, remaining_actions=2,
+                    seconds_remaining=40, max_timeout_seconds=10, scope=scope('auto')))
+        return dict(schema_version='1.0', ok=True, prompt_id='a'*32, task_id='b'*32,
+            profile=dict(mode='supervised', automatic=False, remaining_actions=0,
+                seconds_remaining=0, max_timeout_seconds=0, scope=scope('supervised')))
+
+    def permission_request(prompt_id, request_key, args):
+        permission_requests.append(dict(prompt_id=prompt_id, request_key=request_key, args=args))
+        assert prompt_id == 'a'*32
+        assert args == dict(mode='auto', duration_seconds=60, max_actions=4, max_timeout_seconds=10)
+        time.sleep(1)
+        return dict(schema_version='1.0', ok=True, prompt_id=prompt_id, task_id='b'*32,
+                    approval=dict(approval_id='e'*32, state='pending', grant_id=None))
+
+    app = Prompt(submit=delayed_recorder, status=delayed_status,
+                 permission_read=permission_read, permission_request=permission_request)
+    permission_ticks = dict(read=0, request=0)
+
+    def permission_report(name, value):
+        path = ROOT / name
+        if not path.exists():
+            temporary = path.with_suffix('.tmp')
+            temporary.write_text(json.dumps(value) + '\n')
+            temporary.replace(path)
+
+    def permission_observer():
+        panel = app.permission_window
+        if panel is None:
+            return True
+        if not panel.alive:
+            if panel.worker.busy:
+                return True
+            assert len(permission_reads) == 2 and len(permission_requests) == 1
+            assert panel.model.status['automatic'] is False
+            permission_report('permissions-closed.json', dict(closed=True, late_reply_ignored=True))
+            return False
+        if panel.worker.busy:
+            stage = 'request' if panel.model.pending is not None else 'read'
+            permission_ticks[stage] += 1
+        elif panel.model.approval is not None:
+            assert panel.model.approval['state'] == 'pending'
+            assert panel.model.status['automatic'] is False
+            assert len(permission_reads) == len(permission_requests) == 1
+            assert all(count >= 2 for count in permission_ticks.values())
+            report = dict(read_ticks=permission_ticks['read'],
+                request_ticks=permission_ticks['request'],
+                request=permission_requests[0], summary=panel.summary.get_text(),
+                review=panel.review.get_text(), automatic_activated=False,
+                scope='synthetic local permission-management UI fixture',
+                physical_input_provenance=None)
+            permission_report('permissions-complete.json', report)
+        elif panel.model.status is not None:
+            assert panel.ask.get_sensitive()
+            permission_report('permissions-ready.json', dict(ready=True))
+        return True
     status_ticks = 0
 
     def status_responsiveness():
@@ -143,6 +205,7 @@ def main():
         GLib.timeout_add(50, poll)
         GLib.timeout_add(50, responsiveness)
         GLib.timeout_add(50, status_responsiveness)
+        GLib.timeout_add(50, permission_observer)
 
     app.connect("activate", install)
     return app.run(None)

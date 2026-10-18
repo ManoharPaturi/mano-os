@@ -97,3 +97,28 @@ witnesses await finalCI. No physical keyboard/GUI mode/host-network/release clai
 See architecture/0083-trusted-mode-selection.md and workspace outputs for live state.
 
 First PR99 head6830b78 CI39107689316 failed restart witness expecting pending; actual Runtime.live_task correctly denies orphaned task after lost descriptors. Preserve denial, require fresh provisioning. Human mode requests now require the same live runtime before creating a challenge. Regression test added; all319localtests pass. Final-head CI still required.
+
+PR99 merged466d0d985c1eeec96853dc58566b14cd7510ecb8 after finalhead80e197c,
+CI39111620796 allsuccess/artifact12130479427/53hashes. Current gui-permission-
+management work adds a modal bound to acknowledged prompt/task/revision, native09
+status and native08 pending requests only. No GUI password/confirmation/rearm.
+Initial status validated; uncertain request keeps exact args/key and locks edits;
+late closed/stale replies ignored. Full duration clamps300s; scoped status and
+terminal review ID/command shown. Existing mode validators split into pure parsers
+for both native clients and injected GUI fixtures. Pure model tests324local/28Linux
+skips pass; Ruff/diff/shell/compile pass. New synthetic GTK/AT-SPI interaction/
+responsiveness/noactivation/no-password screenshot acceptance pending. New
+human-permissions.png added to referenced artifact hashes. Final screenshots must
+be visually inspected; live GUI/broker integration/physical/release not claimed.
+See architecture/0084-gui-permission-management.md and workspace outputs.
+
+PR100 head5fb CI39113742648 passed all jobs and54 artifact hashes, but visual
+inspection rejected acceptance: modal screenshot showed only the parent. Sway's
+app-wide fullscreen rule also matched the transient. Scope fullscreen to the main
+window title and float the transient. Require compositor visible/focused/nonfullscreen
+dialog before screenshot. New head CI and actual pixels required before merge.
+
+PR100 b8f620e/run39114543246 failed the new compositor visibility assertion;
+no merge. Explicitly leave main fullscreen while the modal exists, restore main
+fullscreen/focus on close using GTK. Retain strict visibility assertion and include
+full compositor tree on failure. New exact-head VM and pixel acceptance required.

@@ -252,7 +252,7 @@ def main():
             "native-prompt-serial-rescue",
             "pass" if report["passed"] and native else "fail",
             "Native GTK4 prompt plus authenticated real ttyS0 shell with frozen mock core",
-            ("human-prompt.json", "human-prompt.png", "serial-rescue.json")
+            ("human-prompt.json", "human-prompt.png", "human-permissions.png", "serial-rescue.json")
             if native
             else ("serial-rescue.json",),
         )
