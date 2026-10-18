@@ -58,5 +58,7 @@ class Permissions:
         aid = self.approval['approval_id']
         if self.approval['state'] == 'approved':
             return 'Approval already recorded. Refresh permissions to check new-grant availability.'
-        return ('Pending terminal review. This window has activated nothing.\nApproval: ' + aid
+        return ('Pending terminal review at acknowledgement; '
+                'current approval state may have changed.\n'
+                'This window has activated nothing.\nApproval: ' + aid
                 + '\nPYTHONPATH=/usr/lib/mano-os python3 -m mano_prompt.approve ' + aid)

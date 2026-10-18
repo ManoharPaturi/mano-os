@@ -87,6 +87,7 @@ created_egress_user = False
 created_group = False
 joined = False
 identity = None
+extra_gui_identities = []
 
 
 def command(*args):
@@ -1389,6 +1390,11 @@ finally:client.close()
     for malformed in (wire[:-1], wire+b'extra', wire[:66]+b'\x03'+wire[67:]):
         assert human(dict(mode="raw_prompt", wire=malformed.hex())) == {"ok": False}
     terminal_report["human_mode_tty_cancel_wrong_password_retry_and_status"] = True
+    from probe_live_human import run as live_human_permissions
+
+    live_gui = live_human_permissions(native_terminal, password, extra_gui_identities.append, human)
+    assert live_gui['effective']['status']['automatic'] is True
+    terminal_report["production_gui_native_broker_tty_pam_profile_refresh"] = True
     _, unlisted = profiled_request("terminal.run", dict(argv=["/bin/sh", "-c", "true"],
                                                        cwd=".", timeout_seconds=2))
     assert unlisted["state"] == "pending"
@@ -1983,6 +1989,8 @@ finally:
     STATE.parent.chmod(old_mode)
     if identity is not None:
         subprocess.run(["userdel", identity.name], check=False, capture_output=True)
+    for gui_identity in extra_gui_identities:
+        subprocess.run(["userdel", gui_identity], check=False, capture_output=True)
     LOCK.unlink(missing_ok=True)
     stop_dir = Path("/run/mano-stopd")
     if stop_dir.exists():
