@@ -202,6 +202,7 @@ def human_session():
             time.sleep(0.1)
         test = json.loads((RUNTIME / "prompt-test.json").read_text())
         assert test["request"]["text"] == "Show system status"
+        assert test["read_only_intake_status"]["responsive_during_slow_status"] is True
         image = subprocess.run(
             human(["WAYLAND_DISPLAY=wayland-1", "grim", str(RUNTIME / "prompt.png")]),
             text=True,

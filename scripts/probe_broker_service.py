@@ -261,11 +261,13 @@ def native_key_setup(value=None):
 native_client = """import json,sys
 from mano_prompt.approve import (rpc,view_packet,confirmation_packet,
  rearm_view_packet,rearm_confirmation_packet)
-from mano_prompt.submit import prompt_packet,status_packet
+from mano_prompt.submit import prompt_packet
+from mano_prompt.intake import read_status
 body=json.loads(sys.stdin.read())
 try:
  if body['mode']=='submit_prompt':result=rpc(prompt_packet(body['prompt'],body['key']))
- elif body['mode']=='prompt_status':result=rpc(status_packet(body['id']))
+ elif body['mode']=='prompt_status':
+  result=dict(schema_version='1.0',ok=True,prompt=read_status(body['id']))
  elif body['mode']=='raw_prompt':result=rpc(bytes.fromhex(body['wire']))
  elif body['mode']=='view':result=rpc(view_packet(body['id']))
  elif body['mode']=='rearm_view':result=rpc(rearm_view_packet())
@@ -1212,6 +1214,7 @@ finally:client.close()
         durable_prompt_context_dispatch_reused=True,
         installed_root_task_factory=True,
         authenticated_native_human_prompt_queue=True,
+        read_only_intake_client_actual_native_transport=True,
         default_prompt_handler_actual_native_transport=True,
         protected_pending_prompt_discovery=True,
         installed_bounded_queue_cycle=True,

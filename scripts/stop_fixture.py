@@ -195,7 +195,8 @@ def observe(phase):
     epoch = int(Path("/var/lib/mano-broker/grant-epoch").read_text())
     assert epoch > before["grant"]["epoch"]
     for pid in before["task_pids"]:
-        assert exited_or_zombie(pid), f"Task {pid} survived"
+        assert exited_or_zombie(pid), (
+            f"Task {pid} survived final observation: " + json.dumps(task_diagnostic(pid)))
     assert DISPLAY.stat().st_uid == 0 and stat.S_IMODE(DISPLAY.stat().st_mode) == 0o700
     seats = query_seat()
     assert all(not (seat["capabilities"] & 1) for seat in seats)

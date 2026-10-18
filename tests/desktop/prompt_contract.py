@@ -72,6 +72,33 @@ def main():
         time.sleep(0.05)
     response = json.loads(response_path.read_text())
     assert response['responsive_during_slow_ack'] is True and response['ui_ticks'] >= 2
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        tree = list(nodes(pyatspi.Registry.getDesktop(0)))
+        refresh = [node for node in tree if node.name == 'Check request status'
+                   and node.getRoleName() in {'button', 'push button'}]
+        if len(refresh) == 1 and refresh[0].getState().contains(pyatspi.STATE_SENSITIVE):
+            break
+        time.sleep(0.05)  # The accessibility bridge updates asynchronously.
+    else:
+        raise AssertionError('Expected one sensitive status button: ' + str([
+            (node.name, node.getRoleName()) for node in tree
+            if node.name == 'Check request status']))
+    action = refresh[0].queryAction()
+    assert action.nActions and action.doAction(0)  # Exactly one click; no action retry.
+    status_path = ROOT / 'status-response.json'
+    deadline = time.monotonic() + 5
+    while not status_path.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    intake_status = json.loads(status_path.read_text())
+    assert intake_status['responsive_during_slow_status'] and intake_status['ui_ticks'] >= 2
+    assert 'Workspace ready; execution status is unavailable here' in intake_status['display']
+    assert 'Request: ' + 'a' * 32 in intake_status['display']
+    assert 'Task: ' + 'b' * 32 in intake_status['display']
+    tree = list(nodes(pyatspi.Registry.getDesktop(0)))
+    assert any('Workspace ready; execution status is unavailable here' in str(node.name)
+               for node in tree)
+    assert len(receipt.read_text().splitlines()) == prior + 1  # Status never resubmits.
     result = {
         "gtk_version": ".".join(
             str(value)
@@ -83,6 +110,7 @@ def main():
         "physical_input_provenance": None,
         "model_connected": False,
         "submission_responsiveness": response,
+        "read_only_intake_status": intake_status,
     }
     (ROOT / "prompt-test.json").write_text(json.dumps(result, indent=2) + "\n")
 
