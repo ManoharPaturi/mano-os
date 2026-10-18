@@ -1,8 +1,9 @@
+import base64
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from mano_broker.executor import Executor
 from mano_broker.protocol import ActionRequest, Capability, Mode, canonical
@@ -42,6 +43,9 @@ class DurableExecutorTests(unittest.TestCase):
         self.prepare_hook = lambda: None
         self.fail_start = False
         self.observed_starts = 0
+        self.outputs = dict(stdout=b'', stderr=b'')
+        self.output_hook = lambda reply: reply
+        self.code = 0
 
     def tearDown(self):
         self.state.close()
@@ -53,6 +57,13 @@ class DurableExecutorTests(unittest.TestCase):
 
     def exchange(self, channel, envelope, descriptors=()):
         operation = envelope['operation']
+        if operation == 'read_output':
+            body = envelope['body']
+            data = self.outputs[body['stream']]
+            end = body['offset'] + body['length']
+            return self.output_hook(dict(schema_version='1.0', ok=True,
+                effect_verified=False, state='finished', **self.handle,
+                data=base64.b64encode(data[body['offset']:end]).decode(), eof=end >= len(data)))
         if operation == 'launch_task':
             self.assertEqual(descriptors, (10, 11))
             self.assertEqual(self.status(), 'intent')
@@ -67,7 +78,10 @@ class DurableExecutorTests(unittest.TestCase):
         else:
             state = 'finished' if operation == 'status' else 'unknown'
         return dict(schema_version='1.0', ok=True, effect_verified=False, state=state,
-                    return_code=0, reason="completed", **self.handle)
+                    return_code=self.code, reason="completed",
+                    stdout_bytes=len(self.outputs['stdout']),
+                    stderr_bytes=len(self.outputs['stderr']),
+                    **self.handle)
 
     def test_start_is_durable_once_and_exit_remains_unverified(self):
         self.executor.launch(self.action)
@@ -116,3 +130,75 @@ class DurableExecutorTests(unittest.TestCase):
         self.assertEqual(call.args[1]['body']['limits'],
                          dict(memory_bytes=64 * 1024**2, pids=16, cpu_percent=10))
         self.assertEqual(self.status(), 'executing')
+
+    def test_failed_command_multichunk_output_is_atomic_and_immutable(self):
+        from mano_broker.terminal_output import read
+
+        self.code = 1
+        self.outputs = dict(stdout=b'\x00x' * 3000, stderr=b'AssertionError: actual failure')
+        self.executor.launch(self.action)
+        self.executor.poll(self.action)
+        self.assertEqual(self.status(), 'executing')
+        self.assertEqual(self.state.db.execute(
+            'SELECT count(*) FROM terminal_outputs').fetchone()[0], 0)
+        while self.action in self.executor.jobs:
+            self.executor.poll(self.action)
+        self.assertEqual(self.status(), 'failed')
+        meta, row = read(self.state, task_id=self.task, action_id=self.action,
+                         caller_uid=1004, boot_id='boot-a')
+        self.assertEqual(row['stdout'], self.outputs['stdout'])
+        self.assertEqual(row['stderr'], self.outputs['stderr'])
+        self.assertEqual(meta['return_code'], 1)
+        self.assertFalse(meta['effect_verified'])
+        self.assertFalse(self.executor.captures)
+        self.assertEqual(self.observed_starts, 1)
+
+    def test_output_loss_is_unknown_without_partial_result_or_retry(self):
+        self.outputs['stdout'] = b'x' * 6000
+        self.executor.launch(self.action)
+        self.executor.poll(self.action)
+        self.output_hook = Mock(side_effect=TimeoutError('lost output'))
+        with self.assertRaises(TimeoutError):
+            self.executor.poll(self.action)
+        self.assertEqual(self.status(), 'unknown')
+        self.assertFalse(self.executor.captures)
+        self.assertFalse(self.executor.jobs)
+        self.assertEqual(self.state.db.execute(
+            'SELECT count(*) FROM terminal_outputs').fetchone()[0], 0)
+        self.assertEqual(self.observed_starts, 1)
+
+    def test_stop_during_final_capture_cannot_publish_output(self):
+        self.outputs['stdout'] = b'small'
+        self.executor.observe_stop = self.state.emergency_stop
+        self.executor.launch(self.action)
+        with self.assertRaises(Denied):
+            self.executor.poll(self.action)
+        self.assertEqual(self.status(), 'unknown')
+        self.assertEqual(self.state.db.execute(
+            'SELECT count(*) FROM terminal_outputs').fetchone()[0], 0)
+
+    def test_changed_handle_or_short_chunk_is_denied(self):
+        self.outputs['stdout'] = b'expected'
+        self.executor.launch(self.action)
+        self.output_hook = lambda reply: reply | dict(action_id='d' * 32)
+        with self.assertRaises(Denied):
+            self.executor.poll(self.action)
+        self.assertEqual(self.status(), 'unknown')
+
+    def test_result_storage_failure_rolls_back_final_state(self):
+        import sqlite3
+
+        self.state.db.execute("CREATE TRIGGER reject_output BEFORE INSERT ON terminal_outputs "
+                              "BEGIN SELECT RAISE(ABORT,'storage failure'); END")
+        self.executor.launch(self.action)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.executor.poll(self.action)
+        self.assertEqual(self.status(), 'unknown')
+        self.assertFalse(self.executor.captures)
+
+    def test_full_result_quota_denies_before_any_launcher_effect(self):
+        with patch('mano_broker.executor.capacity', side_effect=Denied('full')):
+            with self.assertRaises(Denied):
+                self.executor.launch(self.action)
+        self.client.exchange.assert_not_called()
+        self.assertEqual(self.status(), 'failed')

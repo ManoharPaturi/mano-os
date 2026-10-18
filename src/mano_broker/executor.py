@@ -4,19 +4,26 @@ No public execution endpoint. Runtime integration and independent native Stop
 remain separate gates. A lost response is never automatically retried.
 """
 
+import base64
 import json
 import time
+
+from mano_protocol.terminal_output import REASONS, STREAM_LIMIT
 
 from .limits import Limits
 from .protocol import ActionRequest, Capability, canonical, identifier
 from .state import Denied
+from .terminal_output import capacity, persist
 
 
 class Executor:
-    def __init__(self, state, registry, client, *, boot_id, clock=time.monotonic):
+    def __init__(self, state, registry, client, *, boot_id, clock=time.monotonic,
+                 observe_stop=lambda: None):
         self.state, self.registry, self.client = state, registry, client
         self.boot_id, self.clock = boot_id, clock
+        self.observe_stop = observe_stop
         self.jobs = {}
+        self.captures = {}
 
     def authority(self, action_id, expected):
         row = self.state.db.execute(
@@ -41,12 +48,14 @@ class Executor:
         response = self.client.exchange("control", dict(
             schema_version="1.0", operation=operation, body=handle
         ))
-        if (response.get("ok") is not True or any(response.get(k) != v
+        if (response.get('schema_version') != '1.0'
+                or response.get("ok") is not True or any(response.get(k) != v
                 for k, v in handle.items()) or response.get("effect_verified") is not False):
             raise Denied("Unbound private lifecycle response")
         return response
 
     def settle_unknown(self, action_id):
+        self.captures.pop(action_id, None)
         row = self.state.db.execute("SELECT state FROM actions WHERE id=?", (action_id,)).fetchone()
         if row and row[0] == "executing":
             self.state.transition(action_id, "unknown")
@@ -60,6 +69,7 @@ class Executor:
         handle = None
         try:
             row, request = self.authority(action_id, "intent")
+            capacity(self.state, len(self.jobs))
             prepared = self.registry.leases.get(action_id)
             resource = self.registry.resources.get(request.resource_id)
             if (prepared is None or prepared.closed or prepared.started or resource is None
@@ -113,9 +123,47 @@ class Executor:
             if status != "finished" or type(response.get("return_code")) is not int:
                 raise Denied("No explicit completed exit outcome")
             code = response["return_code"]
-            if code == 0 and response.get("reason") != "completed":
-                raise Denied("Zero exit without completed runner outcome")
-            self.state.transition(action_id, "done" if code == 0 else "failed", exit_code=code)
+            if (not isinstance(response.get('reason'), str) or response['reason'] not in REASONS
+                    or (code == 0 and response['reason'] != 'completed')
+                    or any(type(response.get(k + '_bytes')) is not int
+                           or not 0 <= response[k + '_bytes'] <= STREAM_LIMIT
+                           for k in ('stdout', 'stderr'))):
+                raise Denied('Invalid terminal outcome or stream bounds')
+            outcome = {k: response[k] for k in
+                       ('return_code', 'reason', 'stdout_bytes', 'stderr_bytes')}
+            capture = self.captures.setdefault(action_id, dict(outcome=outcome,
+                stdout=bytearray(), stderr=bytearray()))
+            if capture['outcome'] != outcome:
+                raise Denied('Terminal outcome changed during capture')
+            # One bounded output roundtrip per tick; no long synchronous drain.
+            for stream in ('stdout', 'stderr'):
+                buffer = capture[stream]
+                size = outcome[stream + '_bytes']
+                if len(buffer) == size:
+                    continue
+                query = handle | dict(stream=stream, offset=len(buffer), length=4096)
+                piece = self.client.exchange('control', dict(schema_version='1.0',
+                    operation='read_output', body=query))
+                if (piece.get('ok') is not True or piece.get('schema_version') != '1.0'
+                        or any(piece.get(k) != v for k, v in handle.items())
+                        or piece.get('state') != 'finished'
+                        or piece.get('effect_verified') is not False
+                        or not isinstance(piece.get('data'), str)
+                        or type(piece.get('eof')) is not bool):
+                    raise Denied('Unbound terminal output reply')
+                data = base64.b64decode(piece['data'], validate=True)
+                if (len(data) != min(4096, size - len(buffer))
+                        or piece['eof'] != (len(buffer) + len(data) == size)):
+                    raise Denied('Invalid terminal output chunk or end')
+                buffer.extend(data)
+                break
+            if any(len(capture[s]) != outcome[s + '_bytes'] for s in ('stdout', 'stderr')):
+                return response  # Journal remains executing until custody is durable.
+            self.observe_stop()
+            self.authority(action_id, 'executing')
+            persist(self.state, action_id, outcome,
+                    {s: bytes(capture[s]) for s in ('stdout', 'stderr')}, boot_id=self.boot_id)
+            self.captures.pop(action_id)
             self.jobs.pop(action_id)
             return response
         except BaseException:

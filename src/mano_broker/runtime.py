@@ -33,7 +33,8 @@ class Runtime:
         self.launcher = launcher
         self.stop_reader = stop_reader or (snapshot if launcher else None)
         self.executor = (
-            Executor(state, self.registry, launcher, boot_id=boot_id) if launcher else None
+            Executor(state, self.registry, launcher, boot_id=boot_id,
+                     observe_stop=self.sync_stop) if launcher else None
         )
         # Process-local FD authority cannot survive daemon restart. Keep history,
         # reconcile executing state and revoke old intent/grant/pending epoch.

@@ -259,6 +259,7 @@ def mock_effect(managed, filename):
                 argv=[
                     "/usr/bin/python3",
                     "-c",
+                    "import sys;print('stock-console');sys.stderr.write('stock-note');"
                     "from pathlib import Path;"
                     + "Path('/workspace/"
                     + filename
@@ -280,6 +281,15 @@ def mock_effect(managed, filename):
         assert result["status"] in {"queued", "running"} and time.monotonic() < deadline, result
         time.sleep(0.1)
     assert (Path(managed["workspace"]) / filename).read_text() == "stock-ok"
+    output = result["terminal_output"]
+    assert output["return_code"] == 0 and output["reason"] == "completed"
+    assert output["effect_verified"] is False and output["output_limit_reached"] is False
+    for stream, expected in (("stdout", b"stock-console\n"), ("stderr", b"stock-note")):
+        assert output["streams"][stream] == dict(
+            size=len(expected), sha256=hashlib.sha256(expected).hexdigest())
+    (OUT / ("stock-terminal-output-" + filename + ".json")).write_text(
+        json.dumps(dict(output=output, metadata_only=True, provider_disclosure=False),
+                   indent=2) + "\n")
     read_context = managed | dict(context=managed["context"] | dict(
         operation_key="typed-read-" + filename))
     read_packet = dict(managed=read_context, plan=dict(capability="files.read",
@@ -392,6 +402,7 @@ def phase(after_reboot):
                 native_pam_before_and_after_boot=True,
                 package_owned_mock_effect_before_and_after_boot=True,
                 package_owned_typed_core_read_before_and_after_boot=True,
+                package_owned_terminal_output_before_and_after_boot=True,
                 effect_verified=False,
                 unexpired_unused_old_grant_revoked_after_real_boot=True,
                 old_grant_replay_denied=True,

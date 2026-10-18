@@ -6,13 +6,65 @@ import os
 import pwd
 import select
 import socket
+import time
 
 from mano_protocol.actions import MAX_PACKET, canonical
 from mano_protocol.transport import CREDENTIALS, Peer, reply
 
 PATH = '/run/mano-broker/request.sock'
 OPERATIONS = {'request_approval', 'approval_status', 'propose', 'status', 'artifact_read',
-              'model_result', 'file_result'}
+              'model_result', 'file_result', 'terminal_output', 'terminal_output_read'}
+
+
+def terminal_output(client, *, task_id, action_id):
+    from mano_protocol.actions import identifier
+    from mano_protocol.terminal_output import metadata
+
+    identifier(task_id)
+    identifier(action_id)
+    response = client(dict(schema_version='1.0', operation='terminal_output',
+        body=dict(task_id=task_id, action_id=action_id)))
+    if (not isinstance(response, dict) or response.get('schema_version') != '1.0'
+            or response.get('ok') is not True or 'output' not in response):
+        raise ValueError('Invalid terminal output availability response')
+    value = response['output']
+    return None if value is None else metadata(value, task_id=task_id, action_id=action_id)
+
+
+def read_terminal_output(client, *, task_id, action_id):
+    from mano_protocol.terminal_output import metadata as parse_metadata
+
+    meta = terminal_output(client, task_id=task_id, action_id=action_id)
+    if meta is None:
+        raise ValueError('Terminal output was not captured')
+    streams = {}
+    requested = False
+    for stream in ('stdout', 'stderr'):
+        data = bytearray()
+        size = meta['streams'][stream]['size']
+        while len(data) < size:
+            if requested:
+                time.sleep(0.11)  # Stay below the broker's global10requests/s budget.
+            requested = True
+            response = client(dict(schema_version='1.0', operation='terminal_output_read',
+                body=dict(task_id=task_id, action_id=action_id, stream=stream,
+                          offset=len(data), length=4096)))
+            if (not isinstance(response, dict) or response.get('ok') is not True
+                    or response.get('schema_version') != '1.0'
+                    or type(response.get('eof')) is not bool
+                    or not isinstance(response.get('data'), str)
+                    or parse_metadata(response.get('output'), task_id=task_id,
+                                      action_id=action_id) != meta):
+                raise ValueError('Terminal output identity changed')
+            piece = base64.b64decode(response['data'], validate=True)
+            if (len(piece) != min(4096, size - len(data))
+                    or response['eof'] != (len(data) + len(piece) == size)):
+                raise ValueError('Invalid terminal output chunk/end')
+            data.extend(piece)
+        if hashlib.sha256(data).hexdigest() != meta['streams'][stream]['sha256']:
+            raise ValueError('Terminal output digest mismatch')
+        streams[stream] = bytes(data)
+    return dict(metadata=meta, **streams)
 
 
 class BrokerClient:

@@ -16,6 +16,7 @@ from mano_protocol.file_results import metadata as read_metadata
 from mano_protocol.plans import EXECUTABLE, parse_plan
 from mano_protocol.plans import proposal as make_proposal
 from mano_protocol.provider import configuration
+from mano_protocol.terminal_output import metadata as output_metadata
 
 from .stop_state import snapshot
 from .task_factory import control_request, create_from_prompt, human_uid
@@ -115,6 +116,7 @@ def run_step(managed, *, plan=None, model_policy=None):
     if any(task.get(key) != expected for key, expected in managed['context'].items()):
         raise ValueError('Core returned different task context')
     task.pop('read_result', None)  # Core/checkpoint metadata cannot establish byte custody.
+    task.pop('terminal_output', None)
     action_id = task.get('action_id')
     if action_id is None:
         allowed = {'awaiting_model_grant', 'model_queued', 'model_running',
@@ -145,6 +147,11 @@ def run_step(managed, *, plan=None, model_policy=None):
         raise ValueError('Core action does not match trusted original plan')
     states = {'intent': 'queued', 'executing': 'running', 'failed': 'failed',
               'unknown': 'unknown_effect'}
+    if proposal['capability'] == 'terminal.run' and action['state'] in {'done', 'failed'}:
+        output = control_request('inspect_terminal_output', dict(
+            task_id=context['task_id'], action_id=action_id))['output']
+        task['terminal_output'] = None if output is None else output_metadata(output,
+            task_id=context['task_id'], action_id=action_id)
     if action['state'] == 'done':
         if proposal['capability'] == 'files.read':
             captured = control_request('inspect_file_read', dict(

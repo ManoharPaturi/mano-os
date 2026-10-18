@@ -1370,6 +1370,65 @@ finally:client.close()
         (terminal_workspace / "live-result").write_bytes(original_read_source)
     terminal_report["typed_core_read_native_pam_checkpoint_and_custody"] = True
     terminal_report["typed_core_read_replay_no_execution_or_model_disclosure"] = True
+    output_managed = managed | dict(context=managed["context"] | dict(
+        operation_key="ci-terminal-output-core-witness"))
+    output_plan = dict(args=dict(argv=["/usr/bin/python3", "-c",
+        "import sys;from pathlib import Path;"
+        "Path('/workspace/output-once').open('x').write('once');"
+        "sys.stdout.buffer.write(bytes([0,255])*3500);"
+        "sys.stderr.buffer.write(b'failure\\n'*1000);sys.exit(7)"], cwd=".", timeout_seconds=5),
+        reason="Capture actual failed-command binary stdout and stderr")
+
+    def output_step():
+        result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+            "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.lifecycle", "--mock"],
+            input=json.dumps(dict(managed=output_managed, plan=output_plan)),
+            capture_output=True, text=True, timeout=15, check=False)
+        assert result.returncode == 0, result.stderr[-4096:]
+        decoded = json.loads(result.stdout)
+        assert decoded["ok"], decoded
+        return decoded["task"]
+
+    output_pending = output_step()
+    assert output_pending["status"] == "awaiting_grant"
+    output_view = human(dict(mode="view", id=output_pending["approval_id"]))["view"]
+    assert human(dict(mode="confirm", view=output_view, password=password))["ok"]
+    output_ready = output_step()
+    deadline = time.monotonic() + 30
+    while output_ready["status"] in {"queued", "running"} and time.monotonic() < deadline:
+        output_ready = output_step()
+    assert output_ready["status"] == "failed" and output_ready["terminal_output"] is not None
+    assert output_ready["terminal_output"]["return_code"] == 7
+    assert output_ready["terminal_output"]["effect_verified"] is False
+    output_body = dict(task_id=terminal_task["task_id"], action_id=output_ready["action_id"])
+    output_query = dict(schema_version="1.0", operation="terminal_output", body=output_body)
+    assert rpc("request", output_query) == denied
+    for change in (dict(task_id="0" * 32), dict(action_id="0" * 32)):
+        assert rpc("request", output_query | dict(body=output_body | change),
+                   actor=identity.name) == denied
+    output_code = """import json,sys,hashlib
+from mano_core.broker import BrokerClient,read_terminal_output
+client=BrokerClient()
+try:
+ result=read_terminal_output(client,**json.load(sys.stdin))
+ assert result['stdout']==bytes([0,255])*3500
+ assert result['stderr']==b'failure\\n'*1000
+ assert result['metadata']['return_code']==7
+ print(json.dumps(dict(native_binary_stdout_stderr=True,output=result['metadata'])))
+finally:client.close()
+"""
+    output_client = subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1", "python3", "-c", output_code],
+        input=json.dumps(output_body), capture_output=True, text=True, timeout=15, check=True)
+    assert json.loads(output_client.stdout)["output"] == output_ready["terminal_output"]
+    (terminal_workspace / "output-once").write_text("replay-canary")
+    output_replay = output_step()
+    assert output_replay["action_id"] == output_ready["action_id"]
+    assert output_replay["terminal_output"] == output_ready["terminal_output"]
+    assert (terminal_workspace / "output-once").read_text() == "replay-canary"
+    terminal_report["native_terminal_output_failed_binary_multichunk_and_replay"] = True
+    terminal_report["terminal_output_native_caller_task_scope"] = True
+    terminal_report["terminal_output_witness"] = json.loads(output_client.stdout)
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))
