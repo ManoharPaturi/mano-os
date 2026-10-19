@@ -349,3 +349,11 @@ explicitly rejects MCP outcomes. Hash-pinned officialPythonSDK2.3.0 installed on
 in guardedCIguest; real interoperability/hostile/EOF/deadline/frozenStop witnesses
 added but UNACCEPTED until actual final-head CI/artifacts/pixels. FullgoalACTIVE.
 Disk18GiBfree91%warning; no localVM/vendor/model downloads/deletion.
+
+PR114 initialea2abd6/CI39260334290 FAILED at MCPStop harness startup: existing
+recordedRUN+publicPTY alreadyoccupied bothpublicjobslots; MCPcorrectlyqueued.
+ActualofficialSDK+allhostilecases reached/passed beforelaterharnessfailure; no
+fullacceptance/merge. MoveMCPStop to replacementlauncher RUN+MCP pair (two slots),
+freezeMCPandbothauthorities, actualnativeCStop/drain/unknown andidentifieddetached
+serverchild. KeeporiginalRUN+PTYStop regressionunchanged; noquota/guardweakening.
+Addexplicitmcp-discovery.json to evidence transfer. NewheadCI/artifactsrequired.

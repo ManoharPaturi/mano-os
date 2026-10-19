@@ -45,8 +45,9 @@ never Root; it checks both workspace aliases, network and hidden host endpoints,
 then returns a tool with a hostile description through the actual SDK transport.
 Additional installed native-PAM/public-SDK cases cover malformed/partial/noisy
 frames, callbacks, wrong IDs, quotas, ignored EOF and a detached-child deadline.
-A live MCP job with forked descendants joins the frozen authority/core native
-Stop probe. Each completed action is replayed only as the original journal row.
+A live MCP job with an identified detached server child joins the replacement
+launcher native Stop probe with its authorities frozen. The earlier recorded RUN
+and public PTY Stop probe remains unchanged, preserving the two-job ceiling. Each completed action is replayed only as the original journal row.
 Exact-head CI and independent artifact inspection remain acceptance requirements.
 
 This is local stdio discovery, not tools/call, remote HTTP MCP, authorization of
