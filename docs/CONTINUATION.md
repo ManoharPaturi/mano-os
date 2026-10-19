@@ -311,3 +311,11 @@ Nowallhumanheadlessharnesses setGSK_DEBUG=full-redraw andWLR_SCENE_DEBUG_DAMAGE=
 onlyalongsideexistingCairo/Pixmanprofile. No productconfig/permissions/GUI observer
 changes. Reportexplicitrenderingprofile+incrementalvisualacceptanceFalse; no physical/
 defaultbackend claim. NewheadCI/pixelsrequired;95b NOTmerged. PrimarysourceslinksADR88.
+
+Current work: isolated-coding-delegates, based on accepted PR111 main c80db7e.
+PR111 post-main CI39211933892 completed SUCCESS. ADR0096 documents optional
+Antigravity1.4.2/Codex0.163.0 fixed public PTY SDK, sealed synthetic homes and
+hash-pinned CI-only installation. Local404tests passed/46Linux skips; Ruff,
+compileall, shell and diff checks passed. Actual new VM evidence still pending;
+no authenticated coding/paid calls/actual authenticated soft-denial claims.
+Disk18GiB free91%; vendor binaries/VM downloads remain CI-only. Goal ACTIVE.

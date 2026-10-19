@@ -13,6 +13,7 @@ import socket
 import time
 
 from .credentials import drop
+from .delegate_home import Home
 from .protocol import canonical, identifier, unique_object
 from .pty_session import TaskPTY, geometry
 from .sandbox import command
@@ -41,7 +42,8 @@ def receive(connection):
 
 
 def worker(connection, workspace, cwd, args):
-    command(workspace, cwd, args["argv"], task_pty=True)
+    with Home(args["argv"]) as home:
+        command(workspace, cwd, args["argv"], task_pty=True, home=home)
     send(connection, dict(kind="ready"))
     if receive(connection) != dict(kind="start"):
         raise Denied("One-shot PTY start required")

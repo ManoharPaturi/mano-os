@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "platform": "linux-amd64",
+  "delegates": {
+    "antigravity": {
+      "version": "1.4.2",
+      "url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.4.2-4835981233356800/linux-x64/cli_linux_x64.tar.gz",
+      "sha512": "4a393afc1369cee94e817c1b430c9128d02b12ebd4d5703ace5cd47b2333e216d673fb0097cbf7195f757b110163ba9850e9eea3fdbbaddd4b25668b82c03f05",
+      "archive_member": "antigravity",
+      "executable": "/usr/lib/mano-delegates/antigravity-1.4.2/agy"
+    },
+    "codex": {
+      "version": "0.163.0",
+      "url": "https://registry.npmjs.org/@openai/codex/-/codex-0.163.0-linux-x64.tgz",
+      "sha512": "bb045a3acad8a202d085cc4033f1a8796af0d1021610c468edcf6033cb0a02f89591940796ef6444b2793e4b9f6d5f800468f2660230885749d0b089d0de9ef3",
+      "archive_prefix": "package/vendor/x86_64-unknown-linux-musl/",
+      "executable": "/usr/lib/mano-delegates/codex-0.163.0/codex/codex"
+    }
+  }
+}
