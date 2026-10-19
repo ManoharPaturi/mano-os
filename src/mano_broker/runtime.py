@@ -193,7 +193,7 @@ class Runtime:
                 except (OSError, ValueError, KeyError, TypeError) as error:
                     self.state.event(action_id, "pty-poll-denied",
                                      {"error_type": type(error).__name__})
-            if self.pty_pending and len(self.ptys.jobs) < 2:
+            if self.pty_pending and len(self.ptys.jobs) + len(self.executor.jobs) < 2:
                 action_id = self.pty_pending.popleft()
                 try:
                     self.ptys.launch(action_id)
@@ -209,7 +209,7 @@ class Runtime:
                 self.state.event(action_id, "terminal-poll-denied", {
                     "error_type": type(error).__name__, "errno": getattr(error, "errno", None)
                 })  # No arguments, paths, grants or secrets in diagnostics.
-        if self.pending and len(self.executor.jobs) < 2:
+        if self.pending and len(self.executor.jobs) + len(self.ptys.jobs) < 2:
             action_id = self.pending.popleft()
             try:
                 self.executor.launch(action_id)
