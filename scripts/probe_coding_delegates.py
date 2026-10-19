@@ -48,6 +48,7 @@ def main():
     failures = {}
     try:
         for name, version in VERSIONS.items():
+            help_text = ""
             try:
                 record = installed(name)
                 version_result = run(
@@ -194,7 +195,7 @@ print(json.dumps(dict(config_sha256=hashlib.sha256(before).hexdigest(),immutable
                     config_denial_excerpt=bad_text[:2048],
                 )
             except Exception as error:
-                failures[name] = repr(error)[:10000]
+                failures[name] = dict(error=repr(error)[:4000], help=help_text[:12000])
         assert not failures, failures
     finally:
         guard_fixture.unlink()
