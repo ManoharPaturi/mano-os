@@ -111,7 +111,8 @@ except KeyboardInterrupt:print('INTERRUPTED',flush=True)
                      timeout=2, revoked=lambda: False) as worker:
             try:
                 while True:
-                    worker.poll()
+                    # An early exit must not count as deadline enforcement.
+                    assert worker.poll() is None
                     time.sleep(0.02)
             except PermissionError:
                 assert worker.reason == 'timed-out'
