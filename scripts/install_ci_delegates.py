@@ -58,8 +58,11 @@ def main():
             if digest.hexdigest() != item["sha512"]:
                 raise ValueError("Pinned vendor archive digest mismatch")
             total = 0
+            member_names = []
             with tarfile.open(archive, "r:gz") as bundle:
                 for member in bundle:
+                    if len(member_names) < 64:
+                        member_names.append(member.name[:256])
                     if name == "antigravity":
                         if member.name != item["archive_member"]:
                             continue
@@ -96,6 +99,8 @@ def main():
                         shutil.copyfileobj(stream, output, length=1024 * 1024)
                     target.chmod(0o555 if member.mode & 0o111 or name == "antigravity" else 0o444)
             executable = Path(item["executable"])
+            if not executable.exists():
+                raise ValueError(("Pinned executable absent from archive", name, member_names))
             info = executable.lstat()
             if (
                 not stat.S_ISREG(info.st_mode)
