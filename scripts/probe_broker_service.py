@@ -1431,6 +1431,67 @@ finally:client.close()
     terminal_report["native_terminal_output_failed_binary_multichunk_and_replay"] = True
     terminal_report["terminal_output_native_caller_task_scope"] = True
     terminal_report["terminal_output_witness"] = json.loads(output_client.stdout)
+    # Public PTY creation requires its own exact native PAM approval; active
+    # permission profiles deliberately do not grant interactive channels.
+    public_pty_program = r"""import os,sys,ctypes
+from pathlib import Path
+assert all(os.isatty(fd) for fd in (0,1,2))
+libc=ctypes.CDLL(None,use_errno=True);libc.tcgetsid.argtypes=[ctypes.c_int]
+libc.tcgetsid.restype=ctypes.c_int
+assert libc.tcgetsid(0)==os.getsid(0)
+assert os.tcgetpgrp(0)==os.getpgrp()
+assert os.environ['TERM']=='xterm-256color'
+assert not any(k in os.environ for k in ('DISPLAY','WAYLAND_DISPLAY','DBUS_SESSION_BUS_ADDRESS'))
+Path('/workspace/public-pty-started').write_text('started')
+print('READY',flush=True)
+count=0
+for line in sys.stdin:
+ if line=='size\n':
+  size=os.get_terminal_size(0);print('SIZE:%d:%d'%(size.lines,size.columns),flush=True)
+ else:
+  count+=1;print('LINE:'+line.strip(),flush=True)
+print('END:%d'%count,flush=True)
+"""
+    public_pty_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
+        resource_id=terminal_task["resource_id"], capability="terminal.open_pty",
+        args=dict(argv=["/usr/bin/python3", "-c", public_pty_program], cwd=".",
+                  timeout_seconds=30, rows=24, columns=80, input_limit_bytes=128),
+        idempotency_key="public-pty-open", reason="Approve bounded interactive task PTY")
+    public_pty_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=public_pty_proposal), actor=identity.name)["approval"]
+    assert public_pty_pending["state"] == "pending"
+    assert not (terminal_workspace / "public-pty-started").exists()
+    public_pty_view = human(dict(mode="view", id=public_pty_pending["approval_id"]))["view"]
+    assert public_pty_view["args"] == public_pty_proposal["args"]
+    assert human(dict(mode="confirm", view=public_pty_view,
+                      password="wrong-ci-password")) == {"ok": False}
+    assert not (terminal_workspace / "public-pty-started").exists()
+    public_pty_grant = human(dict(mode="confirm", view=public_pty_view, password=password))
+    assert public_pty_grant["ok"]
+    public_pty_open = dict(schema_version="1.0", operation="propose",
+        body=public_pty_proposal | dict(grant_id=public_pty_grant["grant_id"]))
+    public_pty_action = rpc("request", public_pty_open, actor=identity.name)["action"]["id"]
+    public_pty_body = dict(task_id=terminal_task["task_id"], action_id=public_pty_action)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not (terminal_workspace / "public-pty-started").exists():
+        time.sleep(0.1)
+    assert (terminal_workspace / "public-pty-started").read_text() == "started"
+    public_pty_query = dict(schema_version="1.0", operation="pty_status", body=public_pty_body)
+    assert rpc("request", public_pty_query) == denied
+    for change in (dict(task_id="0"*32), dict(action_id="0"*32)):
+        assert rpc("request", public_pty_query | dict(body=public_pty_body | change),
+                   actor=identity.name) == denied
+    public_pty_client = subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1", "python3",
+        str(ROOT / "scripts/probe_public_pty_client.py")], input=json.dumps(dict(
+            proposal=public_pty_proposal, grant_id=public_pty_grant["grant_id"],
+            action_id=public_pty_action)),
+        capture_output=True, text=True, timeout=25, check=False)
+    assert public_pty_client.returncode == 0, (public_pty_client.stdout, public_pty_client.stderr)
+    terminal_report["public_broker_pty_witness"] = json.loads(public_pty_client.stdout)
+    assert rpc("request", public_pty_open, actor=identity.name)["fresh"] is False
+    terminal_report["public_broker_pty_pam_sdk_replay_geometry_eof"] = True
+    terminal_report["public_broker_pty_native_caller_scope"] = True
     pty_unit = "mano-pty-probe-" + secrets.token_hex(6)
     authorization = os.open(terminal_workspace / ".pty-ci-authorized",
         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
@@ -1643,6 +1704,30 @@ else:raise AssertionError('task reached native Stop')
     core_group = Path("/sys/fs/cgroup/mano.slice/mano-core.slice")
     core_child_group = core_group / core_unit
     deadline = time.monotonic() + 3
+    stop_pty_proposal = public_pty_proposal | dict(idempotency_key="public-pty-stop",
+        args=public_pty_proposal["args"] | dict(timeout_seconds=60, argv=["/usr/bin/python3", "-c",
+            "from pathlib import Path;import time;"
+            "Path('/workspace/public-pty-stop').write_text('ready');time.sleep(60)"]))
+    stop_pty_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=stop_pty_proposal), actor=identity.name)["approval"]
+    assert stop_pty_pending["state"] == "pending"
+    stop_pty_view = human(dict(mode="view", id=stop_pty_pending["approval_id"]))["view"]
+    stop_pty_grant = human(dict(mode="confirm", view=stop_pty_view, password=password))
+    assert stop_pty_grant["ok"]
+    stop_pty_action = rpc("request", dict(schema_version="1.0", operation="propose",
+        body=stop_pty_proposal | dict(grant_id=stop_pty_grant["grant_id"])),
+        actor=identity.name)["action"]["id"]
+    stop_pty_group = Path("/sys/fs/cgroup/system.slice/mano-launcher.service") / (
+        "task-" + stop_pty_action)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not (terminal_workspace / "public-pty-stop").exists():
+        time.sleep(0.1)
+    assert (terminal_workspace / "public-pty-stop").read_text() == "ready"
+    stop_pty_pids = [int(pid) for pid in (stop_pty_group / "cgroup.procs").read_text().split()]
+    assert len(stop_pty_pids) >= 3
+    stop_pty_write = dict(schema_version="1.0", operation="pty_write", body=dict(
+        task_id=terminal_task["task_id"], action_id=stop_pty_action, key="after-stop",
+        data=base64.b64encode(b"must-not-arrive\n").decode()))
     core_pids = []
     pty_frozen = subprocess.Popen(pty_base + ["--unit=" + pty_unit + "-frozen", "--wait"] +
         pty_program + ["--freeze"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -1663,6 +1748,7 @@ else:raise AssertionError('task reached native Stop')
         time.sleep(0.05)
     assert len(core_pids) == 2
     core_pids.extend([pty_worker_pid, pty_child_pid])
+    core_pids.extend(stop_pty_pids)
     provider_idle, _provider_unit, provider_pids = provider_idle_job()
     provider_stop_probe = """import json
 from mano_protocol.stop_state import snapshot
@@ -1733,6 +1819,10 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
     terminal_report["native_stop_frozen_core_and_detached_child_drained"] = True
     terminal_report["native_stop_frozen_provider_drained"] = True
     terminal_report["native_stop_frozen_task_pty_worker_and_child_drained"] = True
+    assert not stop_pty_group.exists() or "populated 0" in (
+        stop_pty_group / "cgroup.events").read_text()
+    assert rpc("request", stop_pty_write, actor=identity.name) == denied
+    terminal_report["public_broker_pty_frozen_native_stop_drained"] = True
     terminal_report["installed_broker_disabled_price_policy"] = True
     terminal_report["loaded_broker_price_policy_immutable_snapshot"] = True
     terminal_report["installed_provider_credential_health"] = True
@@ -1883,6 +1973,8 @@ finally:
         assert database.execute('SELECT revoked FROM grants WHERE id=?',
             (profile_stop_grant["grant_id"],)).fetchone() == (1,)
     terminal_report["live_profile_grant_stop_rearm_no_resurrection"] = True
+    assert rpc("request", stop_pty_write, actor=identity.name) == denied
+    terminal_report["public_broker_pty_restart_stop_rearm_no_input_resurrection"] = True
 
 
     grant_observer = """import sqlite3,sys

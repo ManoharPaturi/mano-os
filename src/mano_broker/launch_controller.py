@@ -14,7 +14,8 @@ from dataclasses import dataclass
 
 from .ipc import Peer, receive
 from .launch_admission import receive as receive_admission
-from .protocol import canonical, identifier, unique_object
+from .protocol import Capability, canonical, identifier, unique_object
+from .pty_supervisor import PTYChild
 from .runner import OUTPUT_LIMIT
 from .state import Denied
 from .stop_state import require_armed
@@ -57,7 +58,8 @@ class Controller:
         try:
             if select.select([owner_fd], [], [], 0)[0]:
                 raise Denied("Preparing broker already exited")
-            child = Child(self.manager, admission)
+            child_type = PTYChild if admission.request.capability == Capability.PTY else Child
+            child = child_type(self.manager, admission)
             self.stop_check()  # Stop may have tripped while the child was being prepared.
         except BaseException:
             try:
@@ -108,7 +110,12 @@ class Controller:
         expected = {"instance_id", "job_id", "action_id"}
         if operation == "read_output":
             expected |= {"stream", "offset", "length"}
-        if operation not in {"start", "status", "cancel", "read_output"} or set(body) != expected:
+        if operation == "pty_input":
+            expected |= {"input_operation", "operation_id", "args"}
+        if operation == "pty_read":
+            expected |= {"offset", "length"}
+        operations = {"start", "status", "cancel", "read_output", "pty_input", "pty_read"}
+        if operation not in operations or set(body) != expected:
             raise Denied("Unknown control operation or fields")
         row = self.record(body, peer)
         child = row.child
@@ -131,6 +138,26 @@ class Controller:
             state=child.state,
             effect_verified=False,
         )
+        if isinstance(child, PTYChild):
+            if operation == "read_output":
+                raise Denied("PTY has one combined stream")
+            if operation == "pty_input":
+                self.stop_check()
+                response["written"] = child.operate(body["input_operation"],
+                    body["operation_id"], body["args"])
+                response["operation_id"] = body["operation_id"]
+            if operation == "pty_read":
+                if (type(body["offset"]) is not int
+                        or not 0 <= body["offset"] <= len(child.output)
+                        or type(body["length"]) is not int or not 1 <= body["length"] <= 4096):
+                    raise Denied("Bounded PTY output range required")
+                piece = child.output[body["offset"]:body["offset"] + body["length"]]
+                response.update(data=base64.b64encode(piece).decode("ascii"),
+                                offset=body["offset"], total_bytes=len(child.output))
+            response.update(output_bytes=len(child.output), outcome=child.outcome)
+            return response
+        if operation in {"pty_input", "pty_read"}:
+            raise Denied("Owned PTY job required")
         if operation == "read_output":
             if (
                 body["stream"] not in {"stdout", "stderr"}

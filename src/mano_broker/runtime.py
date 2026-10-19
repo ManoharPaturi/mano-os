@@ -12,6 +12,7 @@ from .ipc import dispatch, public_action, receive
 from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
 from .provider_jobs import ProviderJobs
 from .provider_worker import ProviderWorker
+from .pty_jobs import PTYJobs
 from .registry import Registry
 from .state import Denied
 from .stop_state import Snapshot, snapshot
@@ -30,16 +31,20 @@ class Runtime:
         self.artifacts = Store()
         self.pending = deque()
         self.file_pending = deque()
+        self.pty_pending = deque()
         self.launcher = launcher
         self.stop_reader = stop_reader or (snapshot if launcher else None)
         self.executor = (
             Executor(state, self.registry, launcher, boot_id=boot_id,
                      observe_stop=self.sync_stop) if launcher else None
         )
+        self.ptys = (PTYJobs(state, self.registry, launcher, boot_id=boot_id,
+                             observe_stop=self.sync_stop) if launcher else None)
         # Process-local FD authority cannot survive daemon restart. Keep history,
         # reconcile executing state and revoke old intent/grant/pending epoch.
         with state.transaction():
             state.recover()
+            state.db.execute("UPDATE pty_operations SET state='unknown' WHERE state='intent'")
             state.db.execute("UPDATE grants SET revoked=1")
             state.db.execute("UPDATE actions SET state='failed' WHERE state='intent'")
             state.db.execute("UPDATE meta SET value=value+1 WHERE key='epoch'")
@@ -110,6 +115,10 @@ class Runtime:
             or value["schema_version"] != "1.0"
         ):
             raise Denied("Invalid runtime envelope")
+        if value["operation"] in {"pty_status", "pty_read", "pty_write", "pty_resize", "pty_close"}:
+            if self.ptys is None:
+                raise Denied("PTY launcher unavailable")
+            return self.ptys.dispatch(value["operation"], value["body"], caller_uid=peer.uid)
         if value["operation"] in {"propose", "request_approval"}:
             self.live_task(value["body"], peer)
         if value["operation"] == "propose":
@@ -121,6 +130,8 @@ class Runtime:
             )
             if prepared is not None and request.capability == Capability.RUN and self.executor:
                 self.pending.append(row["id"])
+            if prepared is not None and request.capability == Capability.PTY and self.ptys:
+                self.pty_pending.append(row["id"])
             if prepared is not None and request.capability == Capability.READ:
                 self.file_pending.append(row['id'])
             if prepared is not None and request.capability == Capability.PLAN and self.model_worker:
@@ -175,6 +186,20 @@ class Runtime:
                 self.state.event(action_id, 'file-read-denied', {
                     'error_type': type(error).__name__})
         self.tick_models()
+        if self.ptys:
+            for action_id in list(self.ptys.jobs):
+                try:
+                    self.ptys.poll(action_id)
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    self.state.event(action_id, "pty-poll-denied",
+                                     {"error_type": type(error).__name__})
+            if self.pty_pending and len(self.ptys.jobs) + len(self.executor.jobs) < 2:
+                action_id = self.pty_pending.popleft()
+                try:
+                    self.ptys.launch(action_id)
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    self.state.event(action_id, "pty-dispatch-denied",
+                                     {"error_type": type(error).__name__})
         if self.executor is None:
             return
         for action_id in list(self.executor.jobs):
@@ -184,7 +209,7 @@ class Runtime:
                 self.state.event(action_id, "terminal-poll-denied", {
                     "error_type": type(error).__name__, "errno": getattr(error, "errno", None)
                 })  # No arguments, paths, grants or secrets in diagnostics.
-        if self.pending and len(self.executor.jobs) < 2:
+        if self.pending and len(self.executor.jobs) + len(self.ptys.jobs) < 2:
             action_id = self.pending.popleft()
             try:
                 self.executor.launch(action_id)
@@ -207,6 +232,12 @@ class Runtime:
 
     def close_terminal(self):
         try:
+            if self.ptys:
+                for action_id in list(self.ptys.jobs):
+                    self.ptys.abandon(action_id)
+                for action_id in self.pty_pending:
+                    self.ptys.settle_unknown(action_id)
+            self.pty_pending.clear()
             for action_id in self.file_pending:
                 self.settle_model(action_id)
             self.file_pending.clear()

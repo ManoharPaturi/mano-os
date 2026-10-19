@@ -113,3 +113,12 @@ class RuntimeSchedulerTests(unittest.TestCase):
         self.runtime.sync_stop()
         self.assertEqual(self.state.meta('latched'), 1)
         self.assertEqual(self.state.meta('native_generation'), 2)
+
+    def test_live_pty_sessions_share_terminal_concurrency_budget(self):
+        result = self.propose()
+        self.runtime.ptys = Mock()
+        self.runtime.ptys.jobs = {'d' * 32: {}, 'e' * 32: {}}
+        self.runtime.tick()
+        self.runtime.executor.launch.assert_not_called()
+        self.assertEqual(list(self.runtime.pending), [result['action']['id']])
+        self.assertEqual(self.runtime.ptys.poll.call_count, 2)

@@ -111,7 +111,7 @@ class Registry:
                         prepared.descriptors["target"] = parent.pin(path.name)
                 except FileNotFoundError:
                     prepared.create_name = path.name
-            elif request.capability == Capability.RUN:
+            elif request.capability in {Capability.RUN, Capability.PTY}:
                 prepared.descriptors["cwd"] = resource.workspace.pin(args["cwd"], directory=True)
             self.leases[row["id"]] = prepared
             return row, prepared

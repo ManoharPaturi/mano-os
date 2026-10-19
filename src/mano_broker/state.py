@@ -94,6 +94,14 @@ class State:
                 action_id TEXT PRIMARY KEY REFERENCES actions(id),metadata_json TEXT NOT NULL,
                 stdout BLOB NOT NULL,stderr BLOB NOT NULL,
                 CHECK(length(stdout)<=65536),CHECK(length(stderr)<=65536));
+            CREATE TABLE IF NOT EXISTS pty_sessions(
+                action_id TEXT PRIMARY KEY REFERENCES actions(id),
+                data BLOB NOT NULL DEFAULT X'', input_bytes INTEGER NOT NULL DEFAULT 0,
+                outcome_json TEXT, CHECK(length(data)<=65536));
+            CREATE TABLE IF NOT EXISTS pty_operations(
+                action_id TEXT NOT NULL REFERENCES actions(id), key TEXT NOT NULL,
+                digest TEXT NOT NULL, operation_id TEXT NOT NULL, state TEXT NOT NULL,
+                reply_json TEXT, PRIMARY KEY(action_id,key));
             CREATE TABLE IF NOT EXISTS artifact_contracts(
                 approval_id TEXT PRIMARY KEY REFERENCES approvals(id),path TEXT NOT NULL,
                 sha256 TEXT NOT NULL,size INTEGER NOT NULL,boot_id TEXT NOT NULL,
@@ -264,7 +272,8 @@ class State:
                 }
             ).encode()
         )
-        if capability == Capability.RUN and approved_args["timeout_seconds"] > max_timeout_seconds:
+        if (capability in {Capability.RUN, Capability.PTY}
+                and approved_args["timeout_seconds"] > max_timeout_seconds):
             raise ValueError("Approved timeout exceeds grant budget")
         grant_id = secrets.token_hex(16)
         with self.transaction():
@@ -336,7 +345,7 @@ class State:
             budget = json.loads(grant["budget_json"])
             args = json.loads(request.args_json)
             if (
-                request.capability == Capability.RUN
+                request.capability in {Capability.RUN, Capability.PTY}
                 and args["timeout_seconds"] > budget["max_timeout_seconds"]
             ):
                 raise Denied("Requested timeout exceeds grant")
