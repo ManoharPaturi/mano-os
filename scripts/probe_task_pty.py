@@ -46,10 +46,13 @@ def main():
                 (args.workspace / 'pty-fixture-ready').write_text(str(worker.process.pid))
                 os.kill(os.getpid(), signal.SIGSTOP)
                 raise AssertionError('Frozen PTY fixture must be killed by native Stop')
-        program = """import os,json,socket,errno,fcntl,termios,struct
+        program = """import os,json,socket,errno,ctypes
 from pathlib import Path
 assert all(os.isatty(fd) for fd in (0,1,2))
-assert struct.unpack('i',fcntl.ioctl(0,termios.TIOCGSID,bytes(4)))[0]==os.getsid(0)
+libc=ctypes.CDLL(None,use_errno=True)
+libc.tcgetsid.argtypes=[ctypes.c_int]
+libc.tcgetsid.restype=ctypes.c_int
+assert libc.tcgetsid(0)==os.getsid(0)
 assert os.tcgetpgrp(0)==os.getpgrp()
 assert os.environ['TERM']=='xterm-256color'
 assert not any(key in os.environ for key in (

@@ -76,6 +76,12 @@ Linux TIOCGSID through fcntl.ioctl instead, retain the direct session-ID equalit
 assertion, and also require the terminal foreground process group to match the
 application's group. No native guard or isolation assertion is relaxed.
 
+CPython3.13's termios extension also does not export TIOCGSID (confirmed against
+the official v3.13.5 module source), so the test calls the standard libc.tcgetsid
+through ctypes with explicit integer argument/result types instead of guessing
+an ioctl constant. It queries the same session identity checked by the native
+guard. The short-lived e518d96 ioctl-constant head was superseded, not accepted.
+
 Primary Linux API references, checked2026-10-19:
 https://www.man7.org/linux/man-pages/man2/TIOCSCTTY.2const.html
 https://man7.org/linux/man-pages/man3/openpty.3.html
