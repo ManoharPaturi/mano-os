@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/landlock.h>
+#include <net/if.h>
 #include <sched.h>
 #include <seccomp.h>
 #include <stdint.h>
@@ -36,7 +37,18 @@ static void path_rule(int ruleset, const char *path, uint64_t access) {
     close(fd);
 }
 
-static void landlock(void) {
+static void hosts_rule(int ruleset) {
+    int fd = open("/etc/hosts", O_PATH | O_NOFOLLOW | O_CLOEXEC);
+    struct stat info;
+    if (fd < 0 || fstat(fd, &info) || !S_ISREG(info.st_mode)) fail("guard synthetic hosts");
+    struct landlock_path_beneath_attr rule = {
+        .allowed_access = LANDLOCK_ACCESS_FS_READ_FILE, .parent_fd = fd };
+    if (syscall(SYS_landlock_add_rule, ruleset, LANDLOCK_RULE_PATH_BENEATH, &rule, 0))
+        fail("guard synthetic hosts read rule");
+    close(fd);
+}
+
+static void landlock(int loopback) {
     int abi = syscall(SYS_landlock_create_ruleset, NULL, 0, LANDLOCK_CREATE_RULESET_VERSION);
     if (abi < 5) { errno = ENOTSUP; fail("guard requires Landlock ABI 5"); }
     uint64_t read = LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR;
@@ -48,10 +60,12 @@ static void landlock(void) {
     struct landlock_ruleset_attr attr = {
         .handled_access_fs = mutable | LANDLOCK_ACCESS_FS_MAKE_CHAR | LANDLOCK_ACCESS_FS_MAKE_BLOCK |
             LANDLOCK_ACCESS_FS_IOCTL_DEV,
-        .handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP | LANDLOCK_ACCESS_NET_CONNECT_TCP
+        .handled_access_net = loopback ? 0 :
+            LANDLOCK_ACCESS_NET_BIND_TCP | LANDLOCK_ACCESS_NET_CONNECT_TCP
     };
     int ruleset = syscall(SYS_landlock_create_ruleset, &attr, sizeof(attr), 0);
     if (ruleset < 0) fail("guard Landlock ruleset");
+    if (loopback) hosts_rule(ruleset);
     path_rule(ruleset, "/usr", execute);
     path_rule(ruleset, "/proc", read);
     path_rule(ruleset, "/dev", read | LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_IOCTL_DEV);
@@ -67,7 +81,7 @@ static void landlock(void) {
     fail("guard Landlock denial self-check");
 }
 
-static void filter(void) {
+static void filter(int loopback) {
     scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_ALLOW);
     if (!ctx) fail("guard seccomp init");
     if (seccomp_attr_set(ctx, SCMP_FLTATR_ACT_BADARCH, SCMP_ACT_KILL_PROCESS) < 0 ||
@@ -97,15 +111,60 @@ static void filter(void) {
             SCMP_A0(SCMP_CMP_MASKED_EQ, namespaces[i], namespaces[i])) < 0)
             fail("guard clone namespace rule");
     int families[] = { AF_INET, AF_INET6, AF_NETLINK, AF_PACKET };
-    for (size_t i = 0; i < sizeof(families)/sizeof(families[0]); ++i)
-        if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(socket), 1,
+    for (size_t i = 0; i < sizeof(families)/sizeof(families[0]); ++i) {
+        if (loopback && (families[i] == AF_INET || families[i] == AF_INET6)) {
+            /* Only TCP streams, inside the checked private loopback namespace. */
+            for (int type = 0; type < 16; ++type) {
+                if (type == SOCK_STREAM) continue;
+                if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(socket), 2,
+                    SCMP_A0(SCMP_CMP_EQ, families[i]),
+                    SCMP_A1(SCMP_CMP_MASKED_EQ, 15, type)) < 0)
+                    fail("guard private TCP socket rule");
+            }
+        } else if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(socket), 1,
             SCMP_A0(SCMP_CMP_EQ, families[i])) < 0) fail("guard socket family rule");
+    }
     if (seccomp_load(ctx) < 0) fail("guard seccomp load");
     seccomp_release(ctx);
     errno = 0;
     if (unshare(0) != -1 || errno != EPERM) fail("guard unshare denial self-check");
     errno = 0;
     if (setresuid(-1, -1, -1) != -1 || errno != EPERM) fail("guard identity denial self-check");
+}
+
+static unsigned long long decimal(const char *text) {
+    char *end = NULL;
+    errno = 0;
+    if (!text[0] || text[0] < '0' || text[0] > '9' || strlen(text) > 24)
+        { errno = EINVAL; fail("guard network identity"); }
+    unsigned long long result = strtoull(text, &end, 10);
+    if (errno || !end || *end || !result) { errno = EINVAL; fail("guard network identity"); }
+    return result;
+}
+
+static void private_loopback(const char *device, const char *inode) {
+    struct stat current;
+    unsigned long long outer_device = decimal(device), outer_inode = decimal(inode);
+    if (stat("/proc/self/ns/net", &current) ||
+        ((unsigned long long)current.st_dev == outer_device &&
+         (unsigned long long)current.st_ino == outer_inode))
+        { errno = EPERM; fail("guard private network namespace required"); }
+    struct if_nameindex *interfaces = if_nameindex();
+    if (!interfaces) fail("guard network interfaces");
+    int count = 0;
+    for (struct if_nameindex *item = interfaces; item->if_index; ++item) {
+        if (strcmp(item->if_name, "lo"))
+            { errno = EPERM; fail("guard only loopback interface allowed"); }
+        count++;
+    }
+    if_freenameindex(interfaces);
+    if (count != 1) { errno = EPERM; fail("guard one loopback interface required"); }
+    int fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    struct ifreq request = { .ifr_name = "lo" };
+    if (fd < 0 || ioctl(fd, SIOCGIFFLAGS, &request) ||
+        (request.ifr_flags & (IFF_LOOPBACK | IFF_UP)) != (IFF_LOOPBACK | IFF_UP))
+        { errno = EPERM; fail("guard active loopback interface required"); }
+    close(fd);
 }
 
 int main(int argc, char **argv) {
@@ -133,8 +192,17 @@ int main(int argc, char **argv) {
             fail("guard PTY controlling session");
         first = 2;
     }
-    landlock();
-    filter();
+    int loopback = 0;
+    if (first < argc && !strcmp(argv[first], "--private-loopback")) {
+        if (argc <= first + 3) { errno = EINVAL; fail("guard loopback arguments"); }
+        private_loopback(argv[first + 1], argv[first + 2]);
+        first += 3;
+        loopback = 1;
+    }
+    if (first >= argc || strcmp(argv[first], "--") || ++first >= argc)
+        { errno = EINVAL; fail("guard explicit application separator required"); }
+    landlock(loopback);
+    filter(loopback);
     execvp(argv[first], &argv[first]);
     fail("guard task exec");
 }

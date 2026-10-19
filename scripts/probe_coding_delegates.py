@@ -78,7 +78,7 @@ def main():
                     if name == "antigravity"
                     else "/home/task/.codex/config.toml"
                 )
-                checker = r"""import errno,hashlib,json,os,socket
+                checker = r"""import ctypes,errno,hashlib,json,os,socket,subprocess
 from pathlib import Path
 p=Path(os.sys.argv[1]);before=p.read_bytes()
 assert os.environ['HOME']=='/home/task'
@@ -94,17 +94,49 @@ for effect in (lambda:p.write_bytes(b'bypass'),lambda:p.unlink(),lambda:p.chmod(
  else:raise AssertionError('immutable synthetic configuration changed')
 assert p.read_bytes()==before
 Path('/home/task/.cache/volatile').write_text('allowed')
-try:socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-except PermissionError:pass
-else:raise AssertionError('delegate got network')
+private='antigravity-cli' in str(p)
+if private:
+ device_lines=Path('/proc/net/dev').read_text().splitlines()[2:]
+ interfaces=[line.split(':')[0].strip() for line in device_lines]
+ assert interfaces==['lo']
+ listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen(1)
+ client=socket.socket();client.connect(listener.getsockname());peer,_=listener.accept()
+ client.sendall(b'private');assert peer.recv(7)==b'private'
+ client.close();peer.close();listener.close()
+ for address,allowed in ((('203.0.113.1',9),{errno.ENETUNREACH,errno.EHOSTUNREACH}),
+  (('127.0.0.1',int(os.sys.argv[2])),{errno.ECONNREFUSED})):
+  with socket.socket() as outbound:
+   outbound.settimeout(1)
+   try:outbound.connect(address)
+   except OSError as error:assert error.errno in allowed,(address,error)
+   else:raise AssertionError('private namespace reached outside listener')
+ for family,kind in ((socket.AF_INET,socket.SOCK_DGRAM),(socket.AF_NETLINK,socket.SOCK_RAW),
+  (socket.AF_PACKET,socket.SOCK_RAW)):
+  try:socket.socket(family,kind)
+  except PermissionError:pass
+  else:raise AssertionError('delegate got non-TCP network socket')
+ current=os.stat('/proc/self/ns/net')
+ same=subprocess.run(['/task-guard','--private-loopback',str(current.st_dev),
+  str(current.st_ino),'--','/usr/bin/true'],capture_output=True)
+ assert same.returncode==125 and b'private network namespace required' in same.stderr
+ assert ctypes.CDLL(None,use_errno=True).unshare(0x40000000)==-1
+ assert ctypes.get_errno()==errno.EPERM
+ separated=subprocess.run(['/task-guard','--','--private-loopback','1','2',
+  '/usr/bin/true'],capture_output=True)
+ assert separated.returncode==125 and b'guard task exec' in separated.stderr
+else:
+ try:socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+ except PermissionError:pass
+ else:raise AssertionError('ordinary delegate got network')
 print(json.dumps(dict(config_sha256=hashlib.sha256(before).hexdigest(),immutable_parents=True,
- host_environment_absent=True,network_denied=True,volatile_cache_writable=True)))
+ host_environment_absent=True,external_network_denied=True,volatile_cache_writable=True,
+ private_tcp_loopback=private,host_loopback_unreachable=True)))
 """
                 with Home(command(name, "version")) as profile:
                     checked = run(
                         root,
                         cwd,
-                        ["/usr/bin/python3", "-c", checker, config_name],
+                        ["/usr/bin/python3", "-c", checker, config_name, sys.argv[2]],
                         timeout=5,
                         revoked=lambda: False,
                         home=profile,

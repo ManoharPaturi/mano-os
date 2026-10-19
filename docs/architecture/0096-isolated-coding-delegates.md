@@ -43,3 +43,22 @@ installation_id file. Only these additional volatile directories are writable;
 the installation ID is a fresh sealed synthetic UUID, never a host identifier.
 The settings file and its parent remain immutable. Codex offline contract passed
 in the same failed VM run; overall acceptance still requires a fresh green head.
+
+Antigravity's actual headless startup uses a localhost TCP language-server channel.
+Its profile therefore permits TCP streams only within bubblewrap's newly created
+network namespace. The native guard compares namespace device/inode with the
+trusted compiler's outer identity, requires exactly one active loopback interface,
+and still blocks datagram/packet/netlink sockets, namespace changes, mount and
+identity changes. Ordinary profiles retain their complete IP socket denial.
+Synthetic sealed /etc/hosts resolves only localhost, without exposing host files.
+The native guard requires an explicit application separator, so application argv
+cannot enable a guard mode. No host network namespace, proxy or external route
+is shared. This is internal IPC, not internet/provider access.
+
+Required VM negatives include unreachable actual outer-VM loopback listener,
+unroutable external numeric address, denied datagram/netlink/packet sockets,
+denied namespace creation, rejection of same-namespace guard admission and
+application-argument isolation. A successful in-namespace TCP exchange is required
+alongside these denials. Existing default profile security probes remain mandatory.
+References: https://github.com/containers/bubblewrap (private loopback namespace),
+https://man7.org/linux/man-pages/man7/network_namespaces.7.html.

@@ -127,7 +127,7 @@ class DelegateContracts(unittest.TestCase):
                         self.assertFalse(os.get_inheritable(descriptor))
                     if name == "antigravity":
                         import uuid
-                        self.assertEqual(len(home.descriptors), 2)
+                        self.assertEqual(len(home.descriptors), 3)
                         seed = os.pread(home.seed_fd, 64, 0).decode()
                         self.assertEqual(str(uuid.UUID(seed)), seed)
                     fragment = home.fragment()

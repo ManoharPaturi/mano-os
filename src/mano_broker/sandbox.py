@@ -149,5 +149,7 @@ def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None):
         "--",
         "/task-guard",
         *(["--task-pty"] if task_pty else []),
+        *(home.guard_fragment() if home is not None else []),
+        "--",
         *argv,
     ]

@@ -9,6 +9,7 @@ import os
 import pwd
 import secrets
 import shutil
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -885,7 +886,11 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     global_delegate_settings.parent.mkdir(parents=True, mode=0o700)
     global_delegate_settings.write_text('{"mano_ci_global_sentinel":"must remain unchanged"}\n')
     global_delegate_digest = hashlib.sha256(global_delegate_settings.read_bytes()).hexdigest()
-    delegate_probe = subprocess.run(["systemd-run", "--quiet", "--pipe", "--wait", "--collect",
+    host_loopback = socket.socket()
+    host_loopback.bind(("127.0.0.1", 0))
+    host_loopback.listen(1)
+    try:
+        delegate_probe = subprocess.run(["systemd-run", "--quiet", "--pipe", "--wait", "--collect",
         "--unit=" + delegate_unit, "--uid=" + identity.name, "--slice=mano-core.slice",
         "--property=NoNewPrivileges=yes", "--property=CapabilityBoundingSet=",
         "--property=AmbientCapabilities=", "--property=MemoryMax=512M", "--property=TasksMax=48",
@@ -894,8 +899,11 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
         "--property=ReadWritePaths=" + str(terminal_workspace), "--property=PrivateTmp=yes",
         "env", "-i", "PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8",
         "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1", "/usr/bin/python3",
-        str(ROOT / "scripts/probe_coding_delegates.py"), str(terminal_workspace)],
+        str(ROOT / "scripts/probe_coding_delegates.py"), str(terminal_workspace),
+        str(host_loopback.getsockname()[1])],
         text=True, capture_output=True, timeout=150, check=False)
+    finally:
+        host_loopback.close()
     assert delegate_probe.returncode == 0, (delegate_probe.stdout[-4096:],
                                            delegate_probe.stderr[-8192:])
     assert (hashlib.sha256(global_delegate_settings.read_bytes()).hexdigest()

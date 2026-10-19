@@ -54,6 +54,7 @@ class Home:
         self.name = identify(argv)
         self.fd = -1
         self.seed_fd = -1
+        self.hosts_fd = -1
         if self.name is None:
             return
         installed(self.name)
@@ -93,13 +94,21 @@ class Home:
                     raise OSError("Incomplete synthetic installation ID")
                 os.lseek(self.seed_fd, 0, os.SEEK_SET)
                 fcntl.fcntl(self.seed_fd, fcntl.F_ADD_SEALS, seals)
+                self.hosts_fd = os.memfd_create(
+                    "mano-delegate-hosts", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING
+                )
+                hosts = b"127.0.0.1 localhost\n::1 localhost\n"
+                if os.write(self.hosts_fd, hosts) != len(hosts):
+                    raise OSError("Incomplete synthetic hosts")
+                os.lseek(self.hosts_fd, 0, os.SEEK_SET)
+                fcntl.fcntl(self.hosts_fd, fcntl.F_ADD_SEALS, seals)
         except BaseException:
             self.close()
             raise
 
     @property
     def descriptors(self):
-        return tuple(fd for fd in (self.fd, self.seed_fd) if fd >= 0)
+        return tuple(fd for fd in (self.fd, self.seed_fd, self.hosts_fd) if fd >= 0)
 
     def fragment(self):
         if self.name is None:
@@ -126,6 +135,9 @@ class Home:
             if self.seed_fd < 3 or fcntl.fcntl(self.seed_fd, fcntl.F_GET_SEALS) & seals != seals:
                 raise PermissionError("Sealed synthetic installation ID required")
             result += ["--ro-bind-data", str(self.seed_fd), home + "/installation_id"]
+            if self.hosts_fd < 3 or fcntl.fcntl(self.hosts_fd, fcntl.F_GET_SEALS) & seals != seals:
+                raise PermissionError("Sealed synthetic hosts required")
+            result += ["--ro-bind-data", str(self.hosts_fd), "/etc/hosts"]
         for folder in self.volatile:
             result += ["--tmpfs", home + "/" + folder]
         result += [
@@ -145,7 +157,16 @@ class Home:
             result += ["--setenv", "CODEX_HOME", home]
         return result
 
+    def guard_fragment(self):
+        if self.name != "antigravity":
+            return []
+        outer = os.stat("/proc/self/ns/net")
+        return ["--private-loopback", str(outer.st_dev), str(outer.st_ino)]
+
     def close(self):
+        if self.hosts_fd >= 0:
+            os.close(self.hosts_fd)
+            self.hosts_fd = -1
         if self.seed_fd >= 0:
             os.close(self.seed_fd)
             self.seed_fd = -1
