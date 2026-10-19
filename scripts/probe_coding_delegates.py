@@ -4,6 +4,7 @@
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -58,7 +59,10 @@ def main():
                 help_result.return_code,
                 help_result.stderr[-2048:],
             )
-            assert b"--help" in help_result.stdout + help_result.stderr
+            help_text = (help_result.stdout + help_result.stderr).decode('utf8', errors='replace')
+            help_text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', help_text)
+            expected_option = '--output-format' if name == 'antigravity' else '--sandbox'
+            assert expected_option in help_text, (name, 'headless help contract', help_text[:8192])
             config_name = (
                 "/home/task/.gemini/antigravity-cli/settings.json"
                 if name == "antigravity"
@@ -125,6 +129,7 @@ print(json.dumps(dict(config_sha256=hashlib.sha256(before).hexdigest(),immutable
                 help_stdout_sha256=hashlib.sha256(help_result.stdout).hexdigest(),
                 version_exit=0,
                 help_exit=0,
+                help_excerpt=help_text[:8192],
                 boundaries=boundaries,
                 actual_synthetic_config_parse_denial=True,
                 config_denial_stdout_sha256=hashlib.sha256(bad.stdout).hexdigest(),
