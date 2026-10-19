@@ -38,37 +38,47 @@ def main():
     root = os.open(workspace, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
     cwd = os.open(".", os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC, dir_fd=root)
     records = {}
+    failures = {}
     try:
         for name, version in VERSIONS.items():
-            record = installed(name)
-            version_result = run(
-                root, cwd, command(name, "version"), timeout=15, revoked=lambda: False
-            )
-            assert version_result.reason == "completed" and version_result.return_code == 0, (
-                name,
-                version_result.reason,
-                version_result.return_code,
-                version_result.stdout[-2048:],
-                version_result.stderr[-2048:],
-            )
-            assert version.encode() in version_result.stdout + version_result.stderr
-            help_result = run(root, cwd, command(name, "help"), timeout=15, revoked=lambda: False)
-            assert help_result.reason == "completed" and help_result.return_code == 0, (
-                name,
-                help_result.reason,
-                help_result.return_code,
-                help_result.stderr[-2048:],
-            )
-            help_text = (help_result.stdout + help_result.stderr).decode('utf8', errors='replace')
-            help_text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', help_text)
-            expected_option = '--output-format' if name == 'antigravity' else '--sandbox'
-            assert expected_option in help_text, (name, 'headless help contract', help_text[:8192])
-            config_name = (
-                "/home/task/.gemini/antigravity-cli/settings.json"
-                if name == "antigravity"
-                else "/home/task/.codex/config.toml"
-            )
-            checker = r"""import errno,hashlib,json,os,socket
+            try:
+                record = installed(name)
+                version_result = run(
+                    root, cwd, command(name, "version"), timeout=15, revoked=lambda: False
+                )
+                assert version_result.reason == "completed" and version_result.return_code == 0, (
+                    name,
+                    version_result.reason,
+                    version_result.return_code,
+                    version_result.stdout[-2048:],
+                    version_result.stderr[-2048:],
+                )
+                assert version.encode() in version_result.stdout + version_result.stderr
+                help_result = run(
+                    root, cwd, command(name, "help"), timeout=15, revoked=lambda: False
+                )
+                assert help_result.reason == "completed" and help_result.return_code == 0, (
+                    name,
+                    help_result.reason,
+                    help_result.return_code,
+                    help_result.stderr[-2048:],
+                )
+                help_text = (help_result.stdout + help_result.stderr).decode(
+                    "utf8", errors="replace"
+                )
+                help_text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", help_text)
+                expected_option = "--output-format" if name == "antigravity" else "--sandbox"
+                assert expected_option in help_text, (
+                    name,
+                    "headless help contract",
+                    help_text[:8192],
+                )
+                config_name = (
+                    "/home/task/.gemini/antigravity-cli/settings.json"
+                    if name == "antigravity"
+                    else "/home/task/.codex/config.toml"
+                )
+                checker = r"""import errno,hashlib,json,os,socket
 from pathlib import Path
 p=Path(os.sys.argv[1]);before=p.read_bytes()
 assert os.environ['HOME']=='/home/task'
@@ -79,7 +89,8 @@ for effect in (lambda:p.write_bytes(b'bypass'),lambda:p.unlink(),lambda:p.chmod(
  lambda:p.parent.rename('/home/task/replaced-config'),
  lambda:Path('/home/task').rename('/tmp/replaced-home')):
  try:effect()
- except OSError as error:assert error.errno in {errno.EROFS,errno.EBUSY,errno.EPERM,errno.EACCES}
+ except OSError as error:
+  assert error.errno in {errno.EROFS,errno.EBUSY,errno.EPERM,errno.EACCES,errno.EXDEV}
  else:raise AssertionError('immutable synthetic configuration changed')
 assert p.read_bytes()==before
 Path('/home/task/.cache/volatile').write_text('allowed')
@@ -89,53 +100,63 @@ else:raise AssertionError('delegate got network')
 print(json.dumps(dict(config_sha256=hashlib.sha256(before).hexdigest(),immutable_parents=True,
  host_environment_absent=True,network_denied=True,volatile_cache_writable=True)))
 """
-            with Home(command(name, "version")) as profile:
-                checked = run(
-                    root,
-                    cwd,
-                    ["/usr/bin/python3", "-c", checker, config_name],
-                    timeout=5,
-                    revoked=lambda: False,
-                    home=profile,
+                with Home(command(name, "version")) as profile:
+                    checked = run(
+                        root,
+                        cwd,
+                        ["/usr/bin/python3", "-c", checker, config_name],
+                        timeout=5,
+                        revoked=lambda: False,
+                        home=profile,
+                    )
+                assert checked.reason == "completed" and checked.return_code == 0, (
+                    name,
+                    checked.return_code,
+                    checked.stderr[-4096:],
                 )
-            assert checked.reason == "completed" and checked.return_code == 0, (
-                name,
-                checked.return_code,
-                checked.stderr[-4096:],
-            )
-            boundaries = json.loads(checked.stdout)
-            # Exercise actual vendor parsing of the mounted synthetic config.
-            argv = command(
-                name,
-                "run",
-                prompt="Return the word offline; do not change files.",
-                model="mano-ci-no-such-model",
-            )
-            with Home(
-                argv, configuration=b"{invalid-json" if name == "antigravity" else b"invalid = ["
-            ) as invalid:
-                bad = run(root, cwd, argv, timeout=15, revoked=lambda: False, home=invalid)
-            bad_text = (bad.stdout + bad.stderr).decode("utf8", errors="replace")
-            assert bad.reason == "completed" and bad.return_code != 0, (name, bad.reason, bad_text)
-            assert ("settings.json" if name == "antigravity" else "config.toml") in bad_text, (
-                name,
-                bad_text,
-            )
-            assert any(word in bad_text.lower() for word in ("parse", "invalid", "error", "config"))
-            records[name] = dict(
-                version=version,
-                binary_sha256=record["binary_sha256"],
-                version_stdout_sha256=hashlib.sha256(version_result.stdout).hexdigest(),
-                help_stdout_sha256=hashlib.sha256(help_result.stdout).hexdigest(),
-                version_exit=0,
-                help_exit=0,
-                help_excerpt=help_text[:8192],
-                boundaries=boundaries,
-                actual_synthetic_config_parse_denial=True,
-                config_denial_stdout_sha256=hashlib.sha256(bad.stdout).hexdigest(),
-                config_denial_stderr_sha256=hashlib.sha256(bad.stderr).hexdigest(),
-                config_denial_excerpt=bad_text[:2048],
-            )
+                boundaries = json.loads(checked.stdout)
+                # Exercise actual vendor parsing of the mounted synthetic config.
+                argv = command(
+                    name,
+                    "run",
+                    prompt="Return the word offline; do not change files.",
+                    model="mano-ci-no-such-model",
+                )
+                with Home(
+                    argv,
+                    configuration=b"{invalid-json" if name == "antigravity" else b"invalid = [",
+                ) as invalid:
+                    bad = run(root, cwd, argv, timeout=15, revoked=lambda: False, home=invalid)
+                bad_text = (bad.stdout + bad.stderr).decode("utf8", errors="replace")
+                assert bad.reason == "completed" and bad.return_code != 0, (
+                    name,
+                    bad.reason,
+                    bad_text,
+                )
+                assert ("settings.json" if name == "antigravity" else "config.toml") in bad_text, (
+                    name,
+                    bad_text,
+                )
+                assert any(
+                    word in bad_text.lower() for word in ("parse", "invalid", "error", "config")
+                )
+                records[name] = dict(
+                    version=version,
+                    binary_sha256=record["binary_sha256"],
+                    version_stdout_sha256=hashlib.sha256(version_result.stdout).hexdigest(),
+                    help_stdout_sha256=hashlib.sha256(help_result.stdout).hexdigest(),
+                    version_exit=0,
+                    help_exit=0,
+                    help_excerpt=help_text[:8192],
+                    boundaries=boundaries,
+                    actual_synthetic_config_parse_denial=True,
+                    config_denial_stdout_sha256=hashlib.sha256(bad.stdout).hexdigest(),
+                    config_denial_stderr_sha256=hashlib.sha256(bad.stderr).hexdigest(),
+                    config_denial_excerpt=bad_text[:2048],
+                )
+            except Exception as error:
+                failures[name] = repr(error)[:10000]
+        assert not failures, failures
     finally:
         os.close(root)
         os.close(cwd)

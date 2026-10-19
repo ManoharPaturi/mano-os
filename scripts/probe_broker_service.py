@@ -872,6 +872,36 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
     assert account.pw_name == managed["caller_name"]
     identity = TaskIdentity(account.pw_name, account.pw_uid, account.pw_gid)
     terminal_workspace = Path(managed["workspace"])
+    delegate_authorization = os.open(terminal_workspace / ".delegate-ci-authorized",
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
+    with os.fdopen(delegate_authorization, "wb") as stream:
+        os.fchmod(stream.fileno(), 0o640)
+        os.fchown(stream.fileno(), 0, identity.gid)
+        stream.write(b"mano-phase0-ci-delegates\n")
+    delegate_unit = "mano-delegate-contract-" + secrets.token_hex(6)
+    pty_units.append(delegate_unit + ".service")
+    global_delegate_settings = Path("/home/mano-human/.gemini/antigravity-cli/settings.json")
+    assert not global_delegate_settings.exists()
+    global_delegate_settings.parent.mkdir(parents=True, mode=0o700)
+    global_delegate_settings.write_text('{"mano_ci_global_sentinel":"must remain unchanged"}\n')
+    global_delegate_digest = hashlib.sha256(global_delegate_settings.read_bytes()).hexdigest()
+    delegate_probe = subprocess.run(["systemd-run", "--quiet", "--pipe", "--wait", "--collect",
+        "--unit=" + delegate_unit, "--uid=" + identity.name, "--slice=mano-core.slice",
+        "--property=NoNewPrivileges=yes", "--property=CapabilityBoundingSet=",
+        "--property=AmbientCapabilities=", "--property=MemoryMax=512M", "--property=TasksMax=48",
+        "--property=CPUQuota=50%", "--property=RuntimeMaxSec=180", "--property=TimeoutStopSec=1",
+        "--property=ProtectSystem=strict", "--property=ProtectHome=yes",
+        "--property=ReadWritePaths=" + str(terminal_workspace), "--property=PrivateTmp=yes",
+        "env", "-i", "PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8",
+        "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1", "/usr/bin/python3",
+        str(ROOT / "scripts/probe_coding_delegates.py"), str(terminal_workspace)],
+        text=True, capture_output=True, timeout=150, check=False)
+    assert delegate_probe.returncode == 0, (delegate_probe.stdout[-4096:],
+                                           delegate_probe.stderr[-8192:])
+    assert (hashlib.sha256(global_delegate_settings.read_bytes()).hexdigest()
+            == global_delegate_digest)
+    delegate_contracts = json.loads(delegate_probe.stdout)
+    delegate_contracts["host_global_settings_unchanged"] = True
     terminal_task = dict(ok=True, task_id=managed["context"]["task_id"],
                          resource_id=managed["context"]["resource_id"])
     attached_status = human(dict(mode="prompt_status", id=human_receipt["prompt"]["id"]))
@@ -1698,36 +1728,7 @@ print('END:%d'%count,flush=True)
     pty_report["foreign_uid_slave_denied"] = True
     terminal_report["task_owned_pty_worker_kernel_contract"] = pty_report
     terminal_report["task_owned_pty_interactive_guard_contract"] = True
-    delegate_authorization = os.open(terminal_workspace / ".delegate-ci-authorized",
-        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
-    with os.fdopen(delegate_authorization, "wb") as stream:
-        os.fchmod(stream.fileno(), 0o640)
-        os.fchown(stream.fileno(), 0, identity.gid)
-        stream.write(b"mano-phase0-ci-delegates\n")
-    delegate_unit = "mano-delegate-contract-" + secrets.token_hex(6)
-    pty_units.append(delegate_unit + ".service")
-    global_delegate_settings = Path("/home/mano-human/.gemini/antigravity-cli/settings.json")
-    assert not global_delegate_settings.exists()
-    global_delegate_settings.parent.mkdir(parents=True, mode=0o700)
-    global_delegate_settings.write_text('{"mano_ci_global_sentinel":"must remain unchanged"}\n')
-    global_delegate_digest = hashlib.sha256(global_delegate_settings.read_bytes()).hexdigest()
-    delegate_probe = subprocess.run(["systemd-run", "--quiet", "--pipe", "--wait", "--collect",
-        "--unit=" + delegate_unit, "--uid=" + identity.name, "--slice=mano-core.slice",
-        "--property=NoNewPrivileges=yes", "--property=CapabilityBoundingSet=",
-        "--property=AmbientCapabilities=", "--property=MemoryMax=512M", "--property=TasksMax=48",
-        "--property=CPUQuota=50%", "--property=RuntimeMaxSec=180", "--property=TimeoutStopSec=1",
-        "--property=ProtectSystem=strict", "--property=ProtectHome=yes",
-        "--property=ReadWritePaths=" + str(terminal_workspace), "--property=PrivateTmp=yes",
-        "env", "-i", "PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8",
-        "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1", "/usr/bin/python3",
-        str(ROOT / "scripts/probe_coding_delegates.py"), str(terminal_workspace)],
-        text=True, capture_output=True, timeout=150, check=False)
-    assert delegate_probe.returncode == 0, (delegate_probe.stdout[-4096:],
-                                           delegate_probe.stderr[-8192:])
-    assert (hashlib.sha256(global_delegate_settings.read_bytes()).hexdigest()
-            == global_delegate_digest)
-    terminal_report["real_coding_delegate_contracts"] = json.loads(delegate_probe.stdout)
-    terminal_report["real_coding_delegate_contracts"]["host_global_settings_unchanged"] = True
+    terminal_report["real_coding_delegate_contracts"] = delegate_contracts
     terminal_report["real_coding_delegate_versions_help_sealed_home_and_config_parse"] = True
     from mano_core.delegates import proposal as delegate_proposal
     from mano_protocol.delegates import VERSIONS as delegate_versions
