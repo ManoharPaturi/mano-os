@@ -11,6 +11,7 @@ import select
 import time
 
 from .credentials import drop
+from .delegate_home import Home
 from .protocol import ActionRequest, Capability, canonical, unique_object
 from .runner import OUTPUT_LIMIT, ProcessResult, run
 from .sandbox import command
@@ -77,9 +78,9 @@ class Child:
                     parent_pid=parent,
                 )
                 args = json.loads(admission.request.args_json)
-                command(
-                    self.workspace, self.cwd, args["argv"]
-                )  # Fail before READY on invalid setup.
+                with Home(args["argv"]) as home:
+                    command(self.workspace, self.cwd, args["argv"], home=home)
+                # Fail before READY on invalid setup; no CLI process is created.
                 os.write(report_w, b"R")
                 if os.read(self.control_r, 1) != b"s":
                     os._exit(125)

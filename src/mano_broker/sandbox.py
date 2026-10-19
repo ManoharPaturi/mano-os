@@ -29,7 +29,7 @@ def guard():
     return str(GUARD)
 
 
-def command(workspace_fd, cwd_fd, argv, *, task_pty=False):
+def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None):
     if type(task_pty) is not bool:
         raise ValueError('Explicit task PTY mode required')
     if sys.platform != "linux" or os.geteuid() == 0:
@@ -70,6 +70,10 @@ def command(workspace_fd, cwd_fd, argv, *, task_pty=False):
         raise ValueError("Bounded argv required")
     for index, arg in enumerate(argv):
         text(arg, allow_empty=index > 0)
+    from mano_protocol.delegates import identify
+
+    if identify(argv) is not None and home is None:
+        raise ValueError("Pinned delegate requires an immutable synthetic home")
     require_patched()  # Fail closed; no unsandboxed or old-package fallback.
     native = guard()
     return [
@@ -131,6 +135,7 @@ def command(workspace_fd, cwd_fd, argv, *, task_pty=False):
         "/task-cwd",
         "--chdir",
         "/task-cwd",
+        *(home.fragment() if home is not None else []),
         "--setenv",
         "PATH",
         "/usr/bin:/bin",
@@ -144,5 +149,7 @@ def command(workspace_fd, cwd_fd, argv, *, task_pty=False):
         "--",
         "/task-guard",
         *(["--task-pty"] if task_pty else []),
+        *(home.guard_fragment() if home is not None else []),
+        "--",
         *argv,
     ]

@@ -311,3 +311,22 @@ Nowallhumanheadlessharnesses setGSK_DEBUG=full-redraw andWLR_SCENE_DEBUG_DAMAGE=
 onlyalongsideexistingCairo/Pixmanprofile. No productconfig/permissions/GUI observer
 changes. Reportexplicitrenderingprofile+incrementalvisualacceptanceFalse; no physical/
 defaultbackend claim. NewheadCI/pixelsrequired;95b NOTmerged. PrimarysourceslinksADR88.
+
+Current work: isolated-coding-delegates, based on accepted PR111 main c80db7e.
+PR111 post-main CI39211933892 completed SUCCESS. ADR0096 documents optional
+Antigravity1.4.2/Codex0.163.0 fixed public PTY SDK, sealed synthetic homes and
+hash-pinned CI-only installation. Local404tests passed/46Linux skips; Ruff,
+compileall, shell and diff checks passed. Actual new VM evidence still pending;
+no authenticated coding/paid calls/actual authenticated soft-denial claims.
+Disk18GiB free91%; vendor binaries/VM downloads remain CI-only. Goal ACTIVE.
+
+PR112 remains draft/unaccepted. Actual Antigravity1.4.2 ignores our malformed
+settings until authentication, so prior vendor-parse expectation failed. Added
+strict adapter-side JSON/default-policy validation before launch and an actual
+semantic config-consumption probe using documented modelProvider=gemini with NO
+GEMINI_API_KEY: must reject missing key, not OAuth. Codex vendor malformed-TOML
+probe retained. Collect partial diagnostics and independent public native-PAM SDK
+version witnesses before rejecting configuration failure. No failed head merged,
+no key/sign-in/paid call. All existing25 flags +2 delegate flags, full artifact and
+pixel gates remain required. Full v2.1 goal ACTIVE; physical/authenticated work
+unproved. Vendor binaries/VM work CI-only; latest disk17GiBfree92% warning.

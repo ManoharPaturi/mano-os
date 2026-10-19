@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from mano_protocol.terminal_output import STREAM_LIMIT as OUTPUT_LIMIT
 
+from .delegate_home import Home
 from .sandbox import command
 
 
@@ -24,7 +25,7 @@ class ProcessResult:
     stderr: bytes
 
 
-def run(workspace_fd, cwd_fd, argv, *, timeout, revoked):
+def run(workspace_fd, cwd_fd, argv, *, timeout, revoked, home=None):
     if type(timeout) is not int or not 1 <= timeout <= 300 or not callable(revoked):
         raise ValueError("Trusted deadline and revocation observer required")
 
@@ -36,19 +37,14 @@ def run(workspace_fd, cwd_fd, argv, *, timeout, revoked):
 
     if is_revoked():
         return ProcessResult("revoked", None, b"", b"")
-    args = command(workspace_fd, cwd_fd, argv)
-    if is_revoked():
-        return ProcessResult("revoked", None, b"", b"")
-    process = subprocess.Popen(
-        args,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
-        close_fds=True,
-        pass_fds=(workspace_fd, cwd_fd),
-        start_new_session=True,
-    )
+    with (home if home is not None else Home(argv)) as home:
+        args = command(workspace_fd, cwd_fd, argv, home=home)
+        if is_revoked():
+            return ProcessResult("revoked", None, b"", b"")
+        process = subprocess.Popen(
+            args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}, close_fds=True,
+            pass_fds=(workspace_fd, cwd_fd, *home.descriptors), start_new_session=True)
     buffers = {"stdout": bytearray(), "stderr": bytearray()}
     reason = "completed"
     deadline = time.monotonic() + timeout
