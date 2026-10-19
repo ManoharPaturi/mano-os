@@ -357,3 +357,11 @@ fullacceptance/merge. MoveMCPStop to replacementlauncher RUN+MCP pair (two slots
 freezeMCPandbothauthorities, actualnativeCStop/drain/unknown andidentifieddetached
 serverchild. KeeporiginalRUN+PTYStop regressionunchanged; noquota/guardweakening.
 Addexplicitmcp-discovery.json to evidence transfer. NewheadCI/artifactsrequired.
+
+PR114 mergedbc4d67b after head0ba2d74/CI39261999490 ALL3SUCCESS/art12190909682,
+54hashes/31flags/package/freshstock-reboot/all6rawGUI individuallyaccepted.
+Subsequentwitnessreview foundcommandline-onlychildidentity canmatchbwrapwrapper.
+Wholeobserved5-PIDgroupdrained, but actualPythonchildidentityrequiresstrongerproof.
+Immediatefollowup pins childANDparent /proc/exe tosamePython3interpreter, samecode
+argv andownSID; recordsparent/executable/SID. ExactnewheadCI/artifactsrequiredbefore
+accepting refinedidentity. Noquota/Stop/productauthoritychange. FullgoalACTIVE.
