@@ -7,9 +7,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
+#include <termios.h>
 #include <unistd.h>
 
 /* ABI 5 UAPI bit, absent from Ubuntu 24.04's older build headers. Runtime
@@ -110,8 +114,27 @@ int main(int argc, char **argv) {
         errno = EPERM; fail("guard unprivileged sandbox preconditions");
     }
     if (syscall(SYS_close_range, 3U, ~0U, 0)) fail("guard FD closure");
+    int first = 1;
+    if (!strcmp(argv[1], "--task-pty")) {
+        struct stat initial, other;
+        if (argc < 3 || fstat(0, &initial) || !S_ISCHR(initial.st_mode) ||
+            initial.st_uid != geteuid() || !isatty(0)) {
+            errno = EPERM; fail("guard task-owned PTY");
+        }
+        for (int fd = 1; fd <= 2; ++fd) {
+            if (fstat(fd, &other) || !isatty(fd) || initial.st_dev != other.st_dev ||
+                initial.st_ino != other.st_ino || initial.st_rdev != other.st_rdev) {
+                errno = EPERM; fail("guard exact PTY streams");
+            }
+        }
+        if (getsid(0) != getpid() && setsid() < 0) fail("guard PTY session");
+        /* Never force/steal a terminal belonging to another session. */
+        if (ioctl(0, TIOCSCTTY, 0) || tcgetsid(0) != getsid(0))
+            fail("guard PTY controlling session");
+        first = 2;
+    }
     landlock();
     filter();
-    execvp(argv[1], &argv[1]);
+    execvp(argv[first], &argv[first]);
     fail("guard task exec");
 }

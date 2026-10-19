@@ -1,5 +1,14 @@
 # mano-OS continuation
 
+Current task-owned-pty-worker implementsunprivilegedTaskPTYprimitive+privateguard
+mode requiringexactsame taskUID-ownedslaveon0/1/2; setsidonlyifneeded/TIOCSCTTY0
+neversteals. StandardRUNunchanged/--new-session retained/allkernelguardsretained.
+Boundedinteractiveinput/read/resize/EOF/timeout/revocation/combinedoutput +CIactual
+taskcontract/foreignsyntheticslavedenial/frozenPTYnativeStop added. This iskernel
+boundaryprerequisite, NOTpublicterminal.open_pty orcompletePhase2. ExactheadCI+
+actualartifactacceptance requiredbeforemerge. ADR0092. PR107merged7ed2bf8 after
+CI39161087759 allSUCCESS; postmain39162163562 verifiedSUCCESS. FullgoalACTIVE.
+
 Current durable-terminal-output reusesownedprivate launcherread_output: fixed64KiB
 streams, one4096chunk/tick, Stop/grantrecheck, atomicdurablebytes+done/failed. New
 private64resultSQLitecustody, scopedreadonlymetadata/chunk APIs, SDKbinaryretrieval

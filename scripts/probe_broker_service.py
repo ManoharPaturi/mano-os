@@ -87,6 +87,8 @@ created_group = False
 joined = False
 identity = None
 extra_gui_identities = []
+pty_units = []
+pty_frozen = None
 
 
 def command(*args):
@@ -1429,6 +1431,56 @@ finally:client.close()
     terminal_report["native_terminal_output_failed_binary_multichunk_and_replay"] = True
     terminal_report["terminal_output_native_caller_task_scope"] = True
     terminal_report["terminal_output_witness"] = json.loads(output_client.stdout)
+    pty_unit = "mano-pty-probe-" + secrets.token_hex(6)
+    authorization = os.open(terminal_workspace / ".pty-ci-authorized",
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
+    with os.fdopen(authorization, "wb") as stream:
+        os.fchmod(stream.fileno(), 0o640)
+        os.fchown(stream.fileno(), 0, identity.gid)
+        stream.write(b"mano-phase0-ci-task-pty\n")
+    pty_units.extend([pty_unit + ".service", pty_unit + "-frozen.service"])
+    pty_base = ["systemd-run", "--quiet", "--pipe", "--collect", "--uid=" + identity.name,
+        "--slice=mano-core.slice", "--property=NoNewPrivileges=yes",
+        "--property=CapabilityBoundingSet=", "--property=AmbientCapabilities=",
+        "--property=MemoryMax=128M", "--property=TasksMax=24", "--property=CPUQuota=30%",
+        "--property=RuntimeMaxSec=180", "--property=TimeoutStopSec=1",
+        "--property=ProtectSystem=strict", "--property=ProtectHome=yes",
+        "--property=ReadWritePaths=" + str(terminal_workspace),
+        "--property=PrivateTmp=yes"]
+    pty_program = ["env", "-i", "PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8",
+        "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1", "/usr/bin/python3",
+        str(ROOT / "scripts/probe_task_pty.py"), str(terminal_workspace)]
+    pty_probe = subprocess.run(pty_base + ["--unit=" + pty_unit, "--wait"] + pty_program,
+        capture_output=True, text=True, timeout=45, check=False)
+    assert pty_probe.returncode == 0, (pty_probe.stdout[-2048:], pty_probe.stderr[-4096:])
+    pty_report = json.loads(pty_probe.stdout)
+    assert pty_report["task_owned_controlling_pty"] is True
+    assert pty_report["public_broker_session_implemented"] is False
+    # Root creates a synthetic foreign-owned PTY, never the user's actual terminal.
+    foreign_master, foreign_slave = os.openpty()
+    try:
+        foreign = subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--",
+            "/usr/bin/setpriv", "--no-new-privs"] +
+            pty_program + ["--foreign"], stdin=foreign_slave, stdout=foreign_slave,
+            stderr=foreign_slave, timeout=15, check=False)
+        assert foreign.returncode == 125, foreign.returncode
+        os.set_blocking(foreign_master, False)
+        foreign_output = bytearray()
+        while True:
+            try:
+                piece = os.read(foreign_master, 4096)
+            except BlockingIOError:
+                break
+            if not piece:
+                break
+            foreign_output.extend(piece)
+        assert b"guard task-owned PTY" in foreign_output, bytes(foreign_output)
+    finally:
+        os.close(foreign_slave)
+        os.close(foreign_master)
+    pty_report["foreign_uid_slave_denied"] = True
+    terminal_report["task_owned_pty_worker_kernel_contract"] = pty_report
+    terminal_report["task_owned_pty_interactive_guard_contract"] = True
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))
@@ -1592,12 +1644,25 @@ else:raise AssertionError('task reached native Stop')
     core_child_group = core_group / core_unit
     deadline = time.monotonic() + 3
     core_pids = []
+    pty_frozen = subprocess.Popen(pty_base + ["--unit=" + pty_unit + "-frozen", "--wait"] +
+        pty_program + ["--freeze"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + 15
+    while not (terminal_workspace / "pty-fixture-ready").exists() and time.monotonic() < deadline:
+        assert pty_frozen.poll() is None
+        time.sleep(0.05)
+    assert (terminal_workspace / "pty-fixture-ready").exists()
+    pty_worker_pid = int(command("systemctl", "show", pty_unit + "-frozen.service",
+                                 "--property=MainPID", "--value"))
+    pty_child_pid = int((terminal_workspace / "pty-fixture-ready").read_text())
+    assert pty_worker_pid > 0 and pty_child_pid > 0
+    deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
         core_pids = [int(pid) for pid in (core_child_group / "cgroup.procs").read_text().split()]
         if len(core_pids) == 2:
             break
         time.sleep(0.05)
     assert len(core_pids) == 2
+    core_pids.extend([pty_worker_pid, pty_child_pid])
     provider_idle, _provider_unit, provider_pids = provider_idle_job()
     provider_stop_probe = """import json
 from mano_protocol.stop_state import snapshot
@@ -1661,11 +1726,13 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
                        timeout=3)
         provider_idle.terminate()
         provider_idle.wait(timeout=3)
+        pty_frozen.communicate(timeout=5)
     terminal_report["native_human_stop_client_frozen_core_and_authority"] = True
     terminal_report["native_stop_client_message"] = native_stopped.stdout.strip()
     terminal_report["native_stop_broker_and_launcher_frozen"] = True
     terminal_report["native_stop_frozen_core_and_detached_child_drained"] = True
     terminal_report["native_stop_frozen_provider_drained"] = True
+    terminal_report["native_stop_frozen_task_pty_worker_and_child_drained"] = True
     terminal_report["installed_broker_disabled_price_policy"] = True
     terminal_report["loaded_broker_price_policy_immutable_snapshot"] = True
     terminal_report["installed_provider_credential_health"] = True
@@ -2052,6 +2119,15 @@ finally:
     provider_units = [line.split()[0] for line in command("systemctl", "list-units", "--all",
         "--plain", "--no-legend", "mano-provider@*.service",
         "mano-egress@*.service").splitlines() if line.strip()]
+    if pty_units:
+        subprocess.run(["systemctl", "stop", *pty_units], check=False,
+                       capture_output=True, timeout=5)
+    if pty_frozen is not None:
+        if pty_frozen.returncode is None:
+            pty_frozen.communicate(timeout=5)
+        for stream in (pty_frozen.stdout, pty_frozen.stderr):
+            if stream is not None:
+                stream.close()
     if provider_units:
         subprocess.run(["systemctl", "stop", *provider_units], check=False, capture_output=True,
                        timeout=5)
