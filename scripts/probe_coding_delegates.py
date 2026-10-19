@@ -12,6 +12,7 @@ from pathlib import Path
 
 from mano_broker.delegate_home import Home, installed
 from mano_broker.runner import run
+from mano_broker.sandbox import guard
 from mano_protocol.delegates import VERSIONS, command
 
 
@@ -37,6 +38,12 @@ def main():
         os.close(marker)
     root = os.open(workspace, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
     cwd = os.open(".", os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC, dir_fd=root)
+    # A fresh CI-only copy permits testing the guard's own rejection paths.
+    # The installed /task-guard remains unreadable/unexecutable to applications.
+    guard_fixture = workspace / ".mano-ci-native-guard"
+    with guard_fixture.open("xb") as target:
+        target.write(Path(guard()).read_bytes())
+    guard_fixture.chmod(0o555)
     records = {}
     failures = {}
     try:
@@ -116,12 +123,12 @@ if private:
   except PermissionError:pass
   else:raise AssertionError('delegate got non-TCP network socket')
  current=os.stat('/proc/self/ns/net')
- same=subprocess.run(['/task-guard','--private-loopback',str(current.st_dev),
+ same=subprocess.run(['/workspace/.mano-ci-native-guard','--private-loopback',str(current.st_dev),
   str(current.st_ino),'--','/usr/bin/true'],capture_output=True)
  assert same.returncode==125 and b'private network namespace required' in same.stderr
  assert ctypes.CDLL(None,use_errno=True).unshare(0x40000000)==-1
  assert ctypes.get_errno()==errno.EPERM
- separated=subprocess.run(['/task-guard','--','--private-loopback','1','2',
+ separated=subprocess.run(['/workspace/.mano-ci-native-guard','--','--private-loopback','1','2',
   '/usr/bin/true'],capture_output=True)
  assert separated.returncode==125 and b'guard task exec' in separated.stderr
 else:
@@ -190,6 +197,7 @@ print(json.dumps(dict(config_sha256=hashlib.sha256(before).hexdigest(),immutable
                 failures[name] = repr(error)[:10000]
         assert not failures, failures
     finally:
+        guard_fixture.unlink()
         os.close(root)
         os.close(cwd)
     print(
