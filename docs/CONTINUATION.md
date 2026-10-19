@@ -1,3 +1,21 @@
+# Current direct workspace writes (under review)
+
+Branch feat/authorized-workspace-writes adds actual files.write executor, native
+private staged creation/atomic renameat2 publication, scoped historical receipt
+and SDK. ADR0094 explicitly supersedes old proposed in-place pinned-inode write
+policy; the pinned parent remains authority, old external inode aliases unchanged.
+Initial absent target is no-replace. Reserved broker-private0700 staging dir with
+fixed0660 published files/taskGID; native scoped umask restores immediately, no
+service policy relaxation.64 lifetime attempts include failures; empty internal
+staging directories retained safely. Stop/expiry checks before and after mutation,
+uncertain publication unknown/no replay. READ/WRITE reject reserved staging path.
+Local389 tests pass/45 Linux skips. Linux native cases and actual PAM/SDK CI pending.
+Recovery fixture now non-dispatched INSPECT; native target pin/rename check moved
+to separate explicit Root-supervised broker-UID native-library process. Actual
+writes get production create/replace/empty/replay/caller SDK checks. Full scope
+ACTIVE. PR109 merged0d20fd3; postmain39191601068 stillrunning at lastcheck.
+Disk20GiBfree90% warning, no local VM downloads or data deletion.
+
 # Current public broker PTY implementation
 
 Branch feat/broker-pty-sessions adds terminal.open_pty/native PAM, Root-supervised

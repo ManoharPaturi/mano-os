@@ -94,6 +94,8 @@ class State:
                 action_id TEXT PRIMARY KEY REFERENCES actions(id),metadata_json TEXT NOT NULL,
                 stdout BLOB NOT NULL,stderr BLOB NOT NULL,
                 CHECK(length(stdout)<=65536),CHECK(length(stderr)<=65536));
+            CREATE TABLE IF NOT EXISTS file_writes(
+                action_id TEXT PRIMARY KEY REFERENCES actions(id), metadata_json TEXT);
             CREATE TABLE IF NOT EXISTS pty_sessions(
                 action_id TEXT PRIMARY KEY REFERENCES actions(id),
                 data BLOB NOT NULL DEFAULT X'', input_bytes INTEGER NOT NULL DEFAULT 0,

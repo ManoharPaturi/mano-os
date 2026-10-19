@@ -14,7 +14,7 @@ from mano_protocol.transport import CREDENTIALS, Peer, reply
 PATH = '/run/mano-broker/request.sock'
 OPERATIONS = {'request_approval', 'approval_status', 'propose', 'status', 'artifact_read',
               'model_result', 'file_result', 'terminal_output', 'terminal_output_read',
-              'pty_status', 'pty_read', 'pty_write', 'pty_resize', 'pty_close'}
+              'pty_status', 'pty_read', 'pty_write', 'pty_resize', 'pty_close', 'file_write_result'}
 
 
 def terminal_output(client, *, task_id, action_id):
@@ -184,3 +184,18 @@ def read_file_result(client, *, task_id, action_id, path):
             if hashlib.sha256(data).hexdigest() != metadata['sha256']:
                 raise ValueError('File custody digest mismatch')
             return dict(metadata=metadata, data=bytes(data))
+
+
+def file_write_result(client, *, task_id, action_id, path):
+    """Historical publication receipt; does not establish current file contents."""
+    from mano_protocol.actions import identifier
+    from mano_protocol.file_writes import metadata
+
+    response = client(dict(schema_version='1.0', operation='file_write_result',
+        body=dict(task_id=identifier(task_id), action_id=identifier(action_id))))
+    if (response.get('ok') is not True or response.get('schema_version') != '1.0'
+            or 'publication' not in response):
+        raise ValueError('Invalid write publication response')
+    value = response['publication']
+    return (None if value is None else
+            metadata(value, task_id=task_id, action_id=action_id, path=path))

@@ -89,6 +89,7 @@ identity = None
 extra_gui_identities = []
 pty_units = []
 pty_frozen = None
+pin_probe = None
 
 
 def command(*args):
@@ -572,10 +573,10 @@ finally:c.close()
         schema_version="1.0",
         task_id=provision["task_id"],
         resource_id=provision["resource_id"],
-        # This deliberately staged unknown-effect recovery fixture must remain
-        # unscheduled. Read actions now execute; writes still have no executor.
-        capability="files.write",
-        args={"path": "file", "text": "must never be written by this fixture"},
+        # Recovery is independent of file effects. Both READ and WRITE now
+        # execute, so use the existing non-dispatched health-inspection intent.
+        capability="system.inspect_health",
+        args={},
         idempotency_key="read",
         reason="fixed live CI",
     )
@@ -650,19 +651,37 @@ finally:c.close()
         accepted
     )
     assert accepted["action"]["verified"] == 0
+    # Keep a genuine native-library pin/rename test under the actual broker UID.
+    # This is a separately Root-supervised probe, not a claim that the health
+    # intent pins a file or that the daemon retains completed-write leases.
+    pin_program = """import hashlib,json,os,sys
+from mano_broker.resources import Workspace
+fd=os.open(sys.argv[1],os.O_PATH|os.O_DIRECTORY|os.O_CLOEXEC)
+with Workspace(fd) as workspace:
+ os.close(fd)
+ with workspace.pin('file') as pin:
+  print(json.dumps(dict(pid=os.getpid(),fd=pin.fd,inode=pin.inode,device=pin.device)),flush=True)
+  assert sys.stdin.readline()=='inspect\\n'
+  source=pin.read_fd()
+  try:data=os.read(source,32768)
+  finally:os.close(source)
+  print(json.dumps(dict(sha256=hashlib.sha256(data).hexdigest())),flush=True)
+"""
+    pin_probe = subprocess.Popen(["/usr/sbin/runuser", "-u", "mano-broker", "--", "env",
+        "PYTHONPATH=/usr/lib/mano-os", "python3", "-c", pin_program, str(WORK)],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    pin_ready = json.loads(pin_probe.stdout.readline())
     inode = target.stat().st_ino
-    held = []
-    for file in Path(f"/proc/{pid}/fd").iterdir():
-        try:
-            info = file.stat()
-        except (FileNotFoundError, ProcessLookupError):
-            continue
-        if info.st_ino == inode and info.st_dev == target.stat().st_dev:
-            held.append(int(file.name))
-    assert held, "Broker did not retain the actual target descriptor"
+    original_digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    assert pin_ready["inode"] == inode and pin_ready["device"] == target.stat().st_dev
+    actual_pin = Path(f"/proc/{pin_ready['pid']}/fd/{pin_ready['fd']}")
+    assert actual_pin.stat().st_ino == inode
     target.rename(WORK / "retained")
     target.symlink_to("/etc/mano/sentinel")
-    assert all(Path(f"/proc/{pid}/fd/{fd}").stat().st_ino == inode for fd in held)
+    assert actual_pin.stat().st_ino == inode
+    pin_out, pin_error = pin_probe.communicate(input="inspect\n", timeout=5)
+    assert pin_probe.returncode == 0, pin_error
+    assert json.loads(pin_out)["sha256"] == original_digest
     replay = rpc("request", dict(schema_version="1.0", operation="propose", body=body))
     assert not replay["fresh"] and replay["action"]["id"] == accepted["action"]["id"]
     # Pending approval and executing-state recovery are independent of real effects.
@@ -1431,6 +1450,69 @@ finally:client.close()
     terminal_report["native_terminal_output_failed_binary_multichunk_and_replay"] = True
     terminal_report["terminal_output_native_caller_task_scope"] = True
     terminal_report["terminal_output_witness"] = json.loads(output_client.stdout)
+    write_receipts = []
+    for index, content in enumerate(("approved direct write \u2603", "")):
+        direct_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
+            resource_id=terminal_task["resource_id"], capability="files.write",
+            args=dict(path="direct-note", text=content),
+            idempotency_key="direct-write-" + str(index),
+            reason="Approve bounded direct workspace publication")
+        direct_pending = rpc("request", dict(schema_version="1.0", operation="request_approval",
+            body=direct_proposal), actor=identity.name)["approval"]
+        assert direct_pending["state"] == "pending"
+        if index == 0:
+            assert not (terminal_workspace / "direct-note").exists()
+        direct_view = human(dict(mode="view", id=direct_pending["approval_id"]))["view"]
+        assert direct_view["args"] == direct_proposal["args"]
+        assert human(dict(mode="confirm", view=direct_view,
+                          password="wrong-ci-password")) == {"ok": False}
+        direct_grant = human(dict(mode="confirm", view=direct_view, password=password))
+        assert direct_grant["ok"]
+        direct_request = dict(schema_version="1.0", operation="propose",
+            body=direct_proposal | dict(grant_id=direct_grant["grant_id"]))
+        direct_action = rpc("request", direct_request, actor=identity.name)["action"]["id"]
+        direct_query = dict(schema_version="1.0", operation="file_write_result", body=dict(
+            task_id=terminal_task["task_id"], action_id=direct_action))
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            direct_result = rpc("request", direct_query, actor=identity.name)
+            if direct_result["ok"] and direct_result["publication"] is not None:
+                break
+            time.sleep(0.15)
+        receipt = direct_result["publication"]
+        assert receipt is not None, direct_result
+        assert receipt["sha256"] == hashlib.sha256(content.encode()).hexdigest()
+        assert receipt["size"] == len(content.encode())
+        assert receipt["publication"] == ("created" if index == 0 else "replace-slot")
+        assert receipt["effect_verified"] is False and receipt["current_content_verified"] is False
+        assert (terminal_workspace / "direct-note").read_text() == content
+        task_read = subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--",
+            "/bin/cat", str(terminal_workspace / "direct-note")], capture_output=True, check=True)
+        assert task_read.stdout == content.encode()
+        assert rpc("request", direct_query) == denied
+        for change in (dict(task_id="0" * 32), dict(action_id="0" * 32)):
+            assert rpc("request", direct_query | dict(body=direct_query["body"] | change),
+                       actor=identity.name) == denied
+        receipt_code = """import json,sys
+from mano_core.broker import BrokerClient,file_write_result
+client=BrokerClient()
+try:print(json.dumps(file_write_result(client,**json.load(sys.stdin))))
+finally:client.close()
+"""
+        receipt_client = subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--", "env",
+            "PYTHONPATH=/usr/lib/mano-os", "python3", "-c", receipt_code],
+            input=json.dumps(direct_query["body"] | dict(path="direct-note")),
+            text=True, capture_output=True, check=True, timeout=5)
+        assert json.loads(receipt_client.stdout) == receipt
+        (terminal_workspace / "direct-note").write_text("later canary")
+        direct_replay = rpc("request", direct_request, actor=identity.name)
+        assert not direct_replay["fresh"] and direct_replay["action"]["state"] == "done"
+        assert (terminal_workspace / "direct-note").read_text() == "later canary"
+        assert rpc("request", direct_query, actor=identity.name) == direct_result
+        write_receipts.append(receipt)
+    terminal_report["direct_workspace_write_native_pam_create_replace_empty_sdk"] = True
+    terminal_report["direct_workspace_write_scope_and_no_reexecution"] = True
+    terminal_report["direct_workspace_write_receipts"] = write_receipts
     # Public PTY creation requires its own exact native PAM approval; active
     # permission profiles deliberately do not grant interactive channels.
     public_pty_program = r"""import os,sys,ctypes
@@ -2162,7 +2244,8 @@ s.close()
                 native_pam=native_report,
                 terminal_execution=terminal_report,
                 real_root_fd_provisioned=True,
-                prepared_target_fd_verified=True,
+                native_library_broker_uid_target_fd_verified=True,
+                target_pin_probe_scope="separate Root-supervised broker-UID native library probe",
                 mutation_syscalls_kernel_denied=True,
                 root_control_reply_credentials_verified=True,
                 confirmation_binding_denials=4,
@@ -2214,6 +2297,12 @@ finally:
     if pty_units:
         subprocess.run(["systemctl", "stop", *pty_units], check=False,
                        capture_output=True, timeout=5)
+    if pin_probe is not None:
+        if pin_probe.poll() is None:
+            pin_probe.kill()
+            pin_probe.communicate(timeout=5)
+        for stream in (pin_probe.stdin, pin_probe.stdout, pin_probe.stderr):
+            stream.close()
     if pty_frozen is not None:
         if pty_frozen.returncode is None:
             pty_frozen.communicate(timeout=5)

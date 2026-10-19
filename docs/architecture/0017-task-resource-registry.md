@@ -14,7 +14,9 @@ then atomically reserves intent using the existing strict exact-grant checks. It
 pins read targets or terminal cwd. Write preparation pins the parent, then resolves
 an existing target relative to that retained parent (not the original parent name).
 Absent targets record only leaf name plus parent FD; no file is created yet. Future
-writers must use O_EXCL creation or the pinned existing inode. Quota denial rolls
+writers initially had to use O_EXCL creation or the pinned existing inode.
+ADR0094 supersedes that proposed write policy with create-only/atomic directory-
+slot publication, avoiding mutation of old inode aliases. Quota denial rolls
 back new reservation, while existing replay can return prior state without new FDs.
 
 Failed pinning closes transient descriptors and records failed intent. Replays never

@@ -8,6 +8,7 @@ from collections import deque
 from .artifacts import Store
 from .executor import Executor
 from .file_reads import execute as execute_file_read
+from .file_writes import execute as execute_file_write
 from .ipc import dispatch, public_action, receive
 from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
 from .provider_jobs import ProviderJobs
@@ -31,6 +32,7 @@ class Runtime:
         self.artifacts = Store()
         self.pending = deque()
         self.file_pending = deque()
+        self.write_pending = deque()
         self.pty_pending = deque()
         self.launcher = launcher
         self.stop_reader = stop_reader or (snapshot if launcher else None)
@@ -132,6 +134,8 @@ class Runtime:
                 self.pending.append(row["id"])
             if prepared is not None and request.capability == Capability.PTY and self.ptys:
                 self.pty_pending.append(row["id"])
+            if prepared is not None and request.capability == Capability.WRITE:
+                self.write_pending.append(row["id"])
             if prepared is not None and request.capability == Capability.READ:
                 self.file_pending.append(row['id'])
             if prepared is not None and request.capability == Capability.PLAN and self.model_worker:
@@ -185,6 +189,13 @@ class Runtime:
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self.state.event(action_id, 'file-read-denied', {
                     'error_type': type(error).__name__})
+        if self.write_pending:
+            action_id = self.write_pending.popleft()
+            try:
+                execute_file_write(self, action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.state.event(action_id, "file-write-denied",
+                                 {"error_type": type(error).__name__})
         self.tick_models()
         if self.ptys:
             for action_id in list(self.ptys.jobs):
@@ -241,6 +252,9 @@ class Runtime:
             for action_id in self.file_pending:
                 self.settle_model(action_id)
             self.file_pending.clear()
+            for action_id in self.write_pending:
+                self.settle_model(action_id)
+            self.write_pending.clear()
             if self.executor:
                 for action_id, handle in list(self.executor.jobs.items()):
                     try:
