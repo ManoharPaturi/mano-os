@@ -15,6 +15,7 @@ class Capability(StrEnum):
     READ = "files.read"
     WRITE = "files.write"
     RUN = "terminal.run"
+    PTY = "terminal.open_pty"
     PLAN = "model.plan"
     BUDGET = "model.set_budget"
     PROFILE = "policy.set_profile"
@@ -140,7 +141,14 @@ class ActionRequest:
                     or not 16 <= args['max_output_tokens'] <= 8192):
                 raise ValueError('Invalid output token ceiling')
         else:
-            if set(args) != {"argv", "cwd", "timeout_seconds"}:
+            fields = {"argv", "cwd", "timeout_seconds"}
+            if capability == Capability.PTY:
+                fields |= {"rows", "columns", "input_limit_bytes"}
+                for key, maximum in (("rows", 200), ("columns", 400),
+                                     ("input_limit_bytes", 65536)):
+                    if type(args.get(key)) is not int or not 1 <= args[key] <= maximum:
+                        raise ValueError("Invalid bounded PTY arguments")
+            if set(args) != fields:
                 raise ValueError("Unexpected terminal arguments")
             argv = args["argv"]
             if not isinstance(argv, list) or not 1 <= len(argv) <= 128:
