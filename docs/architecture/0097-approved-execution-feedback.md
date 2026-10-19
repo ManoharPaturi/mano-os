@@ -6,7 +6,8 @@ core model configuration. This selection grants no disclosure or execution autho
 
 Feedback includes the complete stdout and stderr streams, readable UTF-8 text,
 base64 bytes, sizes, SHA256, original action/boot and nonzero normal return code.
-Combined streams must contain 1..4096 bytes. Missing custody, binary text, larger
+Combined streams contain 0..4096 bytes; a known nonzero exit with empty captured
+streams is valid, while missing custody is never treated as empty output. Missing custody, binary text, larger
 streams, success, output limits and unknown outcomes are rejected without truncation.
 The broker reconciles the snapshot against its private terminal custody before
 pending approval, fresh authorization and the one-shot model attempt. Cross-task,

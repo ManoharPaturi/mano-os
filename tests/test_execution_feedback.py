@@ -189,6 +189,22 @@ class ExecutionFeedbackTests(unittest.TestCase):
         with self.assertRaises(Denied):
             validate(self.state, self.request(), caller_uid=1005, boot_id="boot")
 
+    def test_known_empty_failure_is_feedback_but_missing_custody_is_not(self):
+        metadata, _ = read(
+            self.state, task_id=self.task, action_id=self.action, caller_uid=1004, boot_id="boot"
+        )
+        empty = dict(size=0, sha256=hashlib.sha256(b"").hexdigest())
+        metadata["streams"] = dict(stdout=empty, stderr=empty)
+        value = capture(metadata, b"", b"")
+        self.assertEqual(parse(value), dict(stdout=b"", stderr=b""))
+        # Empty data cannot conceal the actual nonempty captured stderr.
+        forged = self.proposal | dict(args=self.proposal["args"] | dict(feedback=value))
+        with self.assertRaises(Denied):
+            Approvals(self.state).request(forged, caller_uid=1004, now=10, boot_id="boot")
+        self.state.db.execute("DELETE FROM terminal_outputs WHERE action_id=?", (self.action,))
+        with self.assertRaises(Denied):
+            Approvals(self.state).request(forged, caller_uid=1004, now=10, boot_id="boot")
+
     def test_existing_failure_from_other_task_cannot_enter_disclosure(self):
         other = self.state.create_task(
             human_uid=1002,

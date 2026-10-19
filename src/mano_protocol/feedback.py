@@ -42,8 +42,8 @@ def parse(value):
         if data.decode("utf8") != record["text"]:
             raise ValueError("Feedback text differs from captured bytes")
         result[stream] = data
-    if not 1 <= sum(len(data) for data in result.values()) <= LIMIT:
-        raise ValueError("Feedback must contain complete nonempty streams within 4096 bytes")
+    if sum(len(data) for data in result.values()) > LIMIT:
+        raise ValueError("Complete feedback streams exceed 4096 bytes")
     return result
 
 
