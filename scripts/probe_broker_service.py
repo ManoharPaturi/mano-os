@@ -1957,7 +1957,8 @@ finally:client.close()
     stop_proposal = terminal_proposal | dict(idempotency_key="native-stop-task", args=dict(
         argv=["/usr/bin/python3", "-c", "import os,time;from pathlib import Path;"
               "p=os.fork()\nif p==0:\n os.setsid()\n"
-              " Path('/workspace/stoppable').write_text('ready')\ntime.sleep(60)"],
+              " Path('/workspace/stoppable.pending').write_text('ready');"
+              "os.replace('/workspace/stoppable.pending','/workspace/stoppable')\ntime.sleep(60)"],
         cwd=".", timeout_seconds=60))
     stop_workflow_definition = dict(steps=[observed_test(dict(capability="terminal.run",
         args=stop_proposal["args"], reason="Recorded long-running test for native Stop"), 0),
