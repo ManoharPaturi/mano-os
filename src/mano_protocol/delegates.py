@@ -5,7 +5,7 @@ from .actions import model_identifier, text
 VERSIONS = {'antigravity': '1.4.2', 'codex': '0.163.0'}
 EXECUTABLES = {
     'antigravity': '/usr/lib/mano-delegates/antigravity-1.4.2/agy',
-    'codex': '/usr/lib/mano-delegates/codex-0.163.0/codex/codex',
+    'codex': '/usr/lib/mano-delegates/codex-0.163.0/bin/codex',
 }
 
 
