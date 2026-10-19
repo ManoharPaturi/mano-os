@@ -88,7 +88,7 @@ class Home:
                 self.seed_fd = os.memfd_create(
                     "mano-delegate-installation-id", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING
                 )
-                seed = str(uuid.uuid4()).encode() + b"\n"
+                seed = str(uuid.uuid4()).encode()
                 if os.write(self.seed_fd, seed) != len(seed):
                     raise OSError("Incomplete synthetic installation ID")
                 os.lseek(self.seed_fd, 0, os.SEEK_SET)

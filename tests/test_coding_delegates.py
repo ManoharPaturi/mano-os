@@ -121,8 +121,15 @@ class DelegateContracts(unittest.TestCase):
         with patch("mano_broker.delegate_home.installed"):
             for name in EXECUTABLES:
                 with Home(command(name, "version")) as home:
-                    with self.assertRaises(OSError):
-                        os.write(home.fd, b"override")
+                    for descriptor in home.descriptors:
+                        with self.assertRaises(OSError):
+                            os.write(descriptor, b"override")
+                        self.assertFalse(os.get_inheritable(descriptor))
+                    if name == "antigravity":
+                        import uuid
+                        self.assertEqual(len(home.descriptors), 2)
+                        seed = os.pread(home.seed_fd, 64, 0).decode()
+                        self.assertEqual(str(uuid.UUID(seed)), seed)
                     fragment = home.fragment()
                     index = fragment.index("--remount-ro")
                     self.assertEqual(fragment[index + 1], "/home/task")
