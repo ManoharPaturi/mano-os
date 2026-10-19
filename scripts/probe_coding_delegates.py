@@ -162,24 +162,42 @@ print(json.dumps(dict(config_sha256=hashlib.sha256(before).hexdigest(),immutable
                     prompt="Return the word offline; do not change files.",
                     model="mano-ci-no-such-model",
                 )
-                with Home(
-                    argv,
-                    configuration=b"{invalid-json" if name == "antigravity" else b"invalid = [",
-                ) as invalid:
-                    bad = run(root, cwd, argv, timeout=15, revoked=lambda: False, home=invalid)
-                bad_text = (bad.stdout + bad.stderr).decode("utf8", errors="replace")
-                assert bad.reason == "completed" and bad.return_code != 0, (
-                    name,
-                    bad.reason,
-                    bad_text,
-                )
-                assert ("settings.json" if name == "antigravity" else "config.toml") in bad_text, (
-                    name,
-                    bad_text,
-                )
-                assert any(
-                    word in bad_text.lower() for word in ("parse", "invalid", "error", "config")
-                )
+                if name == "antigravity":
+                    try:
+                        Home(argv, configuration=b"{invalid-json")
+                    except ValueError as error:
+                        assert "Malformed Antigravity settings" in str(error)
+                    else:
+                        raise AssertionError("Malformed config reached vendor launch")
+                    selected = json.dumps(
+                        dict(
+                            agentMode="default", permissions=dict(allow=[]), modelProvider="gemini"
+                        )
+                    ).encode()
+                    with Home(argv, configuration=selected) as profile:
+                        bad = run(root, cwd, argv, timeout=15, revoked=lambda: False, home=profile)
+                    bad_text = (bad.stdout + bad.stderr).decode("utf8", errors="replace")
+                    assert bad.reason == "completed" and bad.return_code != 0, (
+                        name,
+                        "settings provider selection",
+                        bad.reason,
+                        bad_text,
+                    )
+                    assert "GEMINI_API_KEY" in bad_text, (name, bad_text)
+                    assert "accounts.google.com" not in bad_text
+                    config_method = "provider-selection-missing-key"
+                else:
+                    with Home(argv, configuration=b"invalid = [") as invalid:
+                        bad = run(root, cwd, argv, timeout=15, revoked=lambda: False, home=invalid)
+                    bad_text = (bad.stdout + bad.stderr).decode("utf8", errors="replace")
+                    assert bad.reason == "completed" and bad.return_code != 0, (
+                        name,
+                        bad.reason,
+                        bad_text,
+                    )
+                    assert "config.toml" in bad_text, (name, bad_text)
+                    assert any(word in bad_text.lower() for word in ("parse", "invalid", "error"))
+                    config_method = "vendor-malformed-toml-denial"
                 records[name] = dict(
                     version=version,
                     binary_sha256=record["binary_sha256"],
@@ -189,14 +207,16 @@ print(json.dumps(dict(config_sha256=hashlib.sha256(before).hexdigest(),immutable
                     help_exit=0,
                     help_excerpt=help_text[:8192],
                     boundaries=boundaries,
-                    actual_synthetic_config_parse_denial=True,
+                    actual_synthetic_configuration_consumed=True,
+                    configuration_consumption_method=config_method,
+                    malformed_configuration_rejected_before_launch=(name == "antigravity"),
+                    vendor_malformed_config_parse_denial=(name == "codex"),
                     config_denial_stdout_sha256=hashlib.sha256(bad.stdout).hexdigest(),
                     config_denial_stderr_sha256=hashlib.sha256(bad.stderr).hexdigest(),
                     config_denial_excerpt=bad_text[:2048],
                 )
             except Exception as error:
                 failures[name] = dict(error=repr(error)[:4000], help=help_text[:12000])
-        assert not failures, failures
     finally:
         guard_fixture.unlink()
         os.close(root)
@@ -205,14 +225,17 @@ print(json.dumps(dict(config_sha256=hashlib.sha256(before).hexdigest(),immutable
         json.dumps(
             dict(
                 delegates=records,
+                failures=failures,
                 authenticated_model_calls=False,
                 actual_authenticated_soft_denial=None,
                 live_coding_success=False,
                 physical_input_provenance=None,
                 runtime_package_ships_vendor_binaries=False,
             )
-        )
+        ),
+        flush=True,
     )
+    assert not failures, failures
 
 
 if __name__ == "__main__":

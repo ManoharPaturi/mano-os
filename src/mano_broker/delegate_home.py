@@ -13,6 +13,7 @@ import stat
 import uuid
 from pathlib import Path
 
+from mano_protocol.actions import unique_object
 from mano_protocol.delegates import EXECUTABLES, VERSIONS, identify
 
 MANIFEST = Path("/usr/lib/mano-delegates/manifest.json")
@@ -49,6 +50,23 @@ def installed(name):
     return record
 
 
+def validate_antigravity_settings(data):
+    if not isinstance(data, bytes) or len(data) > 4096:
+        raise ValueError("Bounded immutable Antigravity settings required")
+    try:
+        value = json.loads(data, object_pairs_hook=unique_object)
+    except (ValueError, TypeError, RecursionError) as error:
+        raise ValueError("Malformed Antigravity settings rejected before launch") from error
+    if (
+        not isinstance(value, dict)
+        or set(value) - {"agentMode", "permissions", "modelProvider"}
+        or value.get("agentMode") != "default"
+        or value.get("permissions") != {"allow": []}
+        or ("modelProvider" in value and value["modelProvider"] != "gemini")
+    ):
+        raise ValueError("Unsupported immutable Antigravity settings")
+
+
 class Home:
     def __init__(self, argv, *, configuration=None):
         self.name = identify(argv)
@@ -76,6 +94,8 @@ class Home:
             if not isinstance(configuration, bytes) or len(configuration) > 4096:
                 raise ValueError("Bounded synthetic delegate configuration required")
             data = configuration
+        if self.name == "antigravity":
+            validate_antigravity_settings(data)
         seals = seal_mask()
         try:
             self.fd = os.memfd_create("mano-delegate-config", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)

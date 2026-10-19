@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mano_broker.delegate_home import Home
+from mano_broker.delegate_home import Home, validate_antigravity_settings
 from mano_core.delegates import CodingDelegate, classify, proposal
 from mano_protocol.delegates import EXECUTABLES, command, identify
 
@@ -20,10 +20,10 @@ class DelegateContracts(unittest.TestCase):
             with self.assertRaises(ValueError):
                 command(name, "run", prompt="x" * 2049, model="explicit-model")
         for name in EXECUTABLES:
-            args = command(name, 'run', prompt='--yolo', model='--dangerous-looking-value')
+            args = command(name, "run", prompt="--yolo", model="--dangerous-looking-value")
             self.assertEqual(identify(args), name)
-            self.assertNotIn('--yolo', args[:-1])
-            self.assertIn('--model=--dangerous-looking-value', args)
+            self.assertNotIn("--yolo", args[:-1])
+            self.assertIn("--model=--dangerous-looking-value", args)
         value = proposal(
             delegate="antigravity",
             operation="version",
@@ -35,6 +35,20 @@ class DelegateContracts(unittest.TestCase):
         self.assertEqual(value["capability"], "terminal.open_pty")
         self.assertNotIn("grant_id", value)
         self.assertNotIn("env", value["args"])
+
+    def test_antigravity_settings_rejected_before_any_vendor_launch(self):
+        for value in (
+            b"{invalid-json",
+            b"[]",
+            b"{}",
+            b'{"agentMode":"default","agentMode":"plan","permissions":{"allow":[]}}',
+            b'{"agentMode":"default","permissions":{"allow":["command(*)"]}}',
+        ):
+            with self.assertRaises(ValueError):
+                validate_antigravity_settings(value)
+        validate_antigravity_settings(
+            b'{"agentMode":"default","permissions":{"allow":[]},"modelProvider":"gemini"}'
+        )
 
     def test_soft_denied_exit_zero_is_not_completed(self):
         data = b'{"event":"result","result":{"status":"SUCCESS"}}\n'
@@ -127,6 +141,7 @@ class DelegateContracts(unittest.TestCase):
                         self.assertFalse(os.get_inheritable(descriptor))
                     if name == "antigravity":
                         import uuid
+
                         self.assertEqual(len(home.descriptors), 3)
                         seed = os.pread(home.seed_fd, 64, 0).decode()
                         self.assertEqual(str(uuid.UUID(seed)), seed)

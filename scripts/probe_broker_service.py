@@ -904,12 +904,14 @@ print(json.dumps(dict(default_handler_native_ack=True,task_id=None)))
         text=True, capture_output=True, timeout=150, check=False)
     finally:
         host_loopback.close()
-    assert delegate_probe.returncode == 0, (delegate_probe.stdout[-4096:],
-                                           delegate_probe.stderr[-8192:])
+    delegate_probe_passed = delegate_probe.returncode == 0
     assert (hashlib.sha256(global_delegate_settings.read_bytes()).hexdigest()
             == global_delegate_digest)
     delegate_contracts = json.loads(delegate_probe.stdout)
     delegate_contracts["host_global_settings_unchanged"] = True
+    assert len(delegate_probe.stdout.encode()) < 65536
+    (ROOT / "evidence/coding-delegate-contracts.json").write_text(
+        json.dumps(delegate_contracts, indent=2) + "\n")
     terminal_task = dict(ok=True, task_id=managed["context"]["task_id"],
                          resource_id=managed["context"]["resource_id"])
     attached_status = human(dict(mode="prompt_status", id=human_receipt["prompt"]["id"]))
@@ -1737,7 +1739,8 @@ print('END:%d'%count,flush=True)
     terminal_report["task_owned_pty_worker_kernel_contract"] = pty_report
     terminal_report["task_owned_pty_interactive_guard_contract"] = True
     terminal_report["real_coding_delegate_contracts"] = delegate_contracts
-    terminal_report["real_coding_delegate_versions_help_sealed_home_and_config_parse"] = True
+    terminal_report["real_coding_delegate_versions_help_sealed_home_and_config_consumption"] = (
+        delegate_probe_passed)
     from mano_core.delegates import proposal as delegate_proposal
     from mano_protocol.delegates import VERSIONS as delegate_versions
 
@@ -1779,6 +1782,10 @@ finally:client.close()
         assert delegate_sdk_results[delegate_name]["result"]["version"] == delegate_version
     terminal_report["real_coding_delegate_native_pam_public_sdk"] = True
     terminal_report["real_coding_delegate_sdk_witness"] = delegate_sdk_results
+    (ROOT / "evidence/coding-delegate-public-sdk.json").write_text(
+        json.dumps(delegate_sdk_results, indent=2) + "\n")
+    assert delegate_probe_passed, (delegate_probe.stdout[-4096:],
+                                   delegate_probe.stderr[-8192:])
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))

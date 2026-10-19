@@ -62,3 +62,20 @@ application-argument isolation. A successful in-namespace TCP exchange is requir
 alongside these denials. Existing default profile security probes remain mandatory.
 References: https://github.com/containers/bubblewrap (private loopback namespace),
 https://man7.org/linux/man-pages/man7/network_namespaces.7.html.
+
+Actual 1.4.2 authenticates before reporting our malformed JSON settings, so the
+initial expectation of a vendor parse error is not an accepted contract. The
+adapter now rejects malformed, duplicate-key or unsupported Antigravity settings
+before any launch. Default agentMode and empty permission allowlist are mandatory.
+An optional private CI configuration may select only the documented gemini
+provider; no key is supplied. Actual configuration consumption must be established
+by the binary rejecting the missing GEMINI_API_KEY instead of starting OAuth.
+This preserves the malformed-config negative requirement at the adapter boundary
+and adds a semantic test of real configuration selection. Codex retains its actual
+vendor malformed-TOML rejection test. Neither probe establishes authenticated
+permission behavior, actual soft denial or live coding success.
+Reference: https://antigravity.google/docs/install?tab=cli (Gemini API key provider).
+
+Partial diagnostic reports and independent native-PAM SDK inspection are collected
+before rejecting a failed configuration contract. A failed contract still fails CI;
+no diagnostic result turns its acceptance flag true or permits a merge.
