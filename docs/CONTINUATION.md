@@ -2,7 +2,7 @@
 
 Branch feat/broker-pty-sessions adds terminal.open_pty/native PAM, Root-supervised
 dropped TaskPTY worker, durable at-most-once input journal, combined bounded output
-and public SDK. ADR0093. Local379 tests pass/38 Linux skips. Actual CI VM acceptance
+and public SDK. ADR0093. Local381 tests pass/38 Linux skips. Actual CI VM acceptance
 is still REQUIRED; no merge until every exact-head CI check and artifact/pixel
 acceptance succeeds. Full phases0-7 goal ACTIVE/incomplete. PR108 postmain
 39186591131 verified SUCCESS. Disk23GiB free89%; no local VM downloads/deletion.

@@ -20,12 +20,17 @@ class PTYJobs(Executor):
 
     def launch(self, action_id):
         # Capacity is reserved before prepare/start and retained for history.
-        with self.state.transaction():
-            if self.state.db.execute("SELECT count(*) FROM pty_sessions").fetchone()[0] >= 32:
-                self.settle_unknown(action_id)
-                self.registry.release(action_id)
-                raise Denied("PTY session history quota exhausted")
-            self.state.db.execute("INSERT INTO pty_sessions(action_id) VALUES(?)", (action_id,))
+        try:
+            with self.state.transaction():
+                if self.state.db.execute("SELECT count(*) FROM pty_sessions").fetchone()[0] >= 32:
+                    raise Denied("PTY session history quota exhausted")
+                self.state.db.execute("INSERT INTO pty_sessions(action_id) VALUES(?)", (action_id,))
+        except BaseException:
+            # Settle outside the failed reservation transaction, so rollback
+            # cannot restore an intent that will never be scheduled again.
+            self.settle_unknown(action_id)
+            self.registry.release(action_id)
+            raise
         return super().launch(action_id)
 
     def settle_unknown(self, action_id):

@@ -234,3 +234,19 @@ class PTYJournalTests(unittest.TestCase):
                 cpu_percent=20,
                 max_timeout_seconds=1,
             )
+
+    def test_full_history_durably_fails_new_intent_without_prepare(self):
+        for index in range(32):
+            action = format(index, '032x')
+            self.state.db.execute(
+                'INSERT INTO actions(id,task_id,grant_id,request_digest,idempotency_key,'
+                'request_json,state) SELECT ?,task_id,grant_id,request_digest,?,request_json,'
+                "'intent' FROM actions WHERE id=?", (action, 'quota-' + str(index), self.action))
+            if index < 31:
+                self.state.db.execute('INSERT INTO pty_sessions(action_id) VALUES(?)', (action,))
+        calls = self.client.exchange.call_count
+        with self.assertRaises(Denied):
+            self.jobs.launch(action)
+        self.assertEqual(self.client.exchange.call_count, calls)
+        self.assertEqual(self.state.db.execute('SELECT state FROM actions WHERE id=?',
+                         (action,)).fetchone()[0], 'failed')
