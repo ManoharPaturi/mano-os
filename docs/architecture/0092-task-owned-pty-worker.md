@@ -63,6 +63,13 @@ existing launcher worker's setup; the sandbox native guard denies it afterward.
 Production service policy is not relaxed. This is installed-worker CI evidence,
 not a public broker/PAM PTY workflow, hardware input or release acceptance.
 
+The first CI head2249d65 failed before opening a PTY because the non-Root driver
+could not read the Root-only disposable-VM marker. Keep that global marker private
+and its existing Root-coordinator content check unchanged. The coordinator creates
+a separate Root-owned0640 single-link task-group-readable authorization marker in
+the fixture workspace. The unprivileged driver checks its exact bytes, ownership,
+mode and VM identity using a no-follow FD; it performs no Root service/account work.
+
 Primary Linux API references, checked2026-10-19:
 https://www.man7.org/linux/man-pages/man2/TIOCSCTTY.2const.html
 https://man7.org/linux/man-pages/man3/openpty.3.html

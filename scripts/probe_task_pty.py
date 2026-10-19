@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import signal
+import stat
 import subprocess
 import time
 from pathlib import Path
@@ -19,7 +20,17 @@ def main():
     parser.add_argument('--freeze', action='store_true')
     args = parser.parse_args()
     assert os.geteuid() != 0
-    assert Path('/etc/mano-lab-disposable').read_text().strip() == 'mano-phase0-ci'
+    assert subprocess.check_output(['systemd-detect-virt', '--vm'], text=True).strip() in {
+        'qemu', 'kvm'}
+    authorization = os.open(args.workspace / '.pty-ci-authorized',
+                            os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(authorization)
+        assert stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_gid == os.getegid()
+        assert stat.S_IMODE(info.st_mode) == 0o640 and info.st_nlink == 1
+        assert os.read(authorization, 64) == b'mano-phase0-ci-task-pty\n'
+    finally:
+        os.close(authorization)
     workspace = os.open(args.workspace, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
     cwd = os.open('.', os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC, dir_fd=workspace)
     try:

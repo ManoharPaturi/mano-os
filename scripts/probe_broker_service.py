@@ -1432,6 +1432,12 @@ finally:client.close()
     terminal_report["terminal_output_native_caller_task_scope"] = True
     terminal_report["terminal_output_witness"] = json.loads(output_client.stdout)
     pty_unit = "mano-pty-probe-" + secrets.token_hex(6)
+    authorization = os.open(terminal_workspace / ".pty-ci-authorized",
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
+    with os.fdopen(authorization, "wb") as stream:
+        os.fchmod(stream.fileno(), 0o640)
+        os.fchown(stream.fileno(), 0, identity.gid)
+        stream.write(b"mano-phase0-ci-task-pty\n")
     pty_units.extend([pty_unit + ".service", pty_unit + "-frozen.service"])
     pty_base = ["systemd-run", "--quiet", "--pipe", "--collect", "--uid=" + identity.name,
         "--slice=mano-core.slice", "--property=NoNewPrivileges=yes",
