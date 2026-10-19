@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import stat
+import uuid
 from pathlib import Path
 
 from mano_protocol.delegates import EXECUTABLES, VERSIONS, identify
@@ -52,6 +53,7 @@ class Home:
     def __init__(self, argv, *, configuration=None):
         self.name = identify(argv)
         self.fd = -1
+        self.seed_fd = -1
         if self.name is None:
             return
         installed(self.name)
@@ -59,7 +61,7 @@ class Home:
             self.directory = ".gemini/antigravity-cli"
             self.filename = "settings.json"
             data = b'{"agentMode":"default","permissions":{"allow":[]}}\n'
-            self.volatile = ("conversations", "logs", "cache")
+            self.volatile = ("conversations", "logs", "log", "crashes", "cache")
         else:
             self.directory, self.filename = ".codex", "config.toml"
             data = (
@@ -82,13 +84,22 @@ class Home:
             fcntl.fcntl(self.fd, fcntl.F_ADD_SEALS, seals)
             if fcntl.fcntl(self.fd, fcntl.F_GET_SEALS) & seals != seals:
                 raise PermissionError("Immutable delegate configuration seals missing")
+            if self.name == "antigravity":
+                self.seed_fd = os.memfd_create(
+                    "mano-delegate-installation-id", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING
+                )
+                seed = str(uuid.uuid4()).encode() + b"\n"
+                if os.write(self.seed_fd, seed) != len(seed):
+                    raise OSError("Incomplete synthetic installation ID")
+                os.lseek(self.seed_fd, 0, os.SEEK_SET)
+                fcntl.fcntl(self.seed_fd, fcntl.F_ADD_SEALS, seals)
         except BaseException:
             self.close()
             raise
 
     @property
     def descriptors(self):
-        return () if self.fd < 0 else (self.fd,)
+        return tuple(fd for fd in (self.fd, self.seed_fd) if fd >= 0)
 
     def fragment(self):
         if self.name is None:
@@ -111,6 +122,10 @@ class Home:
             "--tmpfs",
             "/home/task/.local",
         ]
+        if self.name == "antigravity":
+            if self.seed_fd < 3 or fcntl.fcntl(self.seed_fd, fcntl.F_GET_SEALS) & seals != seals:
+                raise PermissionError("Sealed synthetic installation ID required")
+            result += ["--ro-bind-data", str(self.seed_fd), home + "/installation_id"]
         for folder in self.volatile:
             result += ["--tmpfs", home + "/" + folder]
         result += [
@@ -131,6 +146,9 @@ class Home:
         return result
 
     def close(self):
+        if self.seed_fd >= 0:
+            os.close(self.seed_fd)
+            self.seed_fd = -1
         if self.fd >= 0:
             os.close(self.fd)
             self.fd = -1

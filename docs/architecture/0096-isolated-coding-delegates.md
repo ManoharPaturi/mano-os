@@ -37,3 +37,9 @@ Codex native executable layout is confirmed against the pinned official launcher
 https://github.com/openai/codex/blob/rust-v0.163.0/codex-cli/bin/codex.js
 (target vendor subtree uses bin/codex). Initial legacy codex/codex path was
 rejected by CI before any vendor execution; no failed head was merged.
+
+Actual Antigravity startup requires singular log and crashes directories plus an
+installation_id file. Only these additional volatile directories are writable;
+the installation ID is a fresh sealed synthetic UUID, never a host identifier.
+The settings file and its parent remain immutable. Codex offline contract passed
+in the same failed VM run; overall acceptance still requires a fresh green head.
