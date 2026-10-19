@@ -1862,6 +1862,12 @@ finally:client.close()
         json.dumps(delegate_sdk_results, indent=2) + "\n")
     assert delegate_probe_passed, (delegate_probe.stdout[-4096:],
                                    delegate_probe.stderr[-8192:])
+    from probe_mcp import run as probe_mcp
+
+    mcp_records = probe_mcp(rpc, human, identity, password, terminal_task, terminal_workspace)
+    terminal_report["mcp_discovery_official_sdk_native_pam_and_hostile_peers"] = True
+    terminal_report["mcp_discovery_witness"] = mcp_records
+    (ROOT / "evidence/mcp-discovery.json").write_text(json.dumps(mcp_records, indent=2) + "\n")
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))
@@ -2451,9 +2457,40 @@ s.close()
     assert (terminal_workspace / "replacement-ready").read_text() == "ready"
     assert int(command("systemctl", "show", "mano-stopd.service",
                        "--property=MainPID", "--value")) == stop_pid
-    subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--", "python3", "-c",
-        stop_client, "S", "stopped", str(stop_pid)], check=True, capture_output=True,
-        text=True, timeout=5)
+    # Replacement RUN + MCP occupy exactly the two public worker slots. The
+    # earlier recorded RUN + public PTY Stop regression remains unchanged.
+    from probe_mcp import start_for_stop as start_mcp_for_stop
+
+    mcp_stop = start_mcp_for_stop(rpc, human, identity, password, replaced_task)
+    terminal_report["mcp_frozen_stop_witness"] = mcp_stop
+    mcp_group = Path("/sys/fs/cgroup/system.slice/mano-launcher.service/task-" +
+                     mcp_stop["action_id"])
+    frozen_authorities = [ready(), replacement_launcher]
+    subprocess.run(["kill", "-STOP", *(str(pid) for pid in
+                   mcp_stop["pids"] + frozen_authorities)], check=True)
+    try:
+        stopped_mcp = subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--",
+            str(STOP_CLIENT)], check=True, capture_output=True, text=True, timeout=5)
+        assert "Emergency Stop acknowledged" in stopped_mcp.stdout
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if (all(core_exited(pid) for pid in mcp_stop["pids"])
+                    and (not mcp_group.exists() or "populated 0" in
+                         (mcp_group / "cgroup.events").read_text())):
+                break
+            time.sleep(.05)
+        assert all(core_exited(pid) for pid in mcp_stop["pids"])
+        assert not mcp_group.exists() or "populated 0" in (mcp_group / "cgroup.events").read_text()
+        for frozen in frozen_authorities:
+            assert "T" in next(line for line in Path(f"/proc/{frozen}/status").read_text()
+                               .splitlines() if line.startswith("State:"))
+    finally:
+        subprocess.run(["kill", "-CONT", *(str(pid) for pid in frozen_authorities)], check=False)
+    mcp_status_query = dict(schema_version="1.0", operation="status", body=dict(
+        task_id=replaced_task["task_id"], action_id=mcp_stop["action_id"]))
+    mcp_stopped = rpc("request", mcp_status_query, actor=identity.name)["action"]
+    assert mcp_stopped["state"] == "unknown" and mcp_stopped["verified"] == 0
+    terminal_report["mcp_discovery_frozen_native_stop_detached_descendants_drained"] = True
     deadline = time.monotonic() + 3
     replacement_drained = False
     while time.monotonic() < deadline:

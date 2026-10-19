@@ -130,7 +130,8 @@ class Runtime:
             row, prepared = self.registry.prepare(
                 self.state, request, caller_uid=peer.uid, now=now, boot_id=self.boot_id
             )
-            if prepared is not None and request.capability == Capability.RUN and self.executor:
+            if (prepared is not None and request.capability in {Capability.RUN, Capability.MCP}
+                    and self.executor):
                 self.pending.append(row["id"])
             if prepared is not None and request.capability == Capability.PTY and self.ptys:
                 self.pty_pending.append(row["id"])

@@ -9,12 +9,18 @@ mkdir -p evidence
 export DEBIAN_FRONTEND=noninteractive
 apt-get -o Acquire::Retries=3 update
 apt-get -o Acquire::Retries=3 -y upgrade
-apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3 python3-venv python3-pip bubblewrap acl \
+apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3 python3-jsonschema python3-venv python3-pip bubblewrap acl \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
   libreoffice-calc libreoffice-gtk3 python3-uno poppler-utils gir1.2-gtk-4.0 fonts-dejavu-core jq procps rsync gcc libc6-dev libpam0g-dev libjson-c-dev libsystemd-dev libseccomp-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols xauth x11-utils xfonts-base
 apt-get clean
 python3 scripts/install_ci_delegates.py
+# Interoperability fixture only; never shipped in the runtime package or run as Root.
+python3 -m venv /usr/lib/mano-mcp-ci
+/usr/lib/mano-mcp-ci/bin/pip install --only-binary=:all: --require-hashes \
+  -r packaging/mcp/requirements.lock
+/usr/lib/mano-mcp-ci/bin/pip freeze > evidence/mcp-python-packages.txt
+install -m 0444 tests/fixtures/mcp_sdk_server.py /usr/lib/mano-mcp-ci/server.py
 # Use system Chromium; never run playwright install/download a separate browser.
 python3 -m venv /usr/local/lib/mano-browser
 /usr/local/lib/mano-browser/bin/pip install playwright==1.63.0

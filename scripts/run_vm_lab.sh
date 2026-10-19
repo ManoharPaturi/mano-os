@@ -201,7 +201,7 @@ if [ "$result" = 0 ]; then
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_service.py' \
     > "$repo_root/evidence/broker-service.json"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
-    'sudo tar -cf - -C /opt/mano-lab/evidence live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
+    'sudo tar -cf - -C /opt/mano-lab/evidence live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt mcp-discovery.json' | tar -xf - -C "$repo_root/evidence"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_resource_pins.py' \
     > "$repo_root/evidence/resource-pins.json"

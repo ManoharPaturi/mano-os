@@ -17,6 +17,7 @@ from .state import Denied
 
 class PTYJobs(Executor):
     capability = Capability.PTY
+    capabilities = {Capability.PTY}
 
     def launch(self, action_id):
         # Capacity is reserved before prepare/start and retained for history.

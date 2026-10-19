@@ -98,7 +98,8 @@ def admit(packet, descriptors, *, peer):
     action = identifier(body["action_id"])
     account = task_account(body["caller_uid"])
     request = ActionRequest.parse(canonical(body["request"]).encode())
-    if request.capability not in {Capability.RUN, Capability.PTY} or len(descriptors) != 2:
+    if (request.capability not in {Capability.RUN, Capability.PTY, Capability.MCP}
+            or len(descriptors) != 2):
         raise Denied("Terminal request and exactly two descriptors required")
     infos = []
     for fd in descriptors:

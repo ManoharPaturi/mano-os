@@ -4,6 +4,7 @@ import json
 
 from mano_protocol.feedback import capture, parse
 
+from .protocol import ActionRequest, Capability
 from .state import Denied
 from .terminal_output import read
 
@@ -16,6 +17,10 @@ def validate(state, request, *, caller_uid, boot_id):
     parse(value)
     if value["boot_id"] != boot_id:
         raise Denied("Feedback belongs to another boot")
+    source = state.db.execute('SELECT request_json FROM actions WHERE id=?',
+                              (value["action_id"],)).fetchone()
+    if source is None or ActionRequest.parse(source[0].encode()).capability != Capability.RUN:
+        raise Denied("Only original terminal.run failures can become model feedback")
     original = read(
         state,
         task_id=request.task_id,

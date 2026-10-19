@@ -29,8 +29,8 @@ def guard():
     return str(GUARD)
 
 
-def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None):
-    if type(task_pty) is not bool:
+def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None, read_only=False):
+    if type(task_pty) is not bool or type(read_only) is not bool:
         raise ValueError('Explicit task PTY mode required')
     if sys.platform != "linux" or os.geteuid() == 0:
         raise PermissionError("Unprivileged Linux task identity required")
@@ -135,6 +135,7 @@ def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None):
         "/task-cwd",
         "--chdir",
         "/task-cwd",
+        *(["--remount-ro", "/workspace", "--remount-ro", "/task-cwd"] if read_only else []),
         *(home.fragment() if home is not None else []),
         "--setenv",
         "PATH",
