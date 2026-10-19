@@ -7,9 +7,9 @@ test ! -f /etc/mano-lab-prepared
 cd /opt/mano-lab
 mkdir -p evidence
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get -y upgrade
-apt-get install -y --no-install-recommends python3 python3-venv python3-pip bubblewrap acl \
+apt-get -o Acquire::Retries=3 update
+apt-get -o Acquire::Retries=3 -y upgrade
+apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3 python3-venv python3-pip bubblewrap acl \
   sway xwayland foot grim wayland-utils dbus-user-session at-spi2-core \
   python3-pyatspi xdg-dbus-proxy btrfs-progs snapper chromium libreoffice-writer \
   libreoffice-calc libreoffice-gtk3 python3-uno poppler-utils gir1.2-gtk-4.0 fonts-dejavu-core jq procps rsync gcc libc6-dev libpam0g-dev libjson-c-dev libsystemd-dev libseccomp-dev pkg-config libwayland-dev libxkbcommon-dev wayland-protocols xauth x11-utils xfonts-base

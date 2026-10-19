@@ -10,9 +10,11 @@ capture/check afterpassingtest; verifiedevidenceID/hash is authoritative. Metada
 historicalsnapshot/current_file_reverifiedFalse; no provider disclosure or paidcalls.
 Supervisedrecordedmode explicit; changingpermissionmode revokes workflow. ActualVM
 four-stepcreate/fail/fix/pass +checkpointreplay +nativeStop workflowtest added.
-8 newjournal unit tests pass. Ruff/compile/shell/diff/embeddedprogram pass. Full
-local suite still live while existingLangGraph imports load slowly; do not claim
-fullsuitepassed yet. ActualCI required. No PR/commit yet at writing this note.
+Local398 tests PASS/45Linuxskips, plus8newjournaltests and3targetedchecks. Ruff/
+compile/shell/diff/embeddedprogram pass. FirstCI39209791923 qualitypassed butVM
+bootstrapfailed onDebianlibeot download connectionreset beforeprojectprobes. Bounded
+Acquire::Retries=3 nowused in guardedCIguestAPTcommands; validation unchanged.
+PR111 remainsdraft/unaccepted; actualVM required beforemerge.
 PR110postmain39208018349 now verifiedSUCCESS. Mainf9a3ef1 remains acceptedbase.
 Disk18GiBfree92% warned. Full phases0-7 ACTIVE/incomplete.
 

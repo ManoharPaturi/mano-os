@@ -8,11 +8,11 @@ expected_sha=$1
 printf '%s  %s\n' "$expected_sha" /var/tmp/mano-runtime.deb | sha256sum -c -
 python3 /opt/mano-lab/scripts/probe_stock_runtime.py baseline
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y --no-install-recommends /var/tmp/mano-runtime.deb
+apt-get -o Acquire::Retries=3 update
+apt-get -o Acquire::Retries=3 install -y --no-install-recommends /var/tmp/mano-runtime.deb
 dpkg-query -W > /opt/mano-lab/evidence/stock-runtime-packages.tsv
 # This driver dependency is test-only and is installed after runtime dependency resolution.
-apt-get install -y --no-install-recommends python3-pyatspi
+apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3-pyatspi
 script --quiet --return --command 'mano-runtime-setup lab --enable' /dev/null
 python3 - "$expected_sha" <<'PY'
 import json,sys
