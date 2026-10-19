@@ -28,10 +28,16 @@ def send(connection, value):
 
 
 def receive(connection):
-    packet, _, flags, _ = connection.recvmsg(PACKET)
-    if not packet or flags & socket.MSG_TRUNC:
+    packet, ancillary, flags, _ = connection.recvmsg(PACKET)
+    if not packet or ancillary or flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC):
         raise Denied("Lost or oversized private PTY packet")
-    return json.loads(packet, object_pairs_hook=unique_object)
+    try:
+        value = json.loads(packet, object_pairs_hook=unique_object)
+    except RecursionError as error:
+        raise Denied("Invalid nested PTY packet") from error
+    if not isinstance(value, dict):
+        raise Denied("Expected private PTY object")
+    return value
 
 
 def worker(connection, workspace, cwd, args):
