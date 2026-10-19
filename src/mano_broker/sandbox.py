@@ -29,7 +29,9 @@ def guard():
     return str(GUARD)
 
 
-def command(workspace_fd, cwd_fd, argv):
+def command(workspace_fd, cwd_fd, argv, *, task_pty=False):
+    if type(task_pty) is not bool:
+        raise ValueError('Explicit task PTY mode required')
     if sys.platform != "linux" or os.geteuid() == 0:
         raise PermissionError("Unprivileged Linux task identity required")
     account = pwd.getpwuid(os.geteuid())
@@ -138,7 +140,9 @@ def command(workspace_fd, cwd_fd, argv):
         "--setenv",
         "LANG",
         "C.UTF-8",
+        *(["--setenv", "TERM", "xterm-256color"] if task_pty else []),
         "--",
         "/task-guard",
+        *(["--task-pty"] if task_pty else []),
         *argv,
     ]
