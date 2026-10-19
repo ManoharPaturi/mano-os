@@ -46,10 +46,11 @@ def main():
                 (args.workspace / 'pty-fixture-ready').write_text(str(worker.process.pid))
                 os.kill(os.getpid(), signal.SIGSTOP)
                 raise AssertionError('Frozen PTY fixture must be killed by native Stop')
-        program = """import os,json,socket,errno
+        program = """import os,json,socket,errno,fcntl,termios,struct
 from pathlib import Path
 assert all(os.isatty(fd) for fd in (0,1,2))
-assert os.tcgetsid(0)==os.getsid(0)
+assert struct.unpack('i',fcntl.ioctl(0,termios.TIOCGSID,bytes(4)))[0]==os.getsid(0)
+assert os.tcgetpgrp(0)==os.getpgrp()
 assert os.environ['TERM']=='xterm-256color'
 assert not any(key in os.environ for key in (
  'DISPLAY','WAYLAND_DISPLAY','SWAYSOCK','DBUS_SESSION_BUS_ADDRESS','SSH_AUTH_SOCK'))

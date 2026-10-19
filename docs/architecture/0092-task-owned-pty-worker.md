@@ -70,6 +70,12 @@ a separate Root-owned0640 single-link task-group-readable authorization marker i
 the fixture workspace. The unprivileged driver checks its exact bytes, ownership,
 mode and VM identity using a no-follow FD; it performs no Root service/account work.
 
+The second headf55c224 reached the sandboxed application (including native guard
+session acquisition), but its Python test used nonexistent os.tcgetsid. Query
+Linux TIOCGSID through fcntl.ioctl instead, retain the direct session-ID equality
+assertion, and also require the terminal foreground process group to match the
+application's group. No native guard or isolation assertion is relaxed.
+
 Primary Linux API references, checked2026-10-19:
 https://www.man7.org/linux/man-pages/man2/TIOCSCTTY.2const.html
 https://man7.org/linux/man-pages/man3/openpty.3.html
