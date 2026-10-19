@@ -38,6 +38,11 @@ class ModelStore:
     def begin(self, action_id, *, now, boot_id):
         with self.state.transaction():
             row, request = self.action(action_id, boot_id)
+            from .feedback import validate
+
+            task = self.state.db.execute('SELECT caller_uid FROM tasks WHERE id=?',
+                                         (request.task_id,)).fetchone()
+            validate(self.state, request, caller_uid=task['caller_uid'], boot_id=boot_id)
             if self.state.db.execute('SELECT 1 FROM model_attempts WHERE action_id=?',
                                      (action_id,)).fetchone():
                 raise Denied('Model attempt cannot be repeated')

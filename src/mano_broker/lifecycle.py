@@ -80,9 +80,12 @@ def run_mock_step(managed, plan):
     return run_step(managed, plan=plan)
 
 
-def run_broker_step(managed, *, model, max_output_tokens):
+def run_broker_step(managed, *, model, max_output_tokens, feedback_action_id=None):
     configuration(model, max_output_tokens)
-    return run_step(managed, model_policy=dict(model=model, max_output_tokens=max_output_tokens))
+    policy = dict(model=model, max_output_tokens=max_output_tokens)
+    if feedback_action_id is not None:
+        policy['feedback_action_id'] = identifier(feedback_action_id)
+    return run_step(managed, model_policy=policy)
 
 
 def run_step(managed, *, plan=None, model_policy=None):
@@ -97,9 +100,12 @@ def run_step(managed, *, plan=None, model_policy=None):
         payload = canonical(dict(context=managed['context'], plan=plan))
     else:
         if (not isinstance(model_policy, dict)
-                or set(model_policy) != {'model', 'max_output_tokens'}):
+                or set(model_policy) not in ({'model', 'max_output_tokens'},
+                     {'model', 'max_output_tokens', 'feedback_action_id'})):
             raise ValueError('Fixed broker model metadata required')
         configuration(model_policy['model'], model_policy['max_output_tokens'])
+        if 'feedback_action_id' in model_policy:
+            identifier(model_policy['feedback_action_id'])
         payload = canonical(dict(context=managed['context'], model=model_policy))
     if len(payload.encode()) > 65536:
         raise ValueError('Core input exceeds packet budget')
@@ -239,7 +245,8 @@ def main(argv=None):
         if args.broker_model:
             if (not isinstance(value, dict) or set(value) != {'managed', 'model'}
                     or not isinstance(value['model'], dict)
-                    or set(value['model']) != {'model', 'max_output_tokens'}):
+                    or set(value['model']) not in ({'model', 'max_output_tokens'},
+                        {'model', 'max_output_tokens', 'feedback_action_id'})):
                 raise ValueError('Unknown broker lifecycle fields')
             task = run_broker_step(value['managed'], **value['model'])
         else:

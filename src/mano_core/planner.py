@@ -6,7 +6,7 @@ from mano_protocol.actions import canonical, identifier, text
 from mano_protocol.plans import parse_plan
 from mano_protocol.provider import configuration
 
-from .broker import read_model_result
+from .broker import read_model_result, read_terminal_output, terminal_output
 
 
 class PlanningPending(Exception):
@@ -19,8 +19,11 @@ class PlanningPending(Exception):
 
 
 class BrokerPlanner:
-    def __init__(self, broker, *, task_id, resource_id, operation_key, model, max_output_tokens):
+    def __init__(self, broker, *, task_id, resource_id, operation_key, model, max_output_tokens,
+                 feedback_action_id=None):
         self.broker = broker
+        self.feedback_action_id = (None if feedback_action_id is None
+                                   else identifier(feedback_action_id))
         self.task_id, self.resource_id = identifier(task_id), identifier(resource_id)
         text(operation_key, 128)
         configuration(model, max_output_tokens)
@@ -41,6 +44,18 @@ class BrokerPlanner:
             capability='model.plan', args=dict(provider='openai', model=self.model, prompt=prompt,
                 max_output_tokens=self.max_output_tokens), idempotency_key=self.key,
             reason='Disclose this exact prompt for one bounded model plan')
+        if self.feedback_action_id is not None:
+            from mano_protocol.feedback import LIMIT, capture
+
+            meta = terminal_output(self.broker, task_id=self.task_id,
+                                   action_id=self.feedback_action_id)
+            if (meta is None or sum(v['size'] for v in meta['streams'].values()) > LIMIT):
+                raise ValueError('Repair feedback absent or exceeds disclosure bound')
+            observed = read_terminal_output(self.broker, task_id=self.task_id,
+                                            action_id=self.feedback_action_id)
+            proposal['args']['feedback'] = capture(observed['metadata'],
+                                                   observed['stdout'], observed['stderr'])
+            proposal['reason'] = 'Disclose this exact prompt and captured untrusted failure once'
         pending = self.request('request_approval', proposal)['approval']
         approval_id = identifier(pending['approval_id'])
         approval = self.request('approval_status', dict(approval_id=approval_id))['approval']

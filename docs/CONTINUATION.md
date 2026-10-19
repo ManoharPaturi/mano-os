@@ -330,3 +330,12 @@ version witnesses before rejecting configuration failure. No failed head merged,
 no key/sign-in/paid call. All existing25 flags +2 delegate flags, full artifact and
 pixel gates remain required. Full v2.1 goal ACTIVE; physical/authenticated work
 unproved. Vendor binaries/VM work CI-only; latest disk17GiBfree92% warning.
+
+Current feature: approved-execution-feedback, based on accepted PR112 main6289d85.
+ADR0097 adds optional explicit feedback_action_id, complete bounded UTF8 failure
+snapshot and broker custody reconciliation before disclosure approval/authorize/
+model attempt. Separate native PAM model.plan consent binds exact readable logs;
+provider frames them as untrusted user data without action/boot IDs or duplicate
+base64. Default planner sends no feedback. Strict provider proposals still need
+separate effect grants. Installed VM probe and unit/recorded-response tests added;
+no live provider call or full repair claim. Full CI/artifact acceptance pending.

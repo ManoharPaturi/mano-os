@@ -60,6 +60,9 @@ class Approvals:
                 or task["resource_id"] != request.resource_id
             ):
                 raise Denied("Approval task identity/resource mismatch")
+            from .feedback import validate
+
+            validate(self.state, request, caller_uid=caller_uid, boot_id=boot_id)
             prior = self.state.db.execute(
                 "SELECT * FROM approvals WHERE task_id=? AND request_key=?",
                 (request.task_id, request.idempotency_key),

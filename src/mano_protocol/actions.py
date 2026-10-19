@@ -133,12 +133,17 @@ class ActionRequest:
                 if type(args[key]) is not int or not 1 <= args[key] <= maximum:
                     raise ValueError('Invalid bounded model budget')
         elif capability == Capability.PLAN:
-            if set(args) != {'provider', 'model', 'prompt', 'max_output_tokens'}:
+            if set(args) not in ({'provider', 'model', 'prompt', 'max_output_tokens'},
+                                 {'provider', 'model', 'prompt', 'max_output_tokens', 'feedback'}):
                 raise ValueError('Unexpected model disclosure arguments')
             if args['provider'] != 'openai':
                 raise ValueError('Unsupported fixed provider')
             model_identifier(args['model'])
             text(args['prompt'], 8192)
+            if 'feedback' in args:
+                from .feedback import parse
+
+                parse(args['feedback'])
             if (type(args['max_output_tokens']) is not int
                     or not 16 <= args['max_output_tokens'] <= 8192):
                 raise ValueError('Invalid output token ceiling')

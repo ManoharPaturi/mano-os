@@ -355,6 +355,9 @@ class State:
                 and args["timeout_seconds"] > budget["max_timeout_seconds"]
             ):
                 raise Denied("Requested timeout exceeds grant")
+            from .feedback import validate
+
+            validate(self, request, caller_uid=caller_uid, boot_id=boot_id)
             # All profiles retain the same boundaries. Network, external effects,
             # devices, credentials and host-system mutation have no capability here.
             action_id = secrets.token_hex(16)

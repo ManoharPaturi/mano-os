@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from mano_protocol.actions import MAX_PACKET, canonical, unique_object
+from mano_protocol.actions import MAX_PACKET, canonical, identifier, unique_object
 from mano_protocol.plans import parse_plan
 from mano_protocol.provider import configuration
 
@@ -29,9 +29,12 @@ def parse_input(packet, *, broker_model=False):
             or not isinstance(value[field], dict)):
         raise ValueError('Unknown core input fields')
     if broker_model:
-        if set(value['model']) != {'model', 'max_output_tokens'}:
+        if set(value['model']) not in ({'model', 'max_output_tokens'},
+                                       {'model', 'max_output_tokens', 'feedback_action_id'}):
             raise ValueError('Unknown broker model configuration')
         configuration(value['model']['model'], value['model']['max_output_tokens'])
+        if 'feedback_action_id' in value['model']:
+            identifier(value['model']['feedback_action_id'])
     else:
         parse_plan(value['plan'])
     return value
