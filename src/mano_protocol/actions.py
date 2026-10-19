@@ -14,6 +14,7 @@ class Capability(StrEnum):
     INSPECT = "system.inspect_health"
     READ = "files.read"
     WRITE = "files.write"
+    MCP = "mcp.discover"
     RUN = "terminal.run"
     PTY = "terminal.open_pty"
     PLAN = "model.plan"
@@ -149,6 +150,12 @@ class ActionRequest:
                 raise ValueError('Invalid output token ceiling')
         else:
             fields = {"argv", "cwd", "timeout_seconds"}
+            if capability == Capability.MCP:
+                from .mcp import VERSION
+
+                fields.add("protocol_version")
+                if args.get("protocol_version") != VERSION:
+                    raise ValueError("Explicit supported MCP protocol version required")
             if capability == Capability.PTY:
                 fields |= {"rows", "columns", "input_limit_bytes"}
                 for key, maximum in (("rows", 200), ("columns", 400),

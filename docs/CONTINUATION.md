@@ -339,3 +339,13 @@ provider frames them as untrusted user data without action/boot IDs or duplicate
 base64. Default planner sends no feedback. Strict provider proposals still need
 separate effect grants. Installed VM probe and unit/recorded-response tests added;
 no live provider call or full repair claim. Full CI/artifact acceptance pending.
+
+Current sandboxed-mcp-discovery based on accepted PR113 mainceff547. Postmain
+CI39257600583 verifiedSUCCESS. ADR0098 adds explicit mcp.discover/nativePAM,
+modern2026-07-28 metadata-only pipes, readonlyworkspace aliases, untrusted schemas,
+fixed one-process/no callback/retry/invocation, common capacity/Rootcgroup/Stop,
+proposal-bound public SDK and durable bounded output. RUN-only model feedback
+explicitly rejects MCP outcomes. Hash-pinned officialPythonSDK2.3.0 installed only
+in guardedCIguest; real interoperability/hostile/EOF/deadline/frozenStop witnesses
+added but UNACCEPTED until actual final-head CI/artifacts/pixels. FullgoalACTIVE.
+Disk18GiBfree91%warning; no localVM/vendor/model downloads/deletion.

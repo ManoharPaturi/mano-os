@@ -18,6 +18,7 @@ from .terminal_output import capacity, persist
 
 class Executor:
     capability = Capability.RUN
+    capabilities = {Capability.RUN, Capability.MCP}
 
     def __init__(self, state, registry, client, *, boot_id, clock=time.monotonic,
                  observe_stop=lambda: None):
@@ -39,7 +40,7 @@ class Executor:
         if (
             row["state"] != expected or row["revoked"] or self.state.meta("latched")
             or row["epoch"] != self.state.meta("epoch") or self.clock() >= row["expires"]
-            or row["boot_id"] != self.boot_id or request.capability != self.capability
+            or row["boot_id"] != self.boot_id or request.capability not in self.capabilities
             or canonical(json.loads(request.args_json)) != row["approved_args_json"]
         ):
             raise Denied("Terminal authority no longer live")

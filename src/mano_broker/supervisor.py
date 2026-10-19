@@ -23,7 +23,7 @@ MAX_REPORT = 192 * 1024
 class Child:
     def __init__(self, manager, admission):
         request = ActionRequest.parse(canonical(admission.request.body()).encode())
-        if request.capability != Capability.RUN:
+        if request.capability not in {Capability.RUN, Capability.MCP}:
             raise Denied("Supervised terminal request required")
         self.timeout = json.loads(request.args_json)["timeout_seconds"]
         self.group = manager.create(admission.action_id, admission.limits)
@@ -79,7 +79,10 @@ class Child:
                 )
                 args = json.loads(admission.request.args_json)
                 with Home(args["argv"]) as home:
-                    command(self.workspace, self.cwd, args["argv"], home=home)
+                    if request.capability == Capability.MCP and home.name is not None:
+                        raise Denied("Coding profiles cannot be MCP servers")
+                    command(self.workspace, self.cwd, args["argv"], home=home,
+                            read_only=request.capability == Capability.MCP)
                 # Fail before READY on invalid setup; no CLI process is created.
                 os.write(report_w, b"R")
                 if os.read(self.control_r, 1) != b"s":
@@ -92,12 +95,18 @@ class Child:
                     os.read(self.control_r, 1)  # Cancel or parent EOF both revoke.
                     return True
 
-                result = run(
+                execute, extra = run, {}
+                if request.capability == Capability.MCP:
+                    from .mcp_discovery import run as discover
+
+                    execute, extra = discover, dict(protocol_version=args["protocol_version"])
+                result = execute(
                     self.workspace,
                     self.cwd,
                     args["argv"],
                     timeout=args["timeout_seconds"],
                     revoked=revoked,
+                    **extra,
                 )
                 packet = canonical(
                     dict(

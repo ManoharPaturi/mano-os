@@ -19,7 +19,8 @@ def persist(state, action_id, outcome, streams, *, boot_id):
     row = state.db.execute('SELECT a.*,t.boot_id FROM actions a JOIN tasks t ON a.task_id=t.id '
                            'WHERE a.id=?', (identifier(action_id),)).fetchone()
     if (row is None or row['state'] != 'executing' or row['boot_id'] != boot_id
-            or ActionRequest.parse(row['request_json'].encode()).capability != Capability.RUN
+            or ActionRequest.parse(row['request_json'].encode()).capability
+            not in {Capability.RUN, Capability.MCP}
             or set(streams) != {'stdout', 'stderr'}
             or any(not isinstance(b, bytes) or len(b) > STREAM_LIMIT for b in streams.values())):
         raise Denied('Exact executing terminal action and bounded bytes required')
@@ -47,7 +48,8 @@ def read(state, *, task_id, action_id, caller_uid, boot_id):
         'WHERE a.id=? AND t.id=? AND t.caller_uid=? AND t.boot_id=?',
         (action_id, task_id, caller_uid, boot_id)).fetchone()
     if (action is None
-            or ActionRequest.parse(action['request_json'].encode()).capability != Capability.RUN):
+            or ActionRequest.parse(action['request_json'].encode()).capability
+            not in {Capability.RUN, Capability.MCP}):
         raise Denied('Terminal output unavailable to this task/caller/boot')
     row = state.db.execute('SELECT * FROM terminal_outputs WHERE action_id=?',
                             (action_id,)).fetchone()

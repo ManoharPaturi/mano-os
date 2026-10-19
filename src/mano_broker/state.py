@@ -278,7 +278,7 @@ class State:
                 }
             ).encode()
         )
-        if (capability in {Capability.RUN, Capability.PTY}
+        if (capability in {Capability.RUN, Capability.PTY, Capability.MCP}
                 and approved_args["timeout_seconds"] > max_timeout_seconds):
             raise ValueError("Approved timeout exceeds grant budget")
         grant_id = secrets.token_hex(16)
@@ -351,7 +351,7 @@ class State:
             budget = json.loads(grant["budget_json"])
             args = json.loads(request.args_json)
             if (
-                request.capability in {Capability.RUN, Capability.PTY}
+                request.capability in {Capability.RUN, Capability.PTY, Capability.MCP}
                 and args["timeout_seconds"] > budget["max_timeout_seconds"]
             ):
                 raise Denied("Requested timeout exceeds grant")

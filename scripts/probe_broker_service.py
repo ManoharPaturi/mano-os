@@ -1862,6 +1862,12 @@ finally:client.close()
         json.dumps(delegate_sdk_results, indent=2) + "\n")
     assert delegate_probe_passed, (delegate_probe.stdout[-4096:],
                                    delegate_probe.stderr[-8192:])
+    from probe_mcp import run as probe_mcp
+
+    mcp_records = probe_mcp(rpc, human, identity, password, terminal_task, terminal_workspace)
+    terminal_report["mcp_discovery_official_sdk_native_pam_and_hostile_peers"] = True
+    terminal_report["mcp_discovery_witness"] = mcp_records
+    (ROOT / "evidence/mcp-discovery.json").write_text(json.dumps(mcp_records, indent=2) + "\n")
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))
@@ -2060,6 +2066,10 @@ else:raise AssertionError('task reached native Stop')
     stop_pty_write = dict(schema_version="1.0", operation="pty_write", body=dict(
         task_id=terminal_task["task_id"], action_id=stop_pty_action, key="after-stop",
         data=base64.b64encode(b"must-not-arrive\n").decode()))
+    from probe_mcp import start_for_stop as start_mcp_for_stop
+
+    mcp_stop = start_mcp_for_stop(rpc, human, identity, password, terminal_task)
+    terminal_report["mcp_frozen_stop_witness"] = mcp_stop
     core_pids = []
     pty_frozen = subprocess.Popen(pty_base + ["--unit=" + pty_unit + "-frozen", "--wait"] +
         pty_program + ["--freeze"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -2081,6 +2091,7 @@ else:raise AssertionError('task reached native Stop')
     assert len(core_pids) == 2
     core_pids.extend([pty_worker_pid, pty_child_pid])
     core_pids.extend(stop_pty_pids)
+    core_pids.extend(mcp_stop["pids"])
     provider_idle, _provider_unit, provider_pids = provider_idle_job()
     provider_stop_probe = """import json
 from mano_protocol.stop_state import snapshot
@@ -2145,6 +2156,7 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
         provider_idle.terminate()
         provider_idle.wait(timeout=3)
         pty_frozen.communicate(timeout=5)
+    terminal_report["mcp_discovery_frozen_native_stop_detached_descendants_drained"] = True
     terminal_report["native_human_stop_client_frozen_core_and_authority"] = True
     terminal_report["native_stop_client_message"] = native_stopped.stdout.strip()
     terminal_report["native_stop_broker_and_launcher_frozen"] = True
