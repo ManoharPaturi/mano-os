@@ -101,8 +101,9 @@ class Registry:
                 prepared.descriptors["target"] = resource.workspace.pin(args["path"])
             elif request.capability == Capability.WRITE:
                 path = PurePosixPath(args["path"])
-                # A future writer must use this parent FD and O_EXCL for creation,
-                # or the pinned existing inode, never re-resolve the submitted path.
+                # Retain parent identity and initial regular target for audit.
+                # Writes atomically publish the approved leaf in this parent;
+                # they never mutate the old inode (ADR0094).
                 prepared.descriptors["parent"] = resource.workspace.pin(
                     str(path.parent), directory=True
                 )

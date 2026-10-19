@@ -36,7 +36,8 @@ ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectClock=yes
 # systemd v257's RestrictSUIDSGID blocks openat2 with ENOSYS. Broker opens
-# targets only with fixed O_PATH flags; forbid identity/owner/mode mutation,
+# pins targets with O_PATH and creates staged regular files with fixed flags;
+# forbid identity/owner/mode mutation,
 # retaining NNP/capability-zero and the rest of the service syscall filter.
 RestrictRealtime=yes
 RestrictNamespaces=yes

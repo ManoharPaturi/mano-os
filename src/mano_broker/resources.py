@@ -28,6 +28,11 @@ def library():
     loaded.mano_pin_beneath.restype = ctypes.c_int
     loaded.mano_read_pinned.argtypes = (ctypes.c_int,)
     loaded.mano_read_pinned.restype = ctypes.c_int
+    loaded.mano_create_write_stage.argtypes = (ctypes.c_int, ctypes.c_char_p)
+    loaded.mano_create_write_stage.restype = ctypes.c_int
+    loaded.mano_publish_write.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                                         ctypes.c_char_p, ctypes.c_int)
+    loaded.mano_publish_write.restype = ctypes.c_int
     return loaded
 
 

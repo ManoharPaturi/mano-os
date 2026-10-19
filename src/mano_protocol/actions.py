@@ -118,6 +118,8 @@ class ActionRequest:
             if set(args) != expected:
                 raise ValueError("Unexpected file arguments")
             relative_path(args["path"])
+            if ".mano-write-staging" in PurePosixPath(args["path"]).parts:
+                raise ValueError("Reserved broker write-custody directory")
             if capability == Capability.WRITE:
                 text(args["text"], 32768, allow_empty=True)
         elif capability == Capability.PROFILE:
