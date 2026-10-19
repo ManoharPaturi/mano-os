@@ -80,6 +80,9 @@ class FileResultClientTests(unittest.TestCase):
     def test_typed_plans_cannot_expand_authority_or_capability(self):
         read = dict(capability='files.read', args=dict(path='notes.txt'), reason='Read notes')
         self.assertEqual(parse_plan(read), read)
+        write = dict(capability='files.write', args=dict(path='notes.txt', text='bounded'),
+                     reason='Write notes')
+        self.assertEqual(parse_plan(write), write)
         for change in (dict(capability='files.write'), dict(capability='model.plan'),
                 dict(capability='policy.set_profile'), dict(grant_id='a' * 32),
                 dict(verified=True), dict(args=dict(path='../outside'))):

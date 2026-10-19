@@ -1,3 +1,23 @@
+# Current recorded developer workflow (under review)
+
+Branch feat/durable-developer-workflow adds WRITE to strict typed/provider/core
+plans, protected lifecycle receipt revalidation, broker-owned immutable recorded
+workflow definitions and Root --recorded step operator. ADR0095.2..8 steps/16
+workflows; derived keys, real broker exits and output hashes select recorded fixes;
+unknown/unexpected/Stop/boot/lost-custody halt. Each effect still nativePAM granted.
+Final predicate declared against broker-bound pending approval beforePAM, sealed
+capture/check afterpassingtest; verifiedevidenceID/hash is authoritative. Metadata
+historicalsnapshot/current_file_reverifiedFalse; no provider disclosure or paidcalls.
+Supervisedrecordedmode explicit; changingpermissionmode revokes workflow. ActualVM
+four-stepcreate/fail/fix/pass +checkpointreplay +nativeStop workflowtest added.
+Local398 tests PASS/45Linuxskips, plus8newjournaltests and3targetedchecks. Ruff/
+compile/shell/diff/embeddedprogram pass. FirstCI39209791923 qualitypassed butVM
+bootstrapfailed onDebianlibeot download connectionreset beforeprojectprobes. Bounded
+Acquire::Retries=3 nowused in guardedCIguestAPTcommands; validation unchanged.
+PR111 remainsdraft/unaccepted; actualVM required beforemerge.
+PR110postmain39208018349 now verifiedSUCCESS. Mainf9a3ef1 remains acceptedbase.
+Disk18GiBfree92% warned. Full phases0-7 ACTIVE/incomplete.
+
 # Current direct workspace writes (under review)
 
 Branch feat/authorized-workspace-writes adds actual files.write executor, native

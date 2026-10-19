@@ -7,7 +7,7 @@ from mano_protocol.actions import ActionRequest, canonical, identifier, text
 from mano_protocol.plans import EXECUTABLE
 from mano_protocol.plans import proposal as make_proposal
 
-from .broker import read_file_result, terminal_output
+from .broker import file_write_result, read_file_result, terminal_output
 from .planner import PlanningPending
 
 
@@ -22,6 +22,7 @@ class TaskState(TypedDict, total=False):
     status: str
     read_result: dict | None
     terminal_output: dict | None
+    write_result: dict | None
 
 
 class AgentRuntime:
@@ -60,7 +61,7 @@ class AgentRuntime:
                 or parsed.idempotency_key != state['operation_key']
                 or parsed.capability not in EXECUTABLE or 'grant_id' in proposal):
             raise ValueError('Checkpoint proposal changed task scope')
-        update = dict(proposal=proposal, read_result=None, terminal_output=None)
+        update = dict(proposal=proposal, read_result=None, terminal_output=None, write_result=None)
         action_id = state.get('action_id')
         if action_id is None:
             approval_id = state.get('approval_id')
@@ -94,6 +95,12 @@ class AgentRuntime:
                     action_id=action_id, path=proposal['args']['path'])
                 # Keep only a custody reference in checkpoint/stdout, never source bytes.
                 update.update(status='read_ready', read_result=captured['metadata'])
+            elif parsed.capability == 'files.write':
+                receipt = file_write_result(self.broker, task_id=state['task_id'],
+                    action_id=action_id, path=proposal['args']['path'])
+                if receipt is None:
+                    raise ValueError('Completed write has no publication receipt')
+                update.update(status='write_published', write_result=receipt)
             else:
                 update['status'] = 'completed' if action['verified'] else 'verifying'
         elif status == 'unknown':
