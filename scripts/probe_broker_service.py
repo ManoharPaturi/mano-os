@@ -1450,6 +1450,80 @@ finally:client.close()
     terminal_report["native_terminal_output_failed_binary_multichunk_and_replay"] = True
     terminal_report["terminal_output_native_caller_task_scope"] = True
     terminal_report["terminal_output_witness"] = json.loads(output_client.stdout)
+    # A broker-owned recorded workflow drives real core checkpoints and effects.
+    # It may correct only the expected observed failure; no provider sees output.
+    def developer_request(body):
+        result = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+            "PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "mano_broker.developer", "--recorded"],
+            input=json.dumps(body), text=True, capture_output=True, timeout=15, check=False)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        decoded = json.loads(result.stdout)
+        assert decoded["ok"], decoded
+        return decoded["workflow"]
+
+    def observed_test(plan, code, stdout=b"", stderr=b""):
+        return dict(plan=plan, expect=dict(exit_code=code,
+            stdout_sha256=hashlib.sha256(stdout).hexdigest(),
+            stderr_sha256=hashlib.sha256(stderr).hexdigest()))
+
+    broken_source = "def answer():\n    return 0\n"
+    fixed_source = "def answer():\n    return 42\n"
+    test_program = ("import sys;from workflow_answer import answer;value=answer();"
+        "sys.stderr.write('FAIL expected 42 got 0\\n') if value!=42 else print('PASS');"
+        "sys.exit(1 if value!=42 else 0)")
+    test_plan = dict(capability="terminal.run", args=dict(argv=["/usr/bin/python3", "-c",
+        test_program], cwd=".", timeout_seconds=5), reason="Run the recorded developer test")
+    recorded_workflow = dict(steps=[
+        dict(plan=dict(capability="files.write", args=dict(path="workflow_answer.py",
+            text=broken_source), reason="Create the recorded initial project"), expect={}),
+        observed_test(test_plan, 1, stderr=b"FAIL expected 42 got 0\n"),
+        dict(plan=dict(capability="files.write", args=dict(path="workflow_answer.py",
+            text=fixed_source), reason="Apply the recorded correction after the expected failure"),
+            expect={}),
+        observed_test(test_plan, 0, stdout=b"PASS\n")],
+        artifact=dict(path="workflow_answer.py",
+                      sha256=hashlib.sha256(fixed_source.encode()).hexdigest(),
+                      size=len(fixed_source.encode())))
+    registered_workflow = developer_request(dict(managed=managed,
+        request_key="recorded-developer-project", workflow=recorded_workflow))
+    workflow_id = registered_workflow["id"]
+    assert registered_workflow["status"] == "ready"
+    assert not (terminal_workspace / "workflow_answer.py").exists()
+    assert rpc("request", dict(schema_version="1.0", operation="developer_workflow_status",
+        body=dict(workflow_id=workflow_id)), actor=identity.name) == denied
+    seen_approvals = set()
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        workflow_state = developer_request(dict(workflow_id=workflow_id))
+        if workflow_state["status"] == "verified":
+            break
+        assert workflow_state["status"] in {"ready", "awaiting_grant", "queued", "running",
+                                             "needs_verification"}, workflow_state["status"]
+        if workflow_state["status"] == "awaiting_grant":
+            approval_id = workflow_state["approval_id"]
+            assert approval_id not in seen_approvals
+            seen_approvals.add(approval_id)
+            workflow_view = human(dict(mode="view", id=approval_id))["view"]
+            assert workflow_view["task_id"] == terminal_task["task_id"]
+            assert human(dict(mode="confirm", view=workflow_view, password=password))["ok"]
+        time.sleep(0.15)
+    assert workflow_state["status"] == "verified", workflow_state["status"]
+    assert len(seen_approvals) == 4 and len(workflow_state["observations"]) == 4
+    assert workflow_state["observations"][1]["output"]["return_code"] == 1
+    assert workflow_state["observations"][3]["output"]["return_code"] == 0
+    assert workflow_state["provider_disclosure"] is False
+    assert (terminal_workspace / "workflow_answer.py").read_text() == fixed_source
+    witness = {key: workflow_state[key] for key in ("id", "status", "observations", "artifact_id",
+               "verification_scope", "provider_disclosure")}
+    (terminal_workspace / "workflow_answer.py").write_text("workflow replay canary")
+    workflow_replay = developer_request(dict(workflow_id=workflow_id))
+    assert workflow_replay["status"] == "verified"
+    assert workflow_replay["observations"] == workflow_state["observations"]
+    assert (terminal_workspace / "workflow_answer.py").read_text() == "workflow replay canary"
+    witness.update(replay_no_effect=True, current_file_reverified=False, native_pam_approvals=4)
+    terminal_report["recorded_developer_workflow_witness"] = witness
+    terminal_report["recorded_developer_create_fail_fix_pass_exact_artifact"] = True
+    terminal_report["recorded_developer_checkpoint_replay_no_model_disclosure"] = True
     write_receipts = []
     for index, content in enumerate(("approved direct write \u2603", "")):
         direct_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
@@ -1721,13 +1795,24 @@ print('END:%d'%count,flush=True)
               "p=os.fork()\nif p==0:\n os.setsid()\n"
               " Path('/workspace/stoppable').write_text('ready')\ntime.sleep(60)"],
         cwd=".", timeout_seconds=60))
-    pending_stop = rpc("request", dict(schema_version="1.0", operation="request_approval",
-        body=stop_proposal), actor=identity.name)["approval"]
-    stop_view = human(dict(mode="view", id=pending_stop["approval_id"]))["view"]
-    stop_grant = human(dict(mode="confirm", view=stop_view, password=password))
-    assert stop_grant["ok"]
-    stop_action = rpc("request", dict(schema_version="1.0", operation="propose",
-        body=stop_proposal | {"grant_id": stop_grant["grant_id"]}), actor=identity.name)
+    stop_workflow_definition = dict(steps=[observed_test(dict(capability="terminal.run",
+        args=stop_proposal["args"], reason="Recorded long-running test for native Stop"), 0),
+        dict(plan=dict(capability="files.write", args=dict(path="workflow-stop-must-not-write",
+            text="must never run"), reason="Forbidden continuation after unknown effect"),
+            expect={}),
+        observed_test(dict(capability="terminal.run", args=dict(argv=["/usr/bin/true"], cwd=".",
+            timeout_seconds=1), reason="Unreachable final step"), 0)],
+        artifact=dict(path="workflow-stop-must-not-write", sha256=hashlib.sha256(b"").hexdigest(),
+                      size=0))
+    stop_workflow = developer_request(dict(managed=managed, request_key="recorded-stop-workflow",
+                                            workflow=stop_workflow_definition))
+    stop_workflow = developer_request(dict(workflow_id=stop_workflow["id"]))
+    assert stop_workflow["status"] == "awaiting_grant"
+    stop_view = human(dict(mode="view", id=stop_workflow["approval_id"]))["view"]
+    assert human(dict(mode="confirm", view=stop_view, password=password))["ok"]
+    stop_workflow = developer_request(dict(workflow_id=stop_workflow["id"]))
+    assert stop_workflow["status"] in {"queued", "running"}
+    stop_action = dict(action=dict(id=stop_workflow["action_id"]))
     group = Path("/sys/fs/cgroup/system.slice/mano-launcher.service") / (
         "task-" + stop_action["action"]["id"])
     deadline = time.monotonic() + 10
@@ -2055,6 +2140,10 @@ finally:
         assert database.execute('SELECT revoked FROM grants WHERE id=?',
             (profile_stop_grant["grant_id"],)).fetchone() == (1,)
     terminal_report["live_profile_grant_stop_rearm_no_resurrection"] = True
+    stopped_workflow = developer_request(dict(workflow_id=stop_workflow["id"]))
+    assert stopped_workflow["status"] == "revoked"
+    assert not (terminal_workspace / "workflow-stop-must-not-write").exists()
+    terminal_report["recorded_developer_native_stop_restart_no_follow_on_effect"] = True
     assert rpc("request", stop_pty_write, actor=identity.name) == denied
     terminal_report["public_broker_pty_restart_stop_rearm_no_input_resurrection"] = True
 

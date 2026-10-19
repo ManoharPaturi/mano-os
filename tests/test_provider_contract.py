@@ -30,7 +30,7 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(body['input'][1], dict(role='user', content='human goal'))
         self.assertEqual(body['tool_choice'], 'required')
         self.assertEqual({tool['name'] for tool in body['tools']},
-                         {'propose_terminal', 'propose_file_read'})
+                         {'propose_terminal', 'propose_file_read', 'propose_file_write'})
         tool = body['tools'][0]
         self.assertIs(tool['strict'], True)
         self.assertEqual(set(tool['parameters']['properties']), {'args', 'reason'})
@@ -129,3 +129,15 @@ class ProviderContractTests(unittest.TestCase):
                 self.assertEqual(result['proposal']['task_id'], task)
             finally:
                 journal.close()
+
+    def test_write_tool_is_only_a_strict_bounded_non_authoritative_proposal(self):
+        plan = dict(args=dict(path='answer.py', text='answer=42\n'), reason='Fix the project')
+        response = self.response | dict(output=[dict(type='function_call',
+            name='propose_file_write', status='completed', arguments=canonical(plan))])
+        self.assertEqual(self.parse(response), plan | dict(capability='files.write'))
+        for args in (dict(path='../outside', text='x'), dict(path='file', text='x'*32769),
+                     dict(path='file', text='x', mode=511)):
+            changed = response | dict(output=[dict(type='function_call', name='propose_file_write',
+                status='completed', arguments=canonical(plan | dict(args=args)))])
+            with self.assertRaises(ValueError):
+                self.parse(changed)

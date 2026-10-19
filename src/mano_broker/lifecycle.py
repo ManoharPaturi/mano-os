@@ -13,6 +13,7 @@ from pathlib import Path
 
 from mano_protocol.actions import ActionRequest, canonical, identifier, text, unique_object
 from mano_protocol.file_results import metadata as read_metadata
+from mano_protocol.file_writes import metadata as write_metadata
 from mano_protocol.plans import EXECUTABLE, parse_plan
 from mano_protocol.plans import proposal as make_proposal
 from mano_protocol.provider import configuration
@@ -117,6 +118,7 @@ def run_step(managed, *, plan=None, model_policy=None):
         raise ValueError('Core returned different task context')
     task.pop('read_result', None)  # Core/checkpoint metadata cannot establish byte custody.
     task.pop('terminal_output', None)
+    task.pop('write_result', None)
     action_id = task.get('action_id')
     if action_id is None:
         allowed = {'awaiting_model_grant', 'model_queued', 'model_running',
@@ -159,6 +161,12 @@ def run_step(managed, *, plan=None, model_policy=None):
             task['read_result'] = read_metadata(captured, task_id=context['task_id'],
                 action_id=action_id, path=proposal['args']['path'])
             task['status'] = 'read_ready'  # A bounded snapshot, never goal completion.
+        elif proposal['capability'] == 'files.write':
+            receipt = control_request('inspect_file_write', dict(
+                task_id=context['task_id'], action_id=action_id))['publication']
+            task['write_result'] = write_metadata(receipt, task_id=context['task_id'],
+                action_id=action_id, path=proposal['args']['path'])
+            task['status'] = 'write_published'
         else:
             task['status'] = 'completed' if action['verified'] else 'verifying'
     elif action['state'] in states:

@@ -13,6 +13,7 @@ from mano_protocol.plans import parse_plan
 MAX_RESPONSE = 262144
 FUNCTION = 'propose_terminal'
 READ_FUNCTION = 'propose_file_read'
+WRITE_FUNCTION = 'propose_file_write'
 
 
 def configuration(model, max_output_tokens):
@@ -33,13 +34,18 @@ def request_body(prompt, *, model, max_output_tokens):
         properties=dict(reason=dict(type='string'), args=dict(type='object',
             additionalProperties=False, required=['path'],
             properties=dict(path=dict(type='string')))))
+    write_schema = dict(type='object', additionalProperties=False, required=['args', 'reason'],
+        properties=dict(reason=dict(type='string'), args=dict(type='object',
+            additionalProperties=False, required=['path', 'text'],
+            properties=dict(path=dict(type='string'), text=dict(type='string')))))
     return dict(model=model, store=False, stream=False, max_output_tokens=max_output_tokens,
         input=[dict(role='developer', content='Propose one workspace terminal operation or '
-            'one workspace-relative file read of at most 32 KiB. '
+            'one workspace-relative file read or text write of at most 32 KiB. '
             'This proposal requires separate broker authorization; do not claim completion.'),
             dict(role='user', content=prompt)],
         tools=[dict(type='function', name=FUNCTION, strict=True, parameters=schema),
-               dict(type='function', name=READ_FUNCTION, strict=True, parameters=read_schema)],
+               dict(type='function', name=READ_FUNCTION, strict=True, parameters=read_schema),
+               dict(type='function', name=WRITE_FUNCTION, strict=True, parameters=write_schema)],
         tool_choice='required', parallel_tool_calls=False)
 
 
@@ -76,7 +82,7 @@ def response_plan(packet, *, model, max_output_tokens):
         if item.get('type') == 'reasoning':
             continue  # Non-authoritative model material is not forwarded or logged.
         if (item.get('type') != 'function_call' or not isinstance(item.get('name'), str)
-                or item['name'] not in {FUNCTION, READ_FUNCTION}
+                or item['name'] not in {FUNCTION, READ_FUNCTION, WRITE_FUNCTION}
                 or item.get('status') != 'completed'):
             raise ValueError('Unexpected or refused provider operation')
         calls.append(item)
@@ -87,6 +93,8 @@ def response_plan(packet, *, model, max_output_tokens):
         raise ValueError('Unexpected provider authority fields')
     if calls[0]['name'] == READ_FUNCTION:
         plan['capability'] = 'files.read'
+    if calls[0]['name'] == WRITE_FUNCTION:
+        plan['capability'] = 'files.write'
     parse_plan(plan)
     return plan
 

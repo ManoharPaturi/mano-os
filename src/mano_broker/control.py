@@ -29,6 +29,33 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value['operation'] in {'register_developer_workflow', 'developer_workflow_status'}:
+        from .developer_workflows import register, status
+
+        if runtime is None:
+            raise Denied('Live developer workflow custody required')
+        runtime.sync_stop()
+        if value['operation'] == 'register_developer_workflow':
+            if set(body) != {'managed', 'request_key', 'workflow'}:
+                raise Denied('Unexpected recorded workflow fields')
+            workflow_id = register(runtime, **body, boot_id=boot_id)
+        else:
+            if set(body) != {'workflow_id'}:
+                raise Denied('Unexpected recorded workflow query')
+            workflow_id = body['workflow_id']
+        return dict(schema_version='1.0', ok=True,
+                    workflow=status(runtime, workflow_id, boot_id=boot_id, now=now))
+    if value['operation'] == 'inspect_file_write':
+        from .file_writes import result
+
+        if set(body) != {'task_id', 'action_id'}:
+            raise Denied('Unexpected protected write query')
+        task = state.db.execute('SELECT caller_uid FROM tasks WHERE id=? AND boot_id=?',
+                                (identifier(body['task_id']), boot_id)).fetchone()
+        if task is None:
+            raise Denied('Unknown current-boot task')
+        metadata = result(state, **body, caller_uid=task[0], boot_id=boot_id)
+        return dict(schema_version='1.0', ok=True, publication=metadata)
     if value['operation'] == 'inspect_terminal_output':
         from .terminal_output import read
 
