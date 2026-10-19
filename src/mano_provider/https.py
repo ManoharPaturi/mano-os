@@ -65,7 +65,8 @@ def generate(args, credential):
         grant_id='0' * 32, resource_id='0' * 32, capability='model.plan', args=args,
         idempotency_key='protected-provider-call', reason='Exact approved disclosure')).encode())
     payload = canonical(request_body(args['prompt'], model=args['model'],
-                        max_output_tokens=args['max_output_tokens'])).encode()
+                        max_output_tokens=args['max_output_tokens'],
+                        feedback=args.get('feedback'))).encode()
     deadline = time.monotonic() + DEADLINE_SECONDS
     connection = response = timer = None
     stream = None

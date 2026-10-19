@@ -1564,6 +1564,82 @@ finally:client.close()
     terminal_report["recorded_developer_workflow_witness"] = witness
     terminal_report["recorded_developer_create_fail_fix_pass_exact_artifact"] = True
     terminal_report["recorded_developer_checkpoint_replay_no_model_disclosure"] = True
+    # Explicitly selected historical failure; no automatic provider disclosure.
+    feedback_source = workflow_state["observations"][1]["action_id"]
+    feedback_managed = managed | dict(context=managed["context"] | dict(
+        operation_key="approved-failure-feedback"))
+    feedback_client = subprocess.run(["env", "PYTHONPATH=/usr/lib/mano-os",
+        "PYTHONDONTWRITEBYTECODE=1", "/usr/bin/python3", "-m", "mano_broker.lifecycle",
+        "--broker-model"], input=json.dumps(dict(managed=feedback_managed,
+        model=dict(model="explicit-snapshot", max_output_tokens=100,
+                   feedback_action_id=feedback_source))),
+        capture_output=True, text=True, timeout=20, check=False)
+    assert feedback_client.returncode == 0, (feedback_client.stdout, feedback_client.stderr)
+    feedback_task = json.loads(feedback_client.stdout)["task"]
+    assert feedback_task["status"] == "awaiting_model_grant"
+    from mano_protocol.actions import canonical as feedback_canonical
+
+    feedback_key = "model-" + hashlib.sha256(feedback_canonical(dict(
+        task_id=terminal_task["task_id"], resource_id=terminal_task["resource_id"],
+        operation_key="approved-failure-feedback")).encode()).hexdigest()
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        feedback_pending = database.execute('SELECT id,proposal_json,state FROM approvals '
+            'WHERE task_id=? AND request_key=?',
+            (terminal_task["task_id"], feedback_key)).fetchone()
+        assert feedback_pending[2] == "pending"
+        assert database.execute('SELECT count(*) FROM provider_jobs').fetchone() == (0,)
+        assert database.execute('SELECT count(*) FROM model_attempts').fetchone() == (0,)
+    feedback_proposal = json.loads(feedback_pending[1])
+    del feedback_proposal["grant_id"]
+    feedback_value = feedback_proposal["args"]["feedback"]
+    assert feedback_value["action_id"] == feedback_source
+    assert feedback_value["boot_id"] == Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    assert feedback_value["return_code"] == 1 and feedback_value["untrusted"] is True
+    assert feedback_value["stdout"]["text"] == ""
+    assert feedback_value["stderr"]["text"] == "FAIL expected 42 got 0\n"
+    assert feedback_value["stderr"]["sha256"] == hashlib.sha256(
+        b"FAIL expected 42 got 0\n").hexdigest()
+    feedback_view = human(dict(mode="view", id=feedback_pending[0]))["view"]
+    assert feedback_view["args"] == feedback_proposal["args"]
+    assert human(dict(mode="confirm", view=feedback_view, password="wrong-ci-password")) == {
+        "ok": False}
+    feedback_grant = human(dict(mode="confirm", view=feedback_view, password=password))
+    assert feedback_grant["ok"]
+    assert human(dict(mode="confirm", view=feedback_view, password=password)) == {"ok": False}
+    forged_feedback = json.loads(json.dumps(feedback_proposal))
+    forged_feedback["idempotency_key"] = "forged-feedback-other-action"
+    forged_feedback["args"]["feedback"]["action_id"] = "f" * 32
+    assert rpc("request", dict(schema_version="1.0", operation="request_approval",
+        body=forged_feedback), actor=identity.name) == denied
+    # Existing disabled/mismatched provider policy must still deny dispatch after PAM.
+    assert rpc("request", dict(schema_version="1.0", operation="propose",
+        body=feedback_proposal | dict(grant_id=feedback_grant["grant_id"])),
+        actor=identity.name) == denied
+    with contextlib.closing(sqlite3.connect(
+            f"file:{STATE / 'state.sqlite3'}?mode=ro", uri=True)) as database:
+        assert database.execute('SELECT used FROM grants WHERE id=?',
+                                (feedback_grant["grant_id"],)).fetchone() == (0,)
+        assert database.execute('SELECT count(*) FROM provider_jobs').fetchone() == (0,)
+        assert database.execute('SELECT count(*) FROM model_attempts').fetchone() == (0,)
+    from mano_protocol.provider import request_body as feedback_request_body
+
+    feedback_payload = feedback_request_body(feedback_proposal["args"]["prompt"],
+        model="explicit-snapshot", max_output_tokens=100, feedback=feedback_value)
+    assert len(feedback_payload["input"]) == 3
+    assert feedback_payload["input"][2]["role"] == "user"
+    assert "UNTRUSTED_EXECUTION_FEEDBACK_JSON" in feedback_payload["input"][2]["content"]
+    assert feedback_source not in feedback_payload["input"][2]["content"]
+    assert (terminal_workspace / "workflow_answer.py").read_text() == "workflow replay canary"
+    terminal_report["approved_failure_feedback_witness"] = dict(
+        feedback=feedback_value, request_key=feedback_key, native_pam=True,
+        default_disclosure_disabled=True, forged_source_denied=True,
+        provider_policy_still_denied=True, provider_jobs=0, model_attempts=0,
+        source_reexecution=False, effect_verified=False, live_provider_request=False,
+        prepared_payload_sha256=hashlib.sha256(json.dumps(
+            feedback_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+    terminal_report["approved_failure_feedback_native_pam_exact_custody"] = True
+    terminal_report["approved_failure_feedback_no_implicit_provider_or_reexecution"] = True
     write_receipts = []
     for index, content in enumerate(("approved direct write \u2603", "")):
         direct_proposal = dict(schema_version="1.0", task_id=terminal_task["task_id"],
@@ -1881,7 +1957,8 @@ finally:client.close()
     stop_proposal = terminal_proposal | dict(idempotency_key="native-stop-task", args=dict(
         argv=["/usr/bin/python3", "-c", "import os,time;from pathlib import Path;"
               "p=os.fork()\nif p==0:\n os.setsid()\n"
-              " Path('/workspace/stoppable').write_text('ready')\ntime.sleep(60)"],
+              " Path('/workspace/stoppable.pending').write_text('ready');"
+              "os.replace('/workspace/stoppable.pending','/workspace/stoppable')\ntime.sleep(60)"],
         cwd=".", timeout_seconds=60))
     stop_workflow_definition = dict(steps=[observed_test(dict(capability="terminal.run",
         args=stop_proposal["args"], reason="Recorded long-running test for native Stop"), 0),
