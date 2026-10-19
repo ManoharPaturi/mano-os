@@ -11,7 +11,8 @@ from mano_core.pty import PTYSession
 body = json.load(sys.stdin)
 client = BrokerClient()
 try:
-    session = PTYSession(client, **body)
+    session = PTYSession.open(client, proposal=body["proposal"], grant_id=body["grant_id"])
+    assert session.action_id == body["action_id"]
     def read_until(needle):
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:

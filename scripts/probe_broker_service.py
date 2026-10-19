@@ -1483,7 +1483,9 @@ print('END:%d'%count,flush=True)
                    actor=identity.name) == denied
     public_pty_client = subprocess.run(["/usr/sbin/runuser", "-u", identity.name, "--", "env",
         "PYTHONPATH=/usr/lib/mano-os", "PYTHONDONTWRITEBYTECODE=1", "python3",
-        str(ROOT / "scripts/probe_public_pty_client.py")], input=json.dumps(public_pty_body),
+        str(ROOT / "scripts/probe_public_pty_client.py")], input=json.dumps(dict(
+            proposal=public_pty_proposal, grant_id=public_pty_grant["grant_id"],
+            action_id=public_pty_action)),
         capture_output=True, text=True, timeout=25, check=False)
     assert public_pty_client.returncode == 0, (public_pty_client.stdout, public_pty_client.stderr)
     terminal_report["public_broker_pty_witness"] = json.loads(public_pty_client.stdout)

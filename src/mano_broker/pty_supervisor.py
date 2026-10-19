@@ -51,7 +51,7 @@ def worker(connection, workspace, cwd, args):
         revoked=lambda: False,
     ) as pty:
         offset = 0
-        operations = 0
+        seen = set()
         reason = "unknown"
         try:
             while True:
@@ -80,9 +80,9 @@ def worker(connection, workspace, cwd, args):
                     raise Denied("Invalid worker operation")
                 identifier(value["id"])
                 operation, body = value["kind"], value["args"]
-                if operations >= 64 or not isinstance(body, dict):
+                if len(seen) >= 64 or value["id"] in seen or not isinstance(body, dict):
                     raise Denied("PTY operation quota exceeded")
-                operations += 1
+                seen.add(value["id"])
                 count = 0
                 if operation == "write" and set(body) == {"data"}:
                     data = base64.b64decode(body["data"], validate=True)
