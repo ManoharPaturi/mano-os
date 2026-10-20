@@ -89,7 +89,7 @@ int mano_publish_write(int stage, const char *token, int parent,
 /* Restore-only primitives. Fixed creation modes and leaf names; never chmod,
    chown, user-selected flags, a root pathname, hooks or executable commands. */
 static int restore_leaf(const char *name) {
-    return write_leaf(name,0) && strcmp(name,".git");
+    return write_leaf(name,0) && strcmp(name,".git") && strcmp(name,".mano-agent");
 }
 
 int mano_create_restore_stage(int stage, const char *token, int executable) {

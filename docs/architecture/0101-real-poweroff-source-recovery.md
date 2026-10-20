@@ -32,3 +32,7 @@ The new witness is unaccepted until exact-head CI, the actual uploaded artifact
 and all six fresh screenshots pass review. No physical-input/8GB, atomic whole
 filesystem rollback, model disclosure, paid model execution or complete-version
 claim follows from this bounded recovery test.
+
+The integrated core journal boundary is defined by ADR0102: snapshots explicitly
+exclude `.mano-agent`; capture and restore must preserve its private owner, mode
+and bytes rather than weakening access to make source traversal succeed.

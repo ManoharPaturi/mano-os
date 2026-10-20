@@ -137,13 +137,14 @@ class PoweroffRestore:
             assert path.stat().st_uid == pwd.getpwnam(managed["caller_name"]).pw_uid
         # Test-only metadata, restricted to this fixed nonsecret fixture. This is
         # diagnostic evidence, never a substitute for the real service action.
-        paths = [workspace, workspace / "nested", *(workspace / name for name in FILES)]
+        paths = [workspace, workspace / ".mano-agent", workspace / "nested",
+                 *(workspace / name for name in FILES)]
         acl = subprocess.check_output(["getfacl", "-cpn", *map(str, paths)], text=True)
         access = self.python(
             """import json,os,sys
 from pathlib import Path
 root=Path(json.load(sys.stdin));rows=[]
-for relative in ('.','nested','before-reboot','nested/binary','run.sh'):
+for relative in ('.','.mano-agent','nested','before-reboot','nested/binary','run.sh'):
  p=root/relative;info=p.stat()
  rows.append(dict(path=relative,uid=info.st_uid,gid=info.st_gid,mode=oct(info.st_mode),
   readable=os.access(p,os.R_OK),searchable=os.access(p,os.X_OK)))
@@ -151,7 +152,12 @@ print(json.dumps(dict(rows=rows,euid=os.geteuid(),groups=os.getgroups())))
 """, str(workspace), "mano-broker")
         Path("/opt/mano-lab/evidence/stock-source-permissions.json").write_text(
             json.dumps(dict(acl=acl,access=access,service_action_required=True),indent=2)+"\n")
+        private_access = next(row for row in access['rows'] if row['path'] == '.mano-agent')
+        assert private_access['uid'] == managed['caller_uid']
+        assert private_access['readable'] is False and private_access['searchable'] is False
         source = self.checkpoint(managed, password, "source-before-real-poweroff")
+        assert source['metadata']['excluded_names'] == ['.git','.mano-write-staging','.mano-agent']
+        assert stat.S_IMODE((workspace / '.mano-agent').stat().st_mode) == 0o700
         assert source["metadata"]["files"] == len(FILES)
         assert source["metadata"]["boot_id"] == self.boot()
         (workspace / "nested/binary").write_bytes(b"changed after immutable capture")
@@ -199,6 +205,11 @@ print(json.dumps(dict(rows=rows,euid=os.geteuid(),groups=os.getgroups())))
         proposed = self.sdk(managed, mode="restore-proposal", before=before, source=source,
                             key="fresh-restore-after-real-poweroff")
         workspace = Path(managed["workspace"])
+        journal = workspace / '.mano-agent'
+        assert journal.stat().st_uid == destination_uid
+        assert stat.S_IMODE(journal.stat().st_mode) == 0o700
+        private_before = self.manifest(journal)
+        assert 'graph.sqlite' in private_before
         initial = self.manifest(workspace)
         grant, view = self.approval(managed, proposed, password, cancel_first=True)
         assert self.manifest(workspace) == initial  # Approval performs no file effect.
@@ -217,9 +228,15 @@ print(json.dumps(dict(rows=rows,euid=os.geteuid(),groups=os.getgroups())))
                                executable=executable)
                     for name, (data, executable) in FILES.items()}
         assert self.manifest(workspace) == expected
-        directories = {str(path.relative_to(workspace)) for path in workspace.rglob("*")
-                       if path.is_dir() and path.name != ".mano-write-staging"}
+        directories = set()
+        for directory, dirs, _ in os.walk(workspace):
+            dirs[:] = [name for name in dirs if name not in
+                       {'.git','.mano-write-staging','.mano-agent'}]
+            directories.update(str((Path(directory)/name).relative_to(workspace)) for name in dirs)
         assert directories == {"nested"}, directories
+        assert self.manifest(journal) == private_before
+        assert journal.stat().st_uid == destination_uid
+        assert stat.S_IMODE(journal.stat().st_mode) == 0o700
         assert (Path(old["workspace"]) / "nested/binary").read_bytes() == (
             b"changed after immutable capture")
         (workspace / "before-reboot").write_bytes(b"post-restore edit must survive replay")
@@ -240,13 +257,17 @@ print(json.dumps(dict(rows=rows,euid=os.geteuid(),groups=os.getgroups())))
                     restore=restored, restored_manifest=expected, restored_directories=["nested"],
                     model_disclosure=False,
                     atomic_filesystem_restore=False, fixture_setup="approved sandboxed RUN",
+                    private_runtime_journal_preserved=True,
+                    private_runtime_journal_mode=0o700,
+                    private_runtime_journal_owner_uid=destination_uid,
                     root_role="independent observer and post-capture fixture edit only")
 
     @staticmethod
     def manifest(workspace):
         result = {}
         for directory, dirs, names in os.walk(workspace):
-            dirs[:] = [name for name in dirs if name not in {".git", ".mano-write-staging"}]
+            dirs[:] = [name for name in dirs if name not in
+                       {".git", ".mano-write-staging", ".mano-agent"}]
             for name in names:
                 path = Path(directory) / name
                 info = path.lstat()

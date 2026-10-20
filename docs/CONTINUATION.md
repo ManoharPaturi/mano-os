@@ -421,3 +421,14 @@ record, without chmod/chown or service policy relaxation. Still need exact cause
 targeted fix and actualfinalheadCI/artifact/pixelacceptance. Local443PASS/46skips.
 Root only observes and simulates postcaptureedit, neverperformsrestore. PR117
 postmerge39381340108 attempt2 verifiedSUCCESS; firstOffice timeout preserved.
+
+PR118 integration cause found: actual core creates task-owned0700 .mano-agent
+insideworkspace, while sourcewalk excludedonly.git/privateWRITE. Root'spermission
+record proved normalnested source readable; exactwalk72failed openingprivate
+runtimejournal. ADR0102 adds explicit3rd exclusion/privateentrylayoutpreservation,
+nativeleafguard, and historical-only legacy2scope parsing for savedcustody. New
+wireproposals/approvals/execution stillrequire current3scope. Legacyreceipt/request
+scope mustmatch; decoderrejectsnowreservedruntimepaths. Nojournalchmod/chown or
+servicepolicyrelaxation. Local444PASS/46skips. Nativepackagedrealpowerofftest now
+assertsbrokerdeniedprivatejournalbeforecapture and preservesprivatebytes/UID/700
+throughrestore. Need actualnewheadCI/artifacts/all6pixels beforeacceptance/merge.

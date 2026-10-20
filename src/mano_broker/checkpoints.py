@@ -79,7 +79,7 @@ def capture(workspace, *, observe, layout=None):
                         if entries > MAX_ENTRIES:
                             raise Denied("Checkpoint entry quota exhausted")
                         if item.name in EXCLUDED:
-                            if layout is not None and item.name == ".git":
+                            if layout is not None and item.name != ".mano-write-staging":
                                 layout["excluded"].append(
                                     item.name if relative == "." else relative + "/" + item.name
                                 )
@@ -216,7 +216,8 @@ def read(state, *, task_id, action_id, caller_uid, boot_id):
     if (
         row is None
         or row["state"] != "done"
-        or ActionRequest.parse(row["request_json"].encode()).capability != Capability.CHECKPOINT
+        or ActionRequest.parse(row["request_json"].encode(),
+                               historical_checkpoint=True).capability != Capability.CHECKPOINT
     ):
         raise Denied("No owned current-boot checkpoint")
     receipt = metadata(json.loads(row["metadata_json"]))
