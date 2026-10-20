@@ -17,6 +17,7 @@ class Capability(StrEnum):
     RESTORE = "workspace.restore"
     CHECKPOINT = "workspace.checkpoint"
     MCP = "mcp.discover"
+    PACKAGE = "packages.plan_install"
     RUN = "terminal.run"
     PTY = "terminal.open_pty"
     PLAN = "model.plan"
@@ -127,6 +128,10 @@ class ActionRequest:
                 text(args["text"], 32768, allow_empty=True)
         elif capability == Capability.RESTORE:
             from .restoration import arguments
+
+            arguments(args)
+        elif capability == Capability.PACKAGE:
+            from .packages import arguments
 
             arguments(args)
         elif capability == Capability.CHECKPOINT:

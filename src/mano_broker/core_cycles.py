@@ -11,7 +11,7 @@ from .state import Denied
 WAITING = {'awaiting_model_grant', 'model_queued', 'model_running', 'awaiting_grant',
            'queued', 'running', 'verifying'}
 TERMINAL = {'completed', 'failed', 'model_failed', 'unknown_effect',
-            'model_unknown_effect', 'controller_uncertain', 'read_ready'}
+            'model_unknown_effect', 'controller_uncertain', 'read_ready', 'package_plan_ready'}
 
 
 class CoreCycles:

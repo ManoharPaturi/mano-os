@@ -14,6 +14,7 @@ dpkg-query -W > /opt/mano-lab/evidence/stock-runtime-packages.tsv
 # This driver dependency is test-only and is installed after runtime dependency resolution.
 apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3-pyatspi
 script --quiet --return --command 'mano-runtime-setup lab --enable' /dev/null
+mano-package-catalog > /opt/mano-lab/evidence/stock-package-catalog.json
 python3 - "$expected_sha" <<'PY'
 import json,sys
 from pathlib import Path

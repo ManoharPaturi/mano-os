@@ -36,7 +36,7 @@ def guard():
     assert not (ROOT / "src").exists() and not Path("/usr/local/lib/mano-core").exists()
 
 
-def python(program, body=None, actor=None):
+def python(program, body=None, actor=None, *, timeout=40):
     argv = [
         "env",
         "-i",
@@ -51,7 +51,7 @@ def python(program, body=None, actor=None):
     ]
     if actor:
         argv = ["/usr/sbin/runuser", "-u", actor, "--", *argv]
-    return json.loads(command(*argv, input=json.dumps(body)).stdout)
+    return json.loads(command(*argv, input=json.dumps(body), timeout=timeout).stdout)
 
 
 def public(operation, body, actor):
@@ -370,6 +370,64 @@ def phase(after_reboot):
         managed, result = gui(password, "after" if after_reboot else "before")
         mock_effect(managed, "after-reboot" if after_reboot else "before-reboot")
         restoration = PoweroffRestore(python, public, query, ACTOR)
+        from probe_package_plans import CLIENT as package_client
+
+        proposed_package = python(
+            """import json,sys
+from mano_core.broker import BrokerClient
+from mano_core.packages import catalog,proposal
+managed=json.load(sys.stdin);client=BrokerClient()
+try:
+ context=managed['context'];observed=catalog(client,task_id=context['task_id'],
+  resource_id=context['resource_id'])
+ value=proposal(task_id=context['task_id'],resource_id=context['resource_id'],names=['sl'],
+  catalog_id=observed['catalog_id'],key='stock-package-preview',
+  reason='Preview only; no installation')
+ print(json.dumps(value))
+finally:client.close()
+""", managed, managed['caller_name'])
+        package_grant,package_view = restoration.approval(managed,proposed_package,password)
+        assert package_view['package_scope']['installation_authorized'] is False
+        status_before = hashlib.sha256(Path('/var/lib/dpkg/status').read_bytes()).hexdigest()
+        package_result = python(package_client,
+                                dict(proposal=proposed_package,grant_id=package_grant),
+                                managed['caller_name'],timeout=75)
+        assert package_result['state'] == 'done'
+        assert package_result['result']['plan']['install_authorized'] is False
+        status_after = hashlib.sha256(Path('/var/lib/dpkg/status').read_bytes()).hexdigest()
+        assert status_after == status_before
+        label = 'after' if after_reboot else 'before'
+        (OUT/('stock-package-plan-'+label+'.json')).write_text(json.dumps(dict(
+            result=package_result,actual_native_tty_pam=True,dpkg_state_unchanged=True,
+            install_authorized=False,model_disclosure=False),indent=2)+'\n')
+        package_context = managed|dict(context=managed['context']|dict(
+            operation_key='typed-package-'+label))
+        package_packet = dict(managed=package_context,plan=dict(capability='packages.plan_install',
+            args=proposed_package['args'],reason='Preview package changes through typed core'))
+        queued_package = json.loads(command('/usr/sbin/mano-core-step','--mock',
+            input=json.dumps(package_packet)).stdout)['task']
+        assert queued_package['status'] == 'awaiting_grant'
+        expected_package = queued_package['proposal']
+        typed_grant,_ = restoration.approval(managed,expected_package,password)
+        assert typed_grant  # Consumed only by the core's original exact proposal.
+        deadline = time.monotonic()+75
+        while time.monotonic()<deadline:
+            typed_package = json.loads(command('/usr/sbin/mano-core-step','--mock',
+                input=json.dumps(package_packet)).stdout)['task']
+            if typed_package['status'] == 'package_plan_ready':
+                break
+            assert typed_package['status'] in {'queued','running'},typed_package
+            time.sleep(.12)
+        assert typed_package['status'] == 'package_plan_ready'
+        receipt = typed_package['package_result']
+        assert receipt['names'] == ['sl'] and receipt['install_authorized'] is False
+        assert receipt['effect_verified'] is False
+        assert receipt['sha256'] == package_result['result']['sha256']
+        typed_status = hashlib.sha256(Path('/var/lib/dpkg/status').read_bytes()).hexdigest()
+        assert typed_status == status_before
+        (OUT/('stock-typed-package-'+label+'.json')).write_text(json.dumps(dict(
+            status=typed_package['status'],receipt=receipt,dpkg_state_unchanged=True,
+            live_model_connected=False),indent=2)+'\n')
         if not after_reboot:
             saved_source = restoration.before(managed, password)
             proposal = dict(
@@ -429,6 +487,7 @@ def phase(after_reboot):
                 rendering_profile="headless pixman / GTK cairo; full-frame redraw",
                 incremental_software_redraw_visual_acceptance=False,
                 source_restoration=recovered_source,
+                package_plan_native_pam_before_and_after_boot=True,
             )
             (OUT / "stock-runtime-reboot.json").write_text(json.dumps(report, indent=2) + "\n")
             print(json.dumps(report))

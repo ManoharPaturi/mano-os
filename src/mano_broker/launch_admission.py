@@ -98,7 +98,8 @@ def admit(packet, descriptors, *, peer):
     action = identifier(body["action_id"])
     account = task_account(body["caller_uid"])
     request = ActionRequest.parse(canonical(body["request"]).encode())
-    if (request.capability not in {Capability.RUN, Capability.PTY, Capability.MCP}
+    if (request.capability not in
+            {Capability.RUN, Capability.PTY, Capability.MCP, Capability.PACKAGE}
             or len(descriptors) != 2):
         raise Denied("Terminal request and exactly two descriptors required")
     infos = []
@@ -118,6 +119,10 @@ def admit(packet, descriptors, *, peer):
     ):
         raise Denied("Workspace owner/group/privacy mismatch")
     args = json.loads(request.args_json)
+    if request.capability == Capability.PACKAGE:
+        from .package_catalog import load
+
+        load(args['catalog_id'])
     if threading.active_count() != 1:
         raise Denied("Metadata identity transition requires a single-threaded service")
     original_uid = os.geteuid()
@@ -126,7 +131,8 @@ def admit(packet, descriptors, *, peer):
         # fixed broker owner; do not add a global DAC override to the launcher.
         os.seteuid(broker.pw_uid)
         with Workspace(descriptors[0]) as workspace:
-            with workspace.pin(args["cwd"], directory=True) as cwd:
+            with workspace.pin("." if request.capability == Capability.PACKAGE
+                               else args["cwd"], directory=True) as cwd:
                 if (cwd.device, cwd.inode) != (infos[1].st_dev, infos[1].st_ino):
                     raise Denied("Working directory does not match workspace request")
     finally:

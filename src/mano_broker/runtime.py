@@ -124,6 +124,14 @@ class Runtime:
             or value["schema_version"] != "1.0"
         ):
             raise Denied("Invalid runtime envelope")
+        if value['operation'] == 'package_catalog':
+            if (not isinstance(value['body'],dict)
+                    or set(value['body']) != {'task_id','resource_id'}):
+                raise Denied('Exact current task package catalog query required')
+            self.live_task(value['body'],peer)
+            from .package_catalog import summary
+
+            return dict(schema_version='1.0',ok=True,catalog=summary())
         if value["operation"] in {"pty_status", "pty_read", "pty_write", "pty_resize", "pty_close"}:
             if self.ptys is None:
                 raise Denied("PTY launcher unavailable")
@@ -137,7 +145,8 @@ class Runtime:
             row, prepared = self.registry.prepare(
                 self.state, request, caller_uid=peer.uid, now=now, boot_id=self.boot_id
             )
-            if (prepared is not None and request.capability in {Capability.RUN, Capability.MCP}
+            if (prepared is not None and request.capability in
+                    {Capability.RUN, Capability.MCP, Capability.PACKAGE}
                     and self.executor):
                 self.pending.append(row["id"])
             if prepared is not None and request.capability == Capability.PTY and self.ptys:

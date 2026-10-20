@@ -1,3 +1,37 @@
+PR119 run39453988077 reached final package Stop; immediate SIGSTOP-state assertion raced asynchronous delivery. Bounded wait for kernel T + exact argv/UID/exe recheck, wait authorities frozen before nativeStop. Add package-plans.json to host evidence export. 455 local tests/46 skips; full guest acceptance pending.
+
+PR119 run39452513187 cache FileNotFoundError: Python-APT dpkg_journal_dirty enumerates private var/lib/dpkg/updates. Add private empty directory; independent current_status host dirty-journal checks unchanged. 455 local tests/46 skips, native acceptance pending.
+
+PR119 run39450820576 reached cache; private lists directory must include writable scratch partial, not symlink entire directory to RO catalog. Individual signed-file symlinks/private config before APT import. Nativeguard unchanged. 455 local tests/46 skips, guest acceptance pending.
+
+PR119 run39448926739 catalog passed; worker failed before JSON. Static nativeguard review: Landlock denies old top-level mounts. Move exact RO solver/catalog inside already masked /usr/lib/mano-os under existing read policy; no nativeguard changes. 454 local tests/46 skips; native acceptance pending.
+
+PR119 third run39447006196 FAILED at security signed Components=updates/main. Correct suite-specific label; signed SHA256 path still main/binary-amd64/Packages. 454 local tests/46 skips, native acceptance pending.
+
+PR119 second run39445095664 FAILED closed at cloud mirror+file cache identity. Add only fixed Debian cloud aliases; normalize snapshot names to official URI; keep original source identities. 453 local tests/46 skips, native acceptance pending.
+
+PR119 correction: first run 39442986898 rejected Debian keyring .gpg symlink. Fixed host input uses regular .pgp without weakening trust. 452 local tests/46 skips; new native CI pending.
+
+# Current package forecasts — not yet accepted
+
+PR118 mergedbf25d57828dae429114b8009c4813491c07a98c1 after final35b19f9/
+CI39390053998 ALLSUCCESS/artifact12250475386,54hashes/38flags/package/actual
+poweroff source recovery/privatejournalpreservation/all6rawGUI accepted.
+Postmain39392442977 verifiedSUCCESS. Fullphases0–7 remainACTIVE/incomplete.
+
+Currentfeat/approved-package-plans adds ADR0103 typed packages.plan_install with
+exactnames/catalogID, nativePAM separatefromAuto/Full, Root-onlyoffline signed
+catalogsnapshot refresh, existingreadonly network-off sandbox/cgroup/Stop solver,
+strictresult/durablecustody/SDK/core package_plan_ready receipt, nonexecuting
+providercontract, packageCLI/dependencies and guardedCIprobes including independent
+apt-getsimulation, corrupt/stalecatalog, unknownpkg, configinjection, frozenactual
+solver+broker+launcherStop/restartunknown, stockSDK/corePAM before/afterrealboot.
+Local451testsPASS/46Linuxskips andRuff; actualnewguestproofnotyetexecuted. No install/
+applyhelper, modelcall/key/disclosure, hostcredential or servicefilterbypass.
+CI/artifacts/all6freshpixels required beforemerge. Disk25GiBfree88%.
+Detailedcontinuation/evidence in outputs/CONTINUATION.md. Do notdeclarefullversion
+complete fromreadonlypackageplan; privilegedapply/snapshots/recovery remain.
+
 # Current recorded developer workflow (under review)
 
 Branch feat/durable-developer-workflow adds WRITE to strict typed/provider/core

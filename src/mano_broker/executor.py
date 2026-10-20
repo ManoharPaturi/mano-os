@@ -18,7 +18,7 @@ from .terminal_output import capacity, persist
 
 class Executor:
     capability = Capability.RUN
-    capabilities = {Capability.RUN, Capability.MCP}
+    capabilities = {Capability.RUN, Capability.MCP, Capability.PACKAGE}
 
     def __init__(self, state, registry, client, *, boot_id, clock=time.monotonic,
                  observe_stop=lambda: None):
@@ -45,6 +45,10 @@ class Executor:
         ):
             raise Denied("Terminal authority no longer live")
         Limits.approved(json.loads(row["budget_json"]))
+        if request.capability == Capability.PACKAGE:
+            from .package_catalog import load
+
+            load(json.loads(request.args_json)['catalog_id'])
         return row, request
 
     def control(self, operation, handle):

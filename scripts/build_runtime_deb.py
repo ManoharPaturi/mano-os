@@ -157,12 +157,14 @@ def build(wheelhouse, output, *, revision=None, epoch=None):
             ("mano-task", "mano_broker.task_factory"),
             ("mano-core-step", "mano_broker.lifecycle"),
             ("mano-runtime-setup", "mano_runtime.administration"),
+            ("mano-package-catalog", "mano_runtime.package_catalog"),
         ):
             path = (
                 stage
                 / (
                     "usr/sbin/"
-                    if name in {"mano-task", "mano-core-step", "mano-runtime-setup"}
+                    if name in {"mano-task", "mano-core-step", "mano-runtime-setup",
+                                "mano-package-catalog"}
                     else "usr/bin/"
                 )
                 / name
@@ -170,7 +172,8 @@ def build(wheelhouse, output, *, revision=None, epoch=None):
             path.parent.mkdir(parents=True, exist_ok=True)
             safe = (
                 "env -i PATH=/usr/sbin:/usr/bin:/bin LANG=C.UTF-8 "
-                if name in {"mano-task", "mano-core-step", "mano-runtime-setup"}
+                if name in {"mano-task", "mano-core-step", "mano-runtime-setup",
+                            "mano-package-catalog"}
                 else "env "
             )
             path.write_text(
@@ -227,7 +230,7 @@ def build(wheelhouse, output, *, revision=None, epoch=None):
             "Maintainer: mano-OS project <noreply@mano.invalid>\n"
             "Section: utils\nPriority: optional\n"
             "Depends: python3 (>= 3.13), python3 (<< 3.14), python3-gi, "
-            "python3-jsonschema, gir1.2-gtk-4.0, "
+            "python3-jsonschema, python3-apt, gpgv, debian-archive-keyring, gir1.2-gtk-4.0, "
             "systemd (>= 257), libc6 (>= 2.41), libpam0g, libpam-modules, "
             "libjson-c5, libsystemd0, libseccomp2, "
             "bubblewrap (>= 0.12.0-1~deb13u1), xdg-dbus-proxy (>= 0.1.6-1+deb13u3), "
