@@ -28,6 +28,7 @@ class State:
         info = directory.stat()
         if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise ValueError("Broker state must be owned by broker and mode0700")
+        self.directory = directory
         file = directory / "state.sqlite3"
         fd = os.open(file, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         try:
@@ -90,6 +91,9 @@ class State:
                 id TEXT PRIMARY KEY,action_id TEXT NOT NULL REFERENCES actions(id),
                 metadata_json TEXT NOT NULL,data BLOB NOT NULL,
                 CHECK(length(data)<=8388608));
+            CREATE TABLE IF NOT EXISTS checkpoints(
+                action_id TEXT PRIMARY KEY REFERENCES actions(id), metadata_json TEXT NOT NULL,
+                data BLOB NOT NULL, CHECK(length(data)<=4194304));
             CREATE TABLE IF NOT EXISTS terminal_outputs(
                 action_id TEXT PRIMARY KEY REFERENCES actions(id),metadata_json TEXT NOT NULL,
                 stdout BLOB NOT NULL,stderr BLOB NOT NULL,

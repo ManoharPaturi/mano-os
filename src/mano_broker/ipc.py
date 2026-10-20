@@ -49,6 +49,26 @@ def dispatch(state, packet, *, peer, now, boot_id):
         result = chunk(state, **body, caller_uid=peer.uid, boot_id=boot_id)
         return dict(schema_version='1.0', ok=True, output=result['metadata'],
                     data=base64.b64encode(result['data']).decode('ascii'), eof=result['eof'])
+    if value['operation'] in {'checkpoint_result', 'checkpoint_read'}:
+        from .checkpoints import read
+
+        body = value['body']
+        fields = {'task_id', 'action_id'}
+        if value['operation'] == 'checkpoint_read':
+            fields |= {'offset', 'length'}
+        if not isinstance(body, dict) or set(body) != fields:
+            raise Denied('Unexpected checkpoint result fields')
+        keys = {key: body[key] for key in ('task_id', 'action_id')}
+        receipt, data = read(state, **keys, caller_uid=peer.uid, boot_id=boot_id)
+        if value['operation'] == 'checkpoint_result':
+            return dict(schema_version='1.0', ok=True, checkpoint=receipt)
+        offset, length = body['offset'], body['length']
+        if (type(offset) is not int or not 0 <= offset <= len(data)
+                or type(length) is not int or not 1 <= length <= 16384):
+            raise Denied('Invalid bounded checkpoint byte range')
+        piece = data[offset:offset+length]
+        return dict(schema_version='1.0', ok=True, checkpoint=receipt,
+                    data=base64.b64encode(piece).decode('ascii'), eof=offset+len(piece)==len(data))
     if value['operation'] == 'file_write_result':
         from .file_writes import result
 

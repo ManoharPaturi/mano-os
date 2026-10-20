@@ -6,6 +6,7 @@ import time
 from collections import deque
 
 from .artifacts import Store
+from .checkpoints import execute as execute_checkpoint
 from .executor import Executor
 from .file_reads import execute as execute_file_read
 from .file_writes import execute as execute_file_write
@@ -32,6 +33,7 @@ class Runtime:
         self.artifacts = Store()
         self.pending = deque()
         self.file_pending = deque()
+        self.checkpoint_pending = deque()
         self.write_pending = deque()
         self.pty_pending = deque()
         self.launcher = launcher
@@ -135,6 +137,8 @@ class Runtime:
                 self.pending.append(row["id"])
             if prepared is not None and request.capability == Capability.PTY and self.ptys:
                 self.pty_pending.append(row["id"])
+            if prepared is not None and request.capability == Capability.CHECKPOINT:
+                self.checkpoint_pending.append(row["id"])
             if prepared is not None and request.capability == Capability.WRITE:
                 self.write_pending.append(row["id"])
             if prepared is not None and request.capability == Capability.READ:
@@ -183,6 +187,13 @@ class Runtime:
 
     def tick(self):
         self.sync_stop()
+        if self.checkpoint_pending:
+            action_id = self.checkpoint_pending.popleft()
+            try:
+                execute_checkpoint(self, action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.state.event(action_id, "checkpoint-denied",
+                                 {"error_type": type(error).__name__})
         if self.file_pending:
             action_id = self.file_pending.popleft()
             try:
@@ -253,6 +264,9 @@ class Runtime:
             for action_id in self.file_pending:
                 self.settle_model(action_id)
             self.file_pending.clear()
+            for action_id in self.checkpoint_pending:
+                self.settle_model(action_id)
+            self.checkpoint_pending.clear()
             for action_id in self.write_pending:
                 self.settle_model(action_id)
             self.write_pending.clear()

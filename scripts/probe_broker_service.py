@@ -1868,6 +1868,14 @@ finally:client.close()
     terminal_report["mcp_discovery_official_sdk_native_pam_and_hostile_peers"] = True
     terminal_report["mcp_discovery_witness"] = mcp_records
     (ROOT / "evidence/mcp-discovery.json").write_text(json.dumps(mcp_records, indent=2) + "\n")
+    from probe_checkpoints import run as probe_checkpoints
+
+    checkpoint_report = probe_checkpoints(rpc, human, identity, password)
+    terminal_report["git_workspace_checkpoint_native_pam_exact_bytes_and_scope"] = True
+    terminal_report["git_workspace_checkpoint_untrusted_metadata_and_replay_denial"] = True
+    terminal_report["git_workspace_checkpoint_witness"] = checkpoint_report
+    (ROOT / "evidence/git-workspace-checkpoint.json").write_text(
+        json.dumps(checkpoint_report, indent=2) + "\n")
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
     assert exhausted["state"] == "pending" and exhausted["grant_id"] is None
     _, supervised_write = profiled_request("files.write", dict(path="no-write", text="denied"))
@@ -2066,6 +2074,17 @@ else:raise AssertionError('task reached native Stop')
     stop_pty_write = dict(schema_version="1.0", operation="pty_write", body=dict(
         task_id=terminal_task["task_id"], action_id=stop_pty_action, key="after-stop",
         data=base64.b64encode(b"must-not-arrive\n").decode()))
+    from mano_core.workspace_checkpoints import proposal as checkpoint_proposal
+
+    checkpoint_stop_proposal = checkpoint_proposal(task_id=terminal_task["task_id"],
+        resource_id=terminal_task["resource_id"], key="checkpoint-pending-stop",
+        reason="Checkpoint approval must not survive native Stop")
+    checkpoint_stop_pending = rpc("request", dict(schema_version="1.0",
+        operation="request_approval", body=checkpoint_stop_proposal),
+        actor=identity.name)["approval"]
+    assert checkpoint_stop_pending["state"] == "pending"  # Even under the Full profile.
+    checkpoint_stop_view = human(dict(
+        mode="view", id=checkpoint_stop_pending["approval_id"]))["view"]
     core_pids = []
     pty_frozen = subprocess.Popen(pty_base + ["--unit=" + pty_unit + "-frozen", "--wait"] +
         pty_program + ["--freeze"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -2215,6 +2234,14 @@ finally:
     assert (STOP_STATE / "state").read_text() == "v1:1:latched\n"
     terminal_report["native_stop_grant_latch_integrated"] = True
     terminal_report["native_stop_pending_revoked"] = True
+    assert checkpoint_stop_view["expires"] > time.monotonic()
+    assert human(dict(mode="confirm", view=checkpoint_stop_view, password=password)) == {
+        "ok": False}
+    checkpoint_stopped = rpc("request", dict(schema_version="1.0", operation="approval_status",
+        body=dict(approval_id=checkpoint_stop_pending["approval_id"])), actor=identity.name)
+    assert checkpoint_stopped["approval"]["state"] == "revoked"
+    terminal_report["git_workspace_checkpoint_native_stop_revokes_live_pending_approval"] = True
+
     terminal_report["native_stop_root_preparation_denied"] = True
     terminal_report["native_stop_restart_no_rearm"] = True
     # Fault-inject an interrupted native state write while its daemon is stopped.
