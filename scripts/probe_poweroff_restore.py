@@ -1,7 +1,8 @@
 """Old-boot source recovery through installed SDK/PAM, disposable stock guest only.
 
-Root creates and independently observes the nonsecret fixture. Root never performs
-the restore or edits the broker journal. No grants/passwords enter evidence.
+The approved sandboxed RUN creates the nonsecret fixture. Root independently
+observes it and simulates a later edit, but never performs the restore or edits
+the broker journal. No grants/passwords enter evidence.
 """
 
 import hashlib
@@ -129,12 +130,12 @@ class PoweroffRestore:
 
     def before(self, managed, password):
         workspace = Path(managed["workspace"])
-        # Nonsecret fixture setup by the test observer, not a product Root writer.
+        # The existing approved sandboxed RUN must have created the fixture.
         for name, (data, executable) in FILES.items():
             path = workspace / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data)
-            path.chmod(0o755 if executable else 0o644)
+            assert path.read_bytes() == data
+            assert bool(path.stat().st_mode & 0o111) == executable
+            assert path.stat().st_uid == pwd.getpwnam(managed["caller_name"]).pw_uid
         source = self.checkpoint(managed, password, "source-before-real-poweroff")
         assert source["metadata"]["files"] == len(FILES)
         assert source["metadata"]["boot_id"] == self.boot()
@@ -223,7 +224,8 @@ class PoweroffRestore:
                     source=source["metadata"], destination_before=before["metadata"],
                     restore=restored, restored_manifest=expected, restored_directories=["nested"],
                     model_disclosure=False,
-                    atomic_filesystem_restore=False, fixture_setup="Root test observer only")
+                    atomic_filesystem_restore=False, fixture_setup="approved sandboxed RUN",
+                    root_role="independent observer and post-capture fixture edit only")
 
     @staticmethod
     def manifest(workspace):

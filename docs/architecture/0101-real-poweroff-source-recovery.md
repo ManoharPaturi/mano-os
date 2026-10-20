@@ -5,10 +5,10 @@ and fresh boot. This adds a release acceptance witness, not a new runtime
 privilege. Only the installed package and explicit test drivers enter the stock
 guest; the product source tree and lab configuration remain absent.
 
-Before shutdown the Root test observer seeds a small nonsecret binary/text/
-executable fixture. The unprivileged task uses the installed public Checkpoint
+Before shutdown the existing approved sandboxed RUN creates a small nonsecret
+binary/text/executable fixture, owned by its task UID. The unprivileged task uses the Checkpoint
 SDK and separate native TTY/PAM consent to capture and export the archive. The
-observer then changes the live source bytes. A second checkpoint and explicit
+Root observer then changes the live source bytes. A second checkpoint and explicit
 restore approval produce an unused preboot restore grant. Only the Root-only,
 fsynced private state file holds that grant; evidence contains no grants/passwords.
 

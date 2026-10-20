@@ -253,6 +253,14 @@ def gui(password, label):
 
 
 def mock_effect(managed, filename):
+    fixture = ""
+    if filename == "before-reboot":
+        fixture = (
+            ";Path('/workspace/nested').mkdir();"
+            "Path('/workspace/nested/binary').write_bytes(bytes([0,255,1])+b'poweroff'+bytes([0]));"
+            "Path('/workspace/run.sh').write_bytes(b'#!/bin/sh\\necho saved-source\\n');"
+            "Path('/workspace/run.sh').chmod(0o755)"
+        )
     packet = dict(
         prompt_id=managed["prompt_id"],
         plan=dict(
@@ -264,7 +272,7 @@ def mock_effect(managed, filename):
                     "from pathlib import Path;"
                     + "Path('/workspace/"
                     + filename
-                    + "').write_text('stock-ok')",
+                    + "').write_text('stock-ok')" + fixture,
                 ],
                 cwd=".",
                 timeout_seconds=2,
