@@ -85,7 +85,7 @@ class ActionRequest:
     reason: str
 
     @classmethod
-    def parse(cls, packet: bytes):
+    def parse(cls, packet: bytes, *, historical_checkpoint=False):
         if not isinstance(packet, bytes) or not 1 <= len(packet) <= MAX_PACKET:
             raise ValueError("Invalid packet size")
         value = json.loads(
@@ -130,9 +130,12 @@ class ActionRequest:
 
             arguments(args)
         elif capability == Capability.CHECKPOINT:
-            from .checkpoints import EXCLUDED
+            from .checkpoints import EXCLUDED, LEGACY_EXCLUDED
 
-            if args != dict(root=".", excluded_names=list(EXCLUDED)):
+            scopes = [dict(root=".", excluded_names=list(EXCLUDED))]
+            if historical_checkpoint:
+                scopes.append(dict(root=".", excluded_names=list(LEGACY_EXCLUDED)))
+            if args not in scopes:
                 raise ValueError("Explicit complete source-root checkpoint scope required")
         elif capability == Capability.PROFILE:
             from .profiles import configuration

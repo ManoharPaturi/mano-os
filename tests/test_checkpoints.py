@@ -80,6 +80,7 @@ class GitCheckpointTests(unittest.TestCase):
             "/absolute",
             ".git/config",
             "nested/.git/config",
+            ".mano-agent/graph.sqlite",
             ".",
             "double//slash",
             "x/" * 14 + "leaf",
@@ -101,6 +102,8 @@ class GitCheckpointTests(unittest.TestCase):
             root = Path(folder)
             (root / ".git").mkdir()
             (root / ".git/config").write_text("[include]\npath=/host-secret\n")
+            (root / ".mano-agent").mkdir(mode=0o700)
+            (root / ".mano-agent/graph.sqlite").write_bytes(b"private graph canary")
             (root / "file").write_bytes(b"captured")
             (root / "sub").mkdir()
             (root / "sub/bin").write_bytes(b"\0\xff")
@@ -120,6 +123,8 @@ class GitCheckpointTests(unittest.TestCase):
 
             class Workspace:
                 def pin(self, name, **_):
+                    if ".mano-agent" in Path(name).parts:
+                        raise AssertionError("Private runtime state must never be opened")
                     return Pin(root / name)
 
             # Only replace the Linux immutable-read primitive; real directory,
@@ -138,7 +143,10 @@ class GitCheckpointTests(unittest.TestCase):
                 return source, dict(size=size)
 
             with patch("mano_broker.checkpoints.seal", side_effect=seal):
-                result, meta = capture(Workspace(), observe=lambda: None)
+                layout = {}
+                result, meta = capture(Workspace(), observe=lambda: None, layout=layout)
+                self.assertEqual(layout['excluded'], ['.git', '.mano-agent'])
+                self.assertIn('.mano-agent', meta['excluded_names'])
                 self.assertEqual(meta["files"], 2)
                 self.assertNotIn(b"/host-secret", result)
                 self.assertEqual(meta["source_bytes"], 10)

@@ -20,7 +20,7 @@ def load(state, action_id, sha256, *, human_uid):
     ).fetchone()
     if row is None or row["human_uid"] != human_uid or row["state"] != "done":
         raise Denied("No saved source owned by the approval human")
-    request = ActionRequest.parse(row["request_json"].encode())
+    request = ActionRequest.parse(row["request_json"].encode(), historical_checkpoint=True)
     receipt = metadata(json.loads(row["metadata_json"]))
     if (
         request.capability != Capability.CHECKPOINT
@@ -29,6 +29,7 @@ def load(state, action_id, sha256, *, human_uid):
         or receipt["task_id"] != row["task_id"]
         or receipt["boot_id"] != row["boot_id"]
         or receipt["action_id"] != action_id
+        or receipt["excluded_names"] != json.loads(request.args_json)["excluded_names"]
         or receipt["sha256"] != sha256
         or len(row["data"]) != receipt["archive_bytes"]
         or hashlib.sha256(row["data"]).hexdigest() != sha256

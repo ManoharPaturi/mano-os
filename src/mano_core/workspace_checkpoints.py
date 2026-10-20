@@ -24,7 +24,8 @@ def proposal(*, task_id, resource_id, key, reason):
 
 class Checkpoint:
     def __init__(self, client, *, proposal, action_id):
-        parsed = ActionRequest.parse(canonical(proposal | dict(grant_id="0" * 32)).encode())
+        parsed = ActionRequest.parse(canonical(proposal | dict(grant_id="0" * 32)).encode(),
+                                     historical_checkpoint=True)
         if parsed.capability != "workspace.checkpoint":
             raise ValueError("Exact checkpoint proposal required")
         self.client, self.task_id = client, parsed.task_id

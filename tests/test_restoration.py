@@ -1,5 +1,6 @@
 import hashlib
 import io
+import json
 import os
 import tarfile
 import tempfile
@@ -10,10 +11,10 @@ from unittest.mock import patch
 
 from mano_broker.approvals import Approvals
 from mano_broker.registry import Prepared
-from mano_broker.restoration import Restorer, result, validate
+from mano_broker.restoration import Restorer, load, result, validate
 from mano_broker.state import Denied, State
 from mano_protocol.actions import ActionRequest, canonical
-from mano_protocol.checkpoints import EXCLUDED, archive, unpack
+from mano_protocol.checkpoints import EXCLUDED, LEGACY_EXCLUDED, archive, unpack
 from mano_protocol.restoration import plan
 
 
@@ -88,7 +89,10 @@ class RestoreLifecycleTests(unittest.TestCase):
             target.chmod(0o770 if mode else 0o660)
         (self.root / ".git").mkdir()
         (self.root / ".git/config").write_text("unchanged")
-        self.before_layout = dict(directories=["obsolete", "was-directory"], excluded=[".git"])
+        (self.root / ".mano-agent").mkdir(mode=0o700)
+        (self.root / ".mano-agent/graph.sqlite").write_bytes(b"private journal unchanged")
+        self.before_layout = dict(directories=["obsolete", "was-directory"],
+                                  excluded=[".git", ".mano-agent"])
         self.source = self.saved(self.desired, key="source")
         self.before = self.saved(self.previous, key="before", layout_value=self.before_layout)
         args = dict(
@@ -287,6 +291,8 @@ class RestoreLifecycleTests(unittest.TestCase):
             self.assertEqual(bool((self.root / name).stat().st_mode & 0o111), executable)
         self.assertFalse((self.root / "obsolete").exists())
         self.assertEqual((self.root / ".git/config").read_text(), "unchanged")
+        self.assertEqual((self.root / ".mano-agent/graph.sqlite").read_bytes(),
+                         b"private journal unchanged")
         observed = result(
             self.state, task_id=self.task, action_id=self.action, caller_uid=1004, boot_id="boot"
         )
@@ -296,6 +302,30 @@ class RestoreLifecycleTests(unittest.TestCase):
         row, fresh = self.state.authorize(self.request, caller_uid=1004, now=10, boot_id="boot")
         self.assertFalse(fresh)
         self.assertEqual(row["state"], "done")
+
+    def test_legacy_saved_scope_loads_but_cannot_authorize_new_capture(self):
+        row = self.state.db.execute("SELECT request_json FROM actions WHERE id=?",
+                                    (self.source[0],)).fetchone()
+        old = json.loads(row[0])
+        old['args']['excluded_names'] = list(LEGACY_EXCLUDED)
+        meta = self.source[1] | dict(excluded_names=list(LEGACY_EXCLUDED))
+        self.state.db.execute("UPDATE actions SET request_json=? WHERE id=?",
+                              (canonical(old),self.source[0]))
+        self.state.db.execute("UPDATE checkpoints SET metadata_json=? WHERE action_id=?",
+                              (canonical(meta),self.source[0]))
+        with self.assertRaises(ValueError):
+            ActionRequest.parse(canonical(old).encode())
+        loaded, receipt, files = load(self.state,self.source[0],meta['sha256'],human_uid=1002)
+        self.assertEqual(files,self.desired)
+        self.assertEqual(receipt['excluded_names'],list(LEGACY_EXCLUDED))
+        self.assertEqual(loaded['task_id'],self.task)
+        self.run_job()
+        self.assertEqual((self.root / '.mano-agent/graph.sqlite').read_bytes(),
+                         b'private journal unchanged')
+        self.state.db.execute("UPDATE checkpoints SET metadata_json=? WHERE action_id=?",
+                              (canonical(self.source[1]),self.source[0]))
+        with self.assertRaises(Denied):
+            load(self.state,self.source[0],meta['sha256'],human_uid=1002)
 
     def test_changed_before_tree_refuses_all_public_effects(self):
         (self.root / "a").write_bytes(b"new change")

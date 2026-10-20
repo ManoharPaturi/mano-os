@@ -1,3 +1,5 @@
+import errno
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -66,6 +68,24 @@ class RuntimeSchedulerTests(unittest.TestCase):
         self.runtime.executor.launch.assert_not_called()
         self.assertEqual(list(self.runtime.pending), [result['action']['id']])
         self.assertEqual(self.runtime.executor.poll.call_count, 2)
+
+    def test_checkpoint_denial_diagnostics_do_not_record_os_filename_or_message(self):
+        result = self.propose()
+        self.runtime.pending.clear()
+        self.runtime.checkpoint_pending.append(result['action']['id'])
+        error = PermissionError(errno.EACCES, 'private canary message', '/private/canary')
+        with patch('mano_broker.runtime.execute_checkpoint', side_effect=error):
+            self.runtime.tick()
+        row = self.state.db.execute(
+            "SELECT details_json FROM events WHERE event='checkpoint-denied'"
+        ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertNotIn('canary', row[0])
+        details = json.loads(row[0])
+        self.assertEqual(details['errno'], errno.EACCES)
+        self.assertEqual(details['error_type'], 'PermissionError')
+        self.assertIsNone(details['denial'])
+        self.assertLessEqual(len(details['stages']), 4)
 
     def test_uncertain_dispatch_is_not_automatically_rescheduled(self):
         self.propose()

@@ -399,3 +399,36 @@ differentUIDcross-taskconsentreached/passed beforeharnessfailure. Observernowwai
 forrealattemptrow (terminalnorecordstillfails), then>=1doneStep/executing/freeze.
 FixCIidentitycleanupcallbacktoappendaccountNAME perexistingcleanupcontract, not
 TaskIdentityobject. NoStopassertion/quota/permissionweakening; newheadCIrequired.
+
+PR117 accepted and merged47d24b04824ace098095bcf674cda6a5de6e6082 after finalhead
+887e7f0/CI39378958394 attempt2 ALL3SUCCESS/artifact12245745038. Accepted54hashes/
+38flags/package/pristinestockrealreboot/all6freshrawGUI; local442PASS/46Linuxskips.
+Actual native PAM binary/mode/dir/delete restore, stale refusal, crossTaskUID
+consent and partial nativeStop/restart/no-replay proved. Actualpoweroff restore
+not yet proved. Followup ADR0101 extends existing stock before/after driver:
+installed public SDK capture and native PAM before real QEMU poweroff, old-source
+read/grant denial after boot, new TaskUID/fresh native PAM restore, independent
+exact source checks and replay-canary. Root seeds/observes only nonsecret fixture;
+Root never restores or modifies broker journal. CI/artifact/pixel acceptance
+required. Full phases0–7 ACTIVE/incomplete; disk27GiBfree87%.
+
+PR118 remains draft/unmerged. First3edfa22 and diagnosticc1786ae heads failed
+stock sourcecheckpoint with unknown/PermissionError errno13. Head65f6586 creates
+fixture through approved task RUN, confirms taskUID ownership; same failure
+stack execute/capture/walk/walk proves nested traversal. Current followup adds
+bounded function+line diagnostic and fixed nonsecret fixture permission/ACL
+record, without chmod/chown or service policy relaxation. Still need exact cause,
+targeted fix and actualfinalheadCI/artifact/pixelacceptance. Local443PASS/46skips.
+Root only observes and simulates postcaptureedit, neverperformsrestore. PR117
+postmerge39381340108 attempt2 verifiedSUCCESS; firstOffice timeout preserved.
+
+PR118 integration cause found: actual core creates task-owned0700 .mano-agent
+insideworkspace, while sourcewalk excludedonly.git/privateWRITE. Root'spermission
+record proved normalnested source readable; exactwalk72failed openingprivate
+runtimejournal. ADR0102 adds explicit3rd exclusion/privateentrylayoutpreservation,
+nativeleafguard, and historical-only legacy2scope parsing for savedcustody. New
+wireproposals/approvals/execution stillrequire current3scope. Legacyreceipt/request
+scope mustmatch; decoderrejectsnowreservedruntimepaths. Nojournalchmod/chown or
+servicepolicyrelaxation. Local444PASS/46skips. Nativepackagedrealpowerofftest now
+assertsbrokerdeniedprivatejournalbeforecapture and preservesprivatebytes/UID/700
+throughrestore. Need actualnewheadCI/artifacts/all6pixels beforeacceptance/merge.

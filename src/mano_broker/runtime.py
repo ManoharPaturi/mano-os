@@ -3,6 +3,7 @@
 import json
 import sys
 import time
+import traceback
 from collections import deque
 
 from .artifacts import Store
@@ -212,7 +213,11 @@ class Runtime:
                 execute_checkpoint(self, action_id)
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self.state.event(action_id, "checkpoint-denied",
-                                 {"error_type": type(error).__name__})
+                                 {"error_type": type(error).__name__,
+                                  "errno": error.errno if isinstance(error, OSError) else None,
+                                  "denial": str(error) if isinstance(error, Denied) else None,
+                                  "stages": [f"{frame.name}:{frame.lineno}" for frame in
+                                             traceback.extract_tb(error.__traceback__)[-4:]]})
         if self.file_pending:
             action_id = self.file_pending.popleft()
             try:

@@ -16,7 +16,8 @@ MAX_DEPTH = 12
 MAX_BYTES = 2 * 1024**2
 MAX_ARCHIVE = 4 * 1024**2
 MAX_CHECKPOINTS = 8
-EXCLUDED = (".git", ".mano-write-staging")
+LEGACY_EXCLUDED = (".git", ".mano-write-staging")
+EXCLUDED = (*LEGACY_EXCLUDED, ".mano-agent")
 
 
 def path(value):
@@ -138,7 +139,7 @@ def metadata(value):
             "action_id",
             "boot_id",
         }
-        or value["excluded_names"] != list(EXCLUDED)
+        or value["excluded_names"] not in (list(EXCLUDED), list(LEGACY_EXCLUDED))
         or value["git_metadata_imported"] is not False
         or value["atomic_filesystem_snapshot"] is not False
         or value["effect_verified"] is not False
