@@ -411,3 +411,13 @@ read/grant denial after boot, new TaskUID/fresh native PAM restore, independent
 exact source checks and replay-canary. Root seeds/observes only nonsecret fixture;
 Root never restores or modifies broker journal. CI/artifact/pixel acceptance
 required. Full phases0–7 ACTIVE/incomplete; disk27GiBfree87%.
+
+PR118 remains draft/unmerged. First3edfa22 and diagnosticc1786ae heads failed
+stock sourcecheckpoint with unknown/PermissionError errno13. Head65f6586 creates
+fixture through approved task RUN, confirms taskUID ownership; same failure
+stack execute/capture/walk/walk proves nested traversal. Current followup adds
+bounded function+line diagnostic and fixed nonsecret fixture permission/ACL
+record, without chmod/chown or service policy relaxation. Still need exact cause,
+targeted fix and actualfinalheadCI/artifact/pixelacceptance. Local443PASS/46skips.
+Root only observes and simulates postcaptureedit, neverperformsrestore. PR117
+postmerge39381340108 attempt2 verifiedSUCCESS; firstOffice timeout preserved.

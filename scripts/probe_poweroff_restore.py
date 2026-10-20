@@ -6,6 +6,7 @@ the broker journal. No grants/passwords enter evidence.
 """
 
 import hashlib
+import json
 import os
 import pwd
 import sqlite3
@@ -82,8 +83,6 @@ class PoweroffRestore:
                     "ON e.action_id=a.id WHERE a.task_id=? "
                     "AND e.event IN ('checkpoint-denied','restore-denied') ORDER BY e.sequence",
                     (managed["context"]["task_id"],)).fetchall()
-            import json
-
             Path("/opt/mano-lab/evidence/stock-source-denial.json").write_text(
                 json.dumps(dict(mode=body["mode"], events=events), indent=2) + "\n")
             raise
@@ -136,6 +135,22 @@ class PoweroffRestore:
             assert path.read_bytes() == data
             assert bool(path.stat().st_mode & 0o111) == executable
             assert path.stat().st_uid == pwd.getpwnam(managed["caller_name"]).pw_uid
+        # Test-only metadata, restricted to this fixed nonsecret fixture. This is
+        # diagnostic evidence, never a substitute for the real service action.
+        paths = [workspace, workspace / "nested", *(workspace / name for name in FILES)]
+        acl = subprocess.check_output(["getfacl", "-cpn", *map(str, paths)], text=True)
+        access = self.python(
+            """import json,os,sys
+from pathlib import Path
+root=Path(json.load(sys.stdin));rows=[]
+for relative in ('.','nested','before-reboot','nested/binary','run.sh'):
+ p=root/relative;info=p.stat()
+ rows.append(dict(path=relative,uid=info.st_uid,gid=info.st_gid,mode=oct(info.st_mode),
+  readable=os.access(p,os.R_OK),searchable=os.access(p,os.X_OK)))
+print(json.dumps(dict(rows=rows,euid=os.geteuid(),groups=os.getgroups())))
+""", str(workspace), "mano-broker")
+        Path("/opt/mano-lab/evidence/stock-source-permissions.json").write_text(
+            json.dumps(dict(acl=acl,access=access,service_action_required=True),indent=2)+"\n")
         source = self.checkpoint(managed, password, "source-before-real-poweroff")
         assert source["metadata"]["files"] == len(FILES)
         assert source["metadata"]["boot_id"] == self.boot()

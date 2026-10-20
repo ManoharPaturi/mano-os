@@ -216,7 +216,7 @@ class Runtime:
                                  {"error_type": type(error).__name__,
                                   "errno": error.errno if isinstance(error, OSError) else None,
                                   "denial": str(error) if isinstance(error, Denied) else None,
-                                  "stages": [frame.name for frame in
+                                  "stages": [f"{frame.name}:{frame.lineno}" for frame in
                                              traceback.extract_tb(error.__traceback__)[-4:]]})
         if self.file_pending:
             action_id = self.file_pending.popleft()
