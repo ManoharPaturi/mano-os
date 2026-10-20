@@ -399,3 +399,15 @@ differentUIDcross-taskconsentreached/passed beforeharnessfailure. Observernowwai
 forrealattemptrow (terminalnorecordstillfails), then>=1doneStep/executing/freeze.
 FixCIidentitycleanupcallbacktoappendaccountNAME perexistingcleanupcontract, not
 TaskIdentityobject. NoStopassertion/quota/permissionweakening; newheadCIrequired.
+
+PR117 accepted and merged47d24b04824ace098095bcf674cda6a5de6e6082 after finalhead
+887e7f0/CI39378958394 attempt2 ALL3SUCCESS/artifact12245745038. Accepted54hashes/
+38flags/package/pristinestockrealreboot/all6freshrawGUI; local442PASS/46Linuxskips.
+Actual native PAM binary/mode/dir/delete restore, stale refusal, crossTaskUID
+consent and partial nativeStop/restart/no-replay proved. Actualpoweroff restore
+not yet proved. Followup ADR0101 extends existing stock before/after driver:
+installed public SDK capture and native PAM before real QEMU poweroff, old-source
+read/grant denial after boot, new TaskUID/fresh native PAM restore, independent
+exact source checks and replay-canary. Root seeds/observes only nonsecret fixture;
+Root never restores or modifies broker journal. CI/artifact/pixel acceptance
+required. Full phases0–7 ACTIVE/incomplete; disk27GiBfree87%.

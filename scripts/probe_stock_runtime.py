@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from ci_tty import native_terminal
+from probe_poweroff_restore import PoweroffRestore
 
 ROOT = Path("/opt/mano-lab")
 OUT = ROOT / "evidence"
@@ -360,7 +361,9 @@ def phase(after_reboot):
     try:
         managed, result = gui(password, "after" if after_reboot else "before")
         mock_effect(managed, "after-reboot" if after_reboot else "before-reboot")
+        restoration = PoweroffRestore(python, public, query, ACTOR)
         if not after_reboot:
+            saved_source = restoration.before(managed, password)
             proposal = dict(
                 schema_version="1.0",
                 task_id=managed["context"]["task_id"],
@@ -382,11 +385,13 @@ def phase(after_reboot):
             fd = os.open(PRIVATE, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
             with os.fdopen(fd, "w") as stream:
                 json.dump(
-                    dict(managed=managed, proposal=proposal, grant_id=approved["grant_id"]), stream
+                    dict(managed=managed, proposal=proposal, grant_id=approved["grant_id"],
+                         source_restore=saved_source), stream
                 )
                 stream.flush()
                 os.fsync(stream.fileno())
         else:
+            recovered_source = restoration.after(previous, managed, password)
             stopped = command("/usr/sbin/runuser", "-u", ACTOR, "--", "/usr/libexec/mano-stop")
             assert "Emergency Stop acknowledged" in stopped.stdout
             assert Path("/var/lib/mano-stopd/state").read_text().endswith(":latched\n")
@@ -415,6 +420,7 @@ def phase(after_reboot):
                 gui_start_mode="manual headless user session; no physical/display-manager test",
                 rendering_profile="headless pixman / GTK cairo; full-frame redraw",
                 incremental_software_redraw_visual_acceptance=False,
+                source_restoration=recovered_source,
             )
             (OUT / "stock-runtime-reboot.json").write_text(json.dumps(report, indent=2) + "\n")
             print(json.dumps(report))
