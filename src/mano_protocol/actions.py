@@ -14,6 +14,7 @@ class Capability(StrEnum):
     INSPECT = "system.inspect_health"
     READ = "files.read"
     WRITE = "files.write"
+    CHECKPOINT = "workspace.checkpoint"
     MCP = "mcp.discover"
     RUN = "terminal.run"
     PTY = "terminal.open_pty"
@@ -123,6 +124,11 @@ class ActionRequest:
                 raise ValueError("Reserved broker write-custody directory")
             if capability == Capability.WRITE:
                 text(args["text"], 32768, allow_empty=True)
+        elif capability == Capability.CHECKPOINT:
+            from .checkpoints import EXCLUDED
+
+            if args != dict(root=".", excluded_names=list(EXCLUDED)):
+                raise ValueError("Explicit complete source-root checkpoint scope required")
         elif capability == Capability.PROFILE:
             from .profiles import configuration
 

@@ -365,3 +365,14 @@ Wholeobserved5-PIDgroupdrained, but actualPythonchildidentityrequiresstrongerpro
 Immediatefollowup pins childANDparent /proc/exe tosamePython3interpreter, samecode
 argv andownSID; recordsparent/executable/SID. ExactnewheadCI/artifactsrequiredbefore
 accepting refinedidentity. Noquota/Stop/productauthoritychange. FullgoalACTIVE.
+
+Current git-workspace-checkpoints based on acceptedPR115 main d0e0bb9; postmain
+39266836249 verifiedSUCCESS. ADR0099 adds fullboundedroot sourcecheckpoint Git
+objects/archive inprivateSQLite, explicitnativePAM/caller-task-boot identity,
+readonlydescriptorwalk/sealedreads/Stop/deadline checks, sourceidentityrechecks,
+limits/retention/freespace, scopedSDKexport and noGit/config/hooks/filterexecution.
+NativeGitstrictfsck/byte/mode recovery and actualPAM/SDK/symlink/replay/Stop pending
+approvalprobes added. Capture is NOTatomicFSsnapshot or in-place restore; latter
+remains nextintegration. Existing mano_core.checkpoints.Session was preserved;
+newSDK is mano_core.workspace_checkpoints. Local/actualCI acceptance stillrequired.
+FullgoalACTIVE; latestdisk28GiBfree86%, allVM/buildsremainremote.
