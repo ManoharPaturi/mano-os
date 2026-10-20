@@ -14,7 +14,7 @@ from mano_protocol.packages import digest
 BASE = Path("/var/lib/mano-packages")
 STATUS = Path("/var/lib/dpkg/status")
 LISTS = Path("/var/lib/apt/lists")
-KEYRING = Path("/usr/share/keyrings/debian-archive-keyring.gpg")
+KEYRING = Path("/usr/share/keyrings/debian-archive-keyring.pgp")
 UPDATES = Path("/var/lib/dpkg/updates")
 MAX_STATUS = 16 * 1024**2
 MAX_INPUT = 128 * 1024**2

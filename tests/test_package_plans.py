@@ -127,6 +127,23 @@ class PackageProtocolTests(unittest.TestCase):
             guard()
 
 
+class DebianKeyringPolicyTests(unittest.TestCase):
+    def test_fixed_regular_keyring_target_without_symlink_exception(self):
+        from mano_runtime import package_catalog as refresh
+
+        expected = Path("/usr/share/keyrings/debian-archive-keyring.pgp")
+        self.assertEqual(package_catalog.KEYRING, expected)
+        self.assertEqual(refresh.KEYRING, expected)
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "keyring.pgp"
+            target.write_bytes(b"keyring")
+            link = Path(directory) / "keyring.gpg"
+            link.symlink_to(target.name)
+            # The target policy changes; the no-symlink boundary does not.
+            with self.assertRaises(ValueError):
+                package_catalog.trusted(link)
+
+
 class CatalogStalenessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

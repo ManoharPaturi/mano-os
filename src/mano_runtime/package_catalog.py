@@ -28,7 +28,7 @@ from mano_broker.package_catalog import (
 from mano_protocol.actions import canonical
 
 LISTS = Path("/var/lib/apt/lists")
-KEYRING = Path("/usr/share/keyrings/debian-archive-keyring.gpg")
+KEYRING = Path("/usr/share/keyrings/debian-archive-keyring.pgp")
 REPOS = (
     ("trixie", ("deb.debian.org_debian",), "http://deb.debian.org/debian"),
     ("trixie-updates", ("deb.debian.org_debian",), "http://deb.debian.org/debian"),

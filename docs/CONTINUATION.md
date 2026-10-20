@@ -1,3 +1,5 @@
+PR119 correction: first run 39442986898 rejected Debian keyring .gpg symlink. Fixed host input uses regular .pgp without weakening trust. 452 local tests/46 skips; new native CI pending.
+
 # Current package forecasts — not yet accepted
 
 PR118 mergedbf25d57828dae429114b8009c4813491c07a98c1 after final35b19f9/

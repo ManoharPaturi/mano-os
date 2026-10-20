@@ -64,3 +64,12 @@ gates remain mandatory before merging the exact final head.
 Primary interfaces: [Python-APT Cache](https://apt-team.pages.debian.net/python-apt/library/apt.cache.html),
 [package marking](https://apt-team.pages.debian.net/python-apt/library/apt.package.html),
 and [APT configuration](https://manpages.debian.org/trixie/apt/apt.conf.5.en.html).
+
+Debian 13 compatibility: the fixed host trust input is
+`/usr/share/keyrings/debian-archive-keyring.pgp`. Debian's `.gpg` name is a
+symlink to that file; no symlink exception is granted to the catalog reader.
+The immutable snapshot retains its internal `debian-archive-keyring.gpg` name
+for APT/gpgv. See the [Debian keyring installation source](https://sources.debian.org/src/debian-archive-keyring/2025.1/Makefile/).
+The first PR CI run (39442986898) failed closed at that symlink before any
+package solver launched; the failed artifact is retained. Local checks after
+this correction: 452 tests, 46 Linux-only skips; native acceptance is pending.
