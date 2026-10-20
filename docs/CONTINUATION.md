@@ -1,3 +1,5 @@
+PR119 second run39445095664 FAILED closed at cloud mirror+file cache identity. Add only fixed Debian cloud aliases; normalize snapshot names to official URI; keep original source identities. 453 local tests/46 skips, native acceptance pending.
+
 PR119 correction: first run 39442986898 rejected Debian keyring .gpg symlink. Fixed host input uses regular .pgp without weakening trust. 452 local tests/46 skips; new native CI pending.
 
 # Current package forecasts — not yet accepted

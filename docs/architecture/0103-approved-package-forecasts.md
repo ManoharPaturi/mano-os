@@ -73,3 +73,12 @@ for APT/gpgv. See the [Debian keyring installation source](https://sources.debia
 The first PR CI run (39442986898) failed closed at that symlink before any
 package solver launched; the failed artifact is retained. Local checks after
 this correction: 452 tests, 46 Linux-only skips; native acceptance is pending.
+
+The second run (39445095664) passed keyring custody but rejected the cloud
+image's mirror+file index identity. Only the two fixed Debian cloud mirror-list
+filename aliases are additionally recognized; duplicate matching identities
+remain an error. Signed suite/origin/hash/freshness checks still apply. Snapshot
+filenames normalize to the fixed official URI, independently of the host's
+mirror-list transport. Original host input identities remain in the manifest
+for stale-input checks. Local checks: 453 tests, 46 Linux-only skips; guest
+acceptance pending.

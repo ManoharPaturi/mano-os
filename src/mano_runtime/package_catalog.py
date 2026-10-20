@@ -30,11 +30,12 @@ from mano_protocol.actions import canonical
 LISTS = Path("/var/lib/apt/lists")
 KEYRING = Path("/usr/share/keyrings/debian-archive-keyring.pgp")
 REPOS = (
-    ("trixie", ("deb.debian.org_debian",), "http://deb.debian.org/debian"),
-    ("trixie-updates", ("deb.debian.org_debian",), "http://deb.debian.org/debian"),
+    ("trixie", ("deb.debian.org_debian", "_etc_apt_mirrors_debian.list"), "http://deb.debian.org/debian"),
+    ("trixie-updates", ("deb.debian.org_debian", "_etc_apt_mirrors_debian.list"), "http://deb.debian.org/debian"),
     (
         "trixie-security",
-        ("deb.debian.org_debian-security", "security.debian.org_debian-security"),
+        ("deb.debian.org_debian-security", "security.debian.org_debian-security",
+         "_etc_apt_mirrors_debian-security.list"),
         "http://deb.debian.org/debian-security",
     ),
 )
@@ -168,6 +169,16 @@ def build():
         os.close(lock)
 
 
+def repository_prefix(suite, prefixes):
+    candidates = [
+        prefix for prefix in prefixes
+        if (LISTS / (prefix + "_dists_" + suite + "_InRelease")).is_file()
+    ]
+    if len(candidates) != 1:
+        raise ValueError("Exactly one official Debian catalog per suite is required")
+    return candidates[0] + "_dists_" + suite
+
+
 def build_locked():
     if len(list((BASE / "catalogs").iterdir())) >= 4:
         raise ValueError("Catalog retention exhausted; explicit operator retention required")
@@ -190,18 +201,15 @@ def build_locked():
         repos, sources = [], []
         source_inputs = {}
         for suite, prefixes, uri in REPOS:
-            candidates = [
-                prefix
-                for prefix in prefixes
-                if (LISTS / (prefix + "_dists_" + suite + "_InRelease")).is_file()
-            ]
-            if len(candidates) != 1:
-                raise ValueError("Exactly one official Debian catalog per suite is required")
-            prefix = candidates[0] + "_dists_" + suite
+            prefix = repository_prefix(suite, prefixes)
             release_name = prefix + "_InRelease"
+            # Cloud images use fixed mirror+file URI identities. Normalize only
+            # snapshot filenames to the fixed official source URI used by APT.
+            canonical_prefix = prefixes[0] + "_dists_" + suite
+            canonical_release = canonical_prefix + "_InRelease"
             source_inputs[release_name] = source_identity(LISTS / release_name)
             repo, expected, plaintext = signed_release(
-                LISTS / release_name, inputs / "lists" / release_name, suite, now
+                LISTS / release_name, inputs / "lists" / canonical_release, suite, now
             )
             index_prefix = prefix + "_main_binary-amd64_Packages"
             candidates = [
@@ -214,7 +222,10 @@ def build_locked():
             selected = candidates[0]
             source_inputs[selected.name] = source_identity(selected)
             compressed = read(selected, MAX_INPUT)
-            snapshot = inputs / "lists" / selected.name
+            canonical_index = (
+                canonical_prefix + "_main_binary-amd64_Packages" + selected.name[len(index_prefix):]
+            )
+            snapshot = inputs / "lists" / canonical_index
             snapshot.write_bytes(compressed)
             decompressed = stage / (suite + ".packages")
 
@@ -236,17 +247,12 @@ def build_locked():
             if (digest.hexdigest(), decompressed.stat().st_size) != expected:
                 raise ValueError("APT package bytes differ from signed Release SHA256")
             repo.update(packages_sha256=expected[0],packages_bytes=expected[1],
-                        signature_verified=True,index_file=selected.name,
+                        signature_verified=True,index_file=canonical_index,
                         index_sha256=hashlib.sha256(compressed).hexdigest())
             decompressed.unlink()  # Only this fresh helper-owned temporary file.
             plaintext.unlink()
             repos.append(repo)
-            actual_uri = (
-                "http://security.debian.org/debian-security"
-                if prefix.startswith("security.debian.org_")
-                else uri
-            )
-            sources.append("deb [arch=amd64] " + actual_uri + " " + suite + " main\n")
+            sources.append("deb [arch=amd64] " + uri + " " + suite + " main\n")
         (inputs / "sources.list").write_text("".join(sources))
         if current_status() != original_status:
             raise ValueError("Installed package state changed while creating catalog")

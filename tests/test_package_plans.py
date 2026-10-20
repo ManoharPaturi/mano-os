@@ -144,6 +144,31 @@ class DebianKeyringPolicyTests(unittest.TestCase):
                 package_catalog.trusted(link)
 
 
+class DebianCloudRepositoryTests(unittest.TestCase):
+    def test_fixed_cloud_aliases_require_one_unambiguous_suite(self):
+        from mano_runtime import package_catalog as refresh
+
+        with tempfile.TemporaryDirectory() as directory:
+            lists = Path(directory)
+            with patch.object(refresh, "LISTS", lists):
+                for suite, prefixes, uri in refresh.REPOS:
+                    self.assertTrue(uri.startswith("http://deb.debian.org/"))
+                    cloud = next(p for p in prefixes if p.startswith("_etc_apt_mirrors_"))
+                    filename = lists / (cloud + "_dists_" + suite + "_InRelease")
+                    filename.write_bytes(b"signed metadata requires later verification")
+                    self.assertEqual(refresh.repository_prefix(suite, prefixes),
+                                     cloud + "_dists_" + suite)
+                    duplicate = lists / (prefixes[0] + "_dists_" + suite + "_InRelease")
+                    duplicate.write_bytes(b"ambiguous")
+                    with self.assertRaises(ValueError):
+                        refresh.repository_prefix(suite, prefixes)
+                    duplicate.unlink()
+                    filename.unlink()
+                    (lists / ("unapproved_dists_" + suite + "_InRelease")).touch()
+                    with self.assertRaises(ValueError):
+                        refresh.repository_prefix(suite, prefixes)
+
+
 class CatalogStalenessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
