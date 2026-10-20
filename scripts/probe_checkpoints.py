@@ -131,6 +131,7 @@ def run(rpc, human, identity, password):
     receipt = saved["result"]["metadata"]
     data = base64.b64decode(saved["result"]["data"], validate=True)
     assert hashlib.sha256(data).hexdigest() == receipt["sha256"]
+    Path("/opt/mano-lab/evidence/git-workspace-checkpoint.tar").write_bytes(data)
     assert receipt["files"] == len(files) and receipt["git_metadata_imported"] is False
     assert receipt["effect_verified"] is receipt["atomic_filesystem_snapshot"] is False
     (workspace / "source.py").write_bytes(b"changed after snapshot\n")
