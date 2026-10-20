@@ -94,6 +94,16 @@ class State:
             CREATE TABLE IF NOT EXISTS checkpoints(
                 action_id TEXT PRIMARY KEY REFERENCES actions(id), metadata_json TEXT NOT NULL,
                 data BLOB NOT NULL, CHECK(length(data)<=4194304));
+            CREATE TABLE IF NOT EXISTS checkpoint_layouts(
+                action_id TEXT PRIMARY KEY REFERENCES checkpoints(action_id),
+                layout_json TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS restore_attempts(
+                action_id TEXT PRIMARY KEY REFERENCES actions(id),plan_json TEXT NOT NULL,
+                metadata_json TEXT);
+            CREATE TABLE IF NOT EXISTS restore_steps(
+                action_id TEXT NOT NULL REFERENCES restore_attempts(action_id),sequence INTEGER,
+                operation_json TEXT NOT NULL,state TEXT NOT NULL,
+                PRIMARY KEY(action_id,sequence));
             CREATE TABLE IF NOT EXISTS terminal_outputs(
                 action_id TEXT PRIMARY KEY REFERENCES actions(id),metadata_json TEXT NOT NULL,
                 stdout BLOB NOT NULL,stderr BLOB NOT NULL,
@@ -334,6 +344,10 @@ class State:
                 if prior["request_digest"] != request.digest:
                     raise Denied("Idempotency binding mismatch")
                 return dict(prior), False
+            if self.db.execute("SELECT count(*) FROM actions WHERE task_id=? "
+                    "AND json_extract(request_json,'$.capability')='workspace.restore' "
+                    "AND state IN ('intent','executing')",(request.task_id,)).fetchone()[0]:
+                raise Denied("Destination source restore must settle before another action")
             grant = self.db.execute(
                 "SELECT * FROM grants WHERE id=?", (request.grant_id,)
             ).fetchone()
@@ -360,8 +374,10 @@ class State:
             ):
                 raise Denied("Requested timeout exceeds grant")
             from .feedback import validate
+            from .restoration import validate as validate_restore
 
             validate(self, request, caller_uid=caller_uid, boot_id=boot_id)
+            validate_restore(self, request, caller_uid=caller_uid, boot_id=boot_id)
             # All profiles retain the same boundaries. Network, external effects,
             # devices, credentials and host-system mutation have no capability here.
             action_id = secrets.token_hex(16)

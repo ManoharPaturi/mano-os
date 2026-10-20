@@ -33,6 +33,15 @@ def library():
     loaded.mano_publish_write.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
                                          ctypes.c_char_p, ctypes.c_int)
     loaded.mano_publish_write.restype = ctypes.c_int
+    loaded.mano_create_restore_stage.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int)
+    loaded.mano_create_restore_stage.restype = ctypes.c_int
+    loaded.mano_publish_restore.argtypes = (ctypes.c_int, ctypes.c_char_p,
+                                            ctypes.c_int, ctypes.c_char_p)
+    loaded.mano_publish_restore.restype = ctypes.c_int
+    loaded.mano_restore_mkdir.argtypes = (ctypes.c_int, ctypes.c_char_p)
+    loaded.mano_restore_mkdir.restype = ctypes.c_int
+    loaded.mano_restore_remove.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int)
+    loaded.mano_restore_remove.restype = ctypes.c_int
     return loaded
 
 

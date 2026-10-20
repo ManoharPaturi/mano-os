@@ -61,8 +61,10 @@ class Approvals:
             ):
                 raise Denied("Approval task identity/resource mismatch")
             from .feedback import validate
+            from .restoration import validate as validate_restore
 
             validate(self.state, request, caller_uid=caller_uid, boot_id=boot_id)
+            restore = validate_restore(self.state, request, caller_uid=caller_uid, boot_id=boot_id)
             prior = self.state.db.execute(
                 "SELECT * FROM approvals WHERE task_id=? AND request_key=?",
                 (request.task_id, request.idempotency_key),
@@ -96,6 +98,8 @@ class Approvals:
                 "boot_id": boot_id,
                 "epoch": self.state.meta("epoch"),
             }
+            if restore is not None:
+                view['restore_plan'] = restore['review']
             if request.capability.value == 'policy.set_profile':
                 from mano_protocol.profiles import scope
 
