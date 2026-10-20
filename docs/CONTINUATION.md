@@ -392,3 +392,10 @@ TaskUID sameHumanfreshconsent transfer with oldsource directreaddenied, and froz
 broker mid-restore nativeStop/partialunknown/hash/restart/no-replay. ADR0100.
 Local441testsPASS/46Linuxskips,Ruff/compile/shell/diffPASS; no actualnewguestproofyet.
 ActualpoweroffSourceRestore remainsUNPROVEN (olderboot provenanceunitonly). GoalACTIVE.
+
+PR117 d599a81/CI39377915649 FAILED innewStopobserver: attemptedjournalrownotyet
+createdwhileactionacknowledged/queued. PositiveactualnativePAMrestore/stalerefusal/
+differentUIDcross-taskconsentreached/passed beforeharnessfailure. Observernowwaits
+forrealattemptrow (terminalnorecordstillfails), then>=1doneStep/executing/freeze.
+FixCIidentitycleanupcallbacktoappendaccountNAME perexistingcleanupcontract, not
+TaskIdentityobject. NoStopassertion/quota/permissionweakening; newheadCIrequired.

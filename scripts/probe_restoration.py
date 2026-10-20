@@ -1,5 +1,6 @@
 """Installed native-PAM restore and frozen-broker Stop witnesses, disposable CI only."""
 
+import contextlib
 import hashlib
 import json
 import os
@@ -198,7 +199,7 @@ def run(rpc, human, identity, password, task, workspace, saved, files, register_
     from mano_broker.workspaces import create_workspace
 
     destination_identity = allocate_identity()
-    register_identity(destination_identity)
+    register_identity(destination_identity.name)
     destination, fd = create_workspace(human_uid=1002, caller_uid=destination_identity.uid)
     os.close(fd)
     destination_task = rpc(
@@ -284,18 +285,20 @@ def start_for_stop(rpc, human, identity, password, context, broker_pid):
     database = Path("/var/lib/mano-broker/runtime/state.sqlite3")
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
-        with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
+        with contextlib.closing(sqlite3.connect(f"file:{database}?mode=ro", uri=True)) as db:
             state = db.execute("SELECT state FROM actions WHERE id=?", (action,)).fetchone()[0]
             acknowledged = db.execute(
                 "SELECT count(*) FROM restore_steps WHERE action_id=? AND state='done'", (action,)
             ).fetchone()[0]
-            total = len(
-                json.loads(
-                    db.execute(
-                        "SELECT plan_json FROM restore_attempts WHERE action_id=?", (action,)
-                    ).fetchone()[0]
-                )["operations"]
-            )
+            attempted = db.execute(
+                "SELECT plan_json FROM restore_attempts WHERE action_id=?", (action,)
+            ).fetchone()
+            if attempted is None:
+                if state in {"failed", "unknown", "done"}:
+                    raise AssertionError(("Restore has no prepared attempt", state))
+                time.sleep(0.02)
+                continue
+            total = len(json.loads(attempted[0])["operations"])
         if state == "executing" and 0 < acknowledged < total:
             os.kill(broker_pid, signal.SIGSTOP)
             for _ in range(100):
