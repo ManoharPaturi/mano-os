@@ -169,6 +169,40 @@ class DebianCloudRepositoryTests(unittest.TestCase):
                         refresh.repository_prefix(suite, prefixes)
 
 
+class SignedReleaseMetadataTests(unittest.TestCase):
+    def test_security_component_and_signed_index_path_are_distinct(self):
+        from mano_runtime import package_catalog as refresh
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, target = root / "input", root / "signed"
+            for suite, component in (("trixie", "main"), ("trixie-updates", "main"),
+                                     ("trixie-security", "updates/main")):
+                plain = root / (suite + ".verified-release")
+                for accepted, observed in ((True, component), (False, "contrib")):
+                    target = root / (suite + str(accepted) + ".signed")
+                    metadata = (
+                        f"Origin: Debian\nCodename: {suite}\nArchitectures: amd64 all\n"
+                        f"Components: {observed}\nDate: Tue, 20 Oct 2026 00:00:00 UTC\n"
+                        "Valid-Until: Tue, 27 Oct 2026 00:00:00 UTC\nSHA256:\n "
+                        + "a" * 64 + " 42 main/binary-amd64/Packages\n"
+                    )
+                    def verify(*args, plain=plain, metadata=metadata, **kwargs):
+                        self.assertEqual(args[0], "/usr/bin/gpgv")
+                        self.assertEqual(args[args.index("--keyring") + 1], str(refresh.KEYRING))
+                        plain.write_text(metadata)
+                    with patch.object(refresh, "read", return_value=b"signed packet"), \
+                         patch.object(refresh, "command", side_effect=verify):
+                        if accepted:
+                            repo, expected, _ = refresh.signed_release(
+                                source, target, suite, 1792454400)
+                            self.assertEqual(repo["suite"], suite)
+                            self.assertEqual(expected, ("a" * 64, 42))
+                        else:
+                            with self.assertRaises(ValueError):
+                                refresh.signed_release(source, target, suite, 1792454400)
+
+
 class CatalogStalenessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

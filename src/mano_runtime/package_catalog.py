@@ -102,7 +102,8 @@ def signed_release(source, target, suite, now):
         fields.get("Codename") != suite
         or fields.get("Origin") != "Debian"
         or "amd64" not in fields.get("Architectures", "").split()
-        or "main" not in fields.get("Components", "").split()
+        or ("updates/main" if suite == "trixie-security" else "main")
+        not in fields.get("Components", "").split()
         or stamp(fields["Date"]) > now + 300
     ):
         raise ValueError("Signed Debian repository identity changed")

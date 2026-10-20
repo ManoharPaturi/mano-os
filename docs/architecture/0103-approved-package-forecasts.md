@@ -82,3 +82,12 @@ filenames normalize to the fixed official URI, independently of the host's
 mirror-list transport. Original host input identities remain in the manifest
 for stale-input checks. Local checks: 453 tests, 46 Linux-only skips; guest
 acceptance pending.
+
+Run39447006196 passed keyring/signature verification and rejected the signed
+security Components label. Debian security's signed Release declares
+`updates/main`, while its signed SHA256 index path is
+`main/binary-amd64/Packages`. The validator now requires `updates/main` for
+trixie-security and `main` for the two other fixed suites. The signed index
+hash path and all signature/freshness checks remain required. Primary input:
+[Debian trixie-security InRelease](https://deb.debian.org/debian-security/dists/trixie-security/InRelease).
+454 local tests, 46 Linux-only skips; actual guest acceptance pending.
