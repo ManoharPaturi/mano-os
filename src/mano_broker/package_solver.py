@@ -51,6 +51,30 @@ def fingerprint(manifest):
             raise ValueError("Signed catalog snapshot integrity changed")
 
 
+def prepare_apt_root(root):
+    for relative in (
+        "etc/apt/trusted.gpg.d",
+        "etc/apt/apt.conf.d",
+        "etc/apt/preferences.d",
+        "var/lib/apt/lists/partial",
+        "var/lib/dpkg",
+        "var/cache/apt/archives/partial",
+        "var/log/apt",
+    ):
+        (root / relative).mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(CATALOG / "inputs/sources.list", root / "etc/apt/sources.list")
+    shutil.copyfile(
+        CATALOG / "inputs/debian-archive-keyring.gpg", root / "etc/apt/trusted.gpg.d/debian.gpg"
+    )
+    # apt.Cache(rootdir=...) requires a writable lists/partial directory even
+    # without update/fetch. Only that scratch directory is private and writable;
+    # each actual signed list remains a read-only catalog file.
+    for path in (CATALOG / "inputs/lists").iterdir():
+        (root / "var/lib/apt/lists" / path.name).symlink_to(path)
+    (root / "var/lib/dpkg/status").symlink_to(CATALOG / "inputs/status")
+    (root / "var/lib/apt/extended_states").symlink_to(CATALOG / "inputs/extended_states")
+
+
 def solve(names, identifier):
     global STAGE
     if (
@@ -79,28 +103,19 @@ def solve(names, identifier):
         raise ValueError("Package catalog identity/freshness changed")
     fingerprint(manifest)
     STAGE = "import"
-    import apt
-    import apt.progress.base
     import apt_pkg
 
     with tempfile.TemporaryDirectory(prefix="apt-plan-", dir="/tmp") as temporary:
         root = Path(temporary)
-        for relative in (
-            "etc/apt/trusted.gpg.d",
-            "var/lib/apt",
-            "var/lib/dpkg",
-            "var/cache/apt/archives/partial",
-            "var/log/apt",
-        ):
-            (root / relative).mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(CATALOG / "inputs/sources.list", root / "etc/apt/sources.list")
-        shutil.copyfile(
-            CATALOG / "inputs/debian-archive-keyring.gpg", root / "etc/apt/trusted.gpg.d/debian.gpg"
-        )
-        (root / "var/lib/apt/lists").symlink_to(CATALOG / "inputs/lists", target_is_directory=True)
-        (root / "var/lib/dpkg/status").symlink_to(CATALOG / "inputs/status")
-        (root / "var/lib/apt/extended_states").symlink_to(CATALOG / "inputs/extended_states")
-        apt_pkg.init_config()  # /etc is an empty sandbox tree, never host APT config.
+        prepare_apt_root(root)
+        # Importing apt initializes configuration. Point it at the empty private
+        # tree first; missing host /etc/apt is neither an input nor a warning.
+        apt_pkg.config.set("Dir", str(root))
+        apt_pkg.config.set("Dir::Etc", str(root / "etc/apt"))
+        apt_pkg.init_config()
+        import apt
+        import apt.progress.base
+
         apt_pkg.config.set("APT::Architecture", "amd64")
         apt_pkg.config.set("APT::Architectures::", "amd64")
         apt_pkg.config.set("APT::Install-Recommends", "false")

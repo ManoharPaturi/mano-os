@@ -1,3 +1,5 @@
+PR119 run39450820576 reached cache; private lists directory must include writable scratch partial, not symlink entire directory to RO catalog. Individual signed-file symlinks/private config before APT import. Nativeguard unchanged. 455 local tests/46 skips, guest acceptance pending.
+
 PR119 run39448926739 catalog passed; worker failed before JSON. Static nativeguard review: Landlock denies old top-level mounts. Move exact RO solver/catalog inside already masked /usr/lib/mano-os under existing read policy; no nativeguard changes. 454 local tests/46 skips; native acceptance pending.
 
 PR119 third run39447006196 FAILED at security signed Components=updates/main. Correct suite-specific label; signed SHA256 path still main/binary-amd64/Packages. 454 local tests/46 skips, native acceptance pending.

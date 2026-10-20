@@ -38,7 +38,7 @@ try:
    raise AssertionError(diagnostic) from None
   assert failure['error']=='package-plan-unavailable'
   assert failure['stage'] in {'admission','catalog','import','cache','resolve','forecast','recheck'}
-  result=dict(failed=True,metadata=failed['metadata'])
+  result=dict(failed=True,metadata=failed['metadata'],failure=failure)
  print(json.dumps(dict(action_id=worker.action_id,state=state['state'],result=result)))
 finally:transport.close()
 """
@@ -175,7 +175,7 @@ def run(rpc, human, identity, password):
         if key == "unknown":
             assert record["state"] == "failed"
         else:
-            assert record["state"] == "done"
+            assert record["state"] == "done", record
             plan = record["result"]["plan"]
             assert plan["names"] == names and plan["catalog_id"] == catalog["catalog_id"]
             assert plan["install_authorized"] is False and plan["network_used"] is False

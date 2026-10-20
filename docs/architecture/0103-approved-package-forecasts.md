@@ -100,3 +100,14 @@ and `/usr/lib/mano-os/package-catalog` inside the already masked implementation
 directory. The normal sandbox still exposes no implementation modules. Landlock
 and seccomp rules remain unchanged. Actual native mount/Stop acceptance remains
 required. Unexpected non-JSON worker stderr now has a bounded CI-only diagnostic.
+
+Run39450820576 reached the solver's cache stage. Python-APT rootdir initialization
+creates `var/lib/apt/lists/partial` even without update/fetch; symlinking the
+whole lists directory to the immutable catalog incorrectly denied that mkdir.
+The private root now has its own lists/partial scratch and individual read-only
+catalog-file symlinks. Config directories are private and created before APT
+configuration/import to avoid missing host /etc warnings. No host config, mutable
+signed inputs, network or nativeguard permission changes are introduced.
+A regression checks scratch writes cannot alter the catalog tree. 455 local
+tests pass, 46 Linux-only skips; actual guest acceptance remains pending.
+Primary implementation reference: [Python-APT Cache source](https://salsa.debian.org/apt-team/python-apt/-/blob/main/apt/cache.py).

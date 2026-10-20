@@ -203,6 +203,34 @@ class SignedReleaseMetadataTests(unittest.TestCase):
                                 refresh.signed_release(source, target, suite, 1792454400)
 
 
+class PrivateAptRootTests(unittest.TestCase):
+    def test_cache_scratch_does_not_follow_catalog_directory(self):
+        from mano_broker import package_solver
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            catalog, root = base / "catalog", base / "scratch"
+            lists = catalog / "inputs/lists"
+            lists.mkdir(parents=True)
+            root.mkdir()
+            for name in ("sources.list", "debian-archive-keyring.gpg", "status", "extended_states"):
+                (catalog / "inputs" / name).write_bytes(name.encode())
+            index = lists / "debian_dists_trixie_main_binary-amd64_Packages"
+            index.write_bytes(b"signed immutable index")
+            before = {p.name: p.read_bytes() for p in lists.iterdir()}
+            with patch.object(package_solver, "CATALOG", catalog):
+                package_solver.prepare_apt_root(root)
+            private = root / "var/lib/apt/lists"
+            self.assertFalse(private.is_symlink())
+            self.assertTrue((private / index.name).is_symlink())
+            self.assertEqual((private / index.name).resolve(), index)
+            (private / "partial/cache-scratch").write_bytes(b"temporary")
+            self.assertEqual(before, {p.name: p.read_bytes() for p in lists.iterdir()})
+            self.assertEqual(list((root / "etc/apt/apt.conf.d").iterdir()), [])
+            self.assertEqual((root / "var/lib/dpkg/status").resolve(),
+                             catalog / "inputs/status")
+
+
 class CatalogStalenessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
