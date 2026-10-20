@@ -55,3 +55,10 @@ GUI inspections remain merge gates. Full v2.1 phases0–7 stay incomplete.
 
 Primary contracts: [btrfs subvolumes and nested snapshot boundaries](https://btrfs.readthedocs.io/en/latest/btrfs-subvolume.html),
 [Debian Snapper CLI and Root-controlled plugins](https://manpages.debian.org/trixie/snapper/snapper.8.en.html).
+
+First CI39470715507 stopped at lock-negative assertion without its rejection
+transcript. Retain bounded denial text and preserve/export early-stage failure
+evidence without hiding the original SSH failure status. Static review found
+Python has no os.tcgetsid; use documented tcgetpgrp/getpgrp to require the Root
+terminal's foreground process group. Add a fully mocked admission regression;
+actual Root-terminal acceptance remains pending. 465 local tests/46 skips.

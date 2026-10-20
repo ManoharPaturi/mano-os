@@ -1,3 +1,5 @@
+PR120 CI39470715507 failed first lock-negative without denial transcript. Fix invalid os.tcgetsid API -> documented tcgetpgrp/getpgrp foreground check. Regression full guard branch; preserve denial/early failure artifacts. 465 local tests/46 skips; actual native acceptance pending.
+
 # Current PR120 work — Root package recovery prerequisite
 
 PR119 merged cfe944709e2ee04ef02ec3adfc98f7d19550a0d8 after exacthead91319f1,

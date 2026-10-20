@@ -56,7 +56,7 @@ def main():
     try:
         fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         denied_lock = terminal("create", success=False)
-        assert "BlockingIOError" in denied_lock
+        assert "BlockingIOError" in denied_lock, denied_lock
     finally:
         os.close(fd)
     gap = Path("/var/lib/dpkg/mano-recovery-ci-gap")
@@ -64,7 +64,7 @@ def main():
     command("/usr/bin/btrfs", "subvolume", "create", str(gap))
     try:
         denied_nested = terminal("create", success=False)
-        assert "Nested subvolume" in denied_nested
+        assert "Nested subvolume" in denied_nested, denied_nested
     finally:
         # Delete only the empty subvolume freshly made by this disposable CI test.
         command("/usr/bin/btrfs", "subvolume", "delete", str(gap))

@@ -54,8 +54,8 @@ def guard():
         raise ValueError("Debian13 recovery policy required")
     if any(not os.isatty(fd) for fd in (0, 1, 2)) or os.fstat(0).st_uid != 0:
         raise PermissionError("Trusted Root controlling terminal required")
-    if os.tcgetsid(0) != os.getsid(0):
-        raise PermissionError("Root controlling terminal session mismatch")
+    if os.tcgetpgrp(0) != os.getpgrp():
+        raise PermissionError("Root terminal must belong to the foreground process group")
 
 
 def overlaps(left, right):
@@ -375,7 +375,13 @@ def main():
     prepare_parser = sub.add_parser("prepare-boot")
     prepare_parser.add_argument("recovery_id")
     args = parser.parse_args()
-    value = create() if args.operation == "create" else prepare(args.recovery_id)
+    try:
+        value = create() if args.operation == "create" else prepare(args.recovery_id)
+    except subprocess.CalledProcessError as error:
+        # Fixed tools report bounded diagnostics to the explicit Root terminal;
+        # never exposed through a task/model endpoint or privileged service log.
+        print((error.stderr or "")[:4096], file=sys.stderr)
+        raise
     print(canonical(value))
 
 

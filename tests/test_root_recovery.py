@@ -37,6 +37,26 @@ class RecoveryAdmissionTests(unittest.TestCase):
                 recovery.create()
             command.assert_not_called()
 
+    def test_terminal_requires_matching_foreground_process_group(self):
+        with (
+            patch.object(recovery.sys, "platform", "linux"),
+            patch.object(recovery.os, "getuid", return_value=0),
+            patch.object(recovery.os, "geteuid", return_value=0),
+            patch.object(
+                recovery.platform,
+                "freedesktop_os_release",
+                return_value={"ID": "debian", "VERSION_ID": "13"},
+            ),
+            patch.object(recovery.os, "isatty", return_value=True),
+            patch.object(recovery.os, "fstat", return_value=SimpleNamespace(st_uid=0)),
+            patch.object(recovery.os, "getpgrp", return_value=42),
+            patch.object(recovery.os, "tcgetpgrp", return_value=42) as foreground,
+        ):
+            recovery.guard()
+            foreground.return_value = 43
+            with self.assertRaises(PermissionError):
+                recovery.guard()
+
     def test_recovery_id_has_no_path_or_snapshot_selector(self):
         for invalid in ("../1", "/etc/shadow", "a" * 31, "A" * 32, "a" * 32 + ";id"):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
