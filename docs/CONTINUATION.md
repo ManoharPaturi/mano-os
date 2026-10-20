@@ -376,3 +376,19 @@ approvalprobes added. Capture is NOTatomicFSsnapshot or in-place restore; latter
 remains nextintegration. Existing mano_core.checkpoints.Session was preserved;
 newSDK is mano_core.workspace_checkpoints. Local/actualCI acceptance stillrequired.
 FullgoalACTIVE; latestdisk28GiBfree86%, allVM/buildsremainremote.
+
+Current workspace-checkpoint-restore uncommitted branch basedonPR116a03ed81;
+postmain39374700360 verifiedSUCCESS. NewboundedcanonicalGitdecoder, privatebefore
+layoutcustody, explicitnativePAM5referencehashrestoreargs/protectedoperationview,
+asynconechunk/operationpertickRestorer, fixednonRootnativehelpers forbinary/modes/
+dirs/delete, per-stepintent/ack/unknownjournal, finalseparatecapturechecks and
+proposal-bound SDK. Local440testsPASS/46Linuxskips; actualnewnative/guestproofnotrun.
+NoPR117yet. Seeoutputs/CONTINUATION.md forprecisewipandrequirednativeCI/Stoptests.
+FullversionACTIVE; noatomicFS/current-content/crossboot-nativeproofclaim.
+
+Approved-source-restoration integration now includes guardedCI probes for native
+PAM/publicSDK binary/exec/dir-file/deletion restore, stale-before refusal, different
+TaskUID sameHumanfreshconsent transfer with oldsource directreaddenied, and frozen
+broker mid-restore nativeStop/partialunknown/hash/restart/no-replay. ADR0100.
+Local441testsPASS/46Linuxskips,Ruff/compile/shell/diffPASS; no actualnewguestproofyet.
+ActualpoweroffSourceRestore remainsUNPROVEN (olderboot provenanceunitonly). GoalACTIVE.

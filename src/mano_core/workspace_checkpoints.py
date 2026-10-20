@@ -28,6 +28,7 @@ class Checkpoint:
         if parsed.capability != "workspace.checkpoint":
             raise ValueError("Exact checkpoint proposal required")
         self.client, self.task_id = client, parsed.task_id
+        self.resource_id = parsed.resource_id
         self.action_id = identifier(action_id)
         self.digest = hashlib.sha256(canonical(proposal).encode()).hexdigest()
 

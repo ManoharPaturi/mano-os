@@ -33,7 +33,7 @@ finally:client.close()
 """
 
 
-def run(rpc, human, identity, password):
+def run(rpc, human, identity, password, register_identity):
     assert os.geteuid() == 0
     assert Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
     workspace, fd = create_workspace(human_uid=1002, caller_uid=identity.uid)
@@ -203,6 +203,10 @@ def run(rpc, human, identity, password):
         assert restored == files
         assert git("rev-parse", "HEAD").decode().strip() == receipt["commit"]
         git_version = git("--version").decode().strip()
+    from probe_restoration import run as probe_restoration
+
+    restore_report, restore_context = probe_restoration(rpc,human,identity,password,
+        task,workspace,saved,files,register_identity)
     # The actual native library must reject unsafe source entries without a
     # partial checkpoint. This also exercises explicit unknown replay semantics.
     (workspace / "escape").symlink_to("/etc/passwd")
@@ -230,4 +234,6 @@ def run(rpc, human, identity, password):
         scope="bounded Git source checkpoint; not atomic filesystem rollback",
     )
     assert (workspace / "source.py").read_bytes() == b"changed after snapshot\n"
+    report['restoration'] = restore_report
+    report['_ci_restore_context'] = restore_context
     return report

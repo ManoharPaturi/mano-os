@@ -85,3 +85,53 @@ int mano_publish_write(int stage, const char *token, int parent,
     return (int)syscall(SYS_renameat2,stage,token,parent,leaf,
                         create_only ? RENAME_NOREPLACE : 0);
 }
+
+/* Restore-only primitives. Fixed creation modes and leaf names; never chmod,
+   chown, user-selected flags, a root pathname, hooks or executable commands. */
+static int restore_leaf(const char *name) {
+    return write_leaf(name,0) && strcmp(name,".git");
+}
+
+int mano_create_restore_stage(int stage, const char *token, int executable) {
+    if (!private_stage(stage) || !write_leaf(token,1) ||
+        (executable!=0 && executable!=1)) {errno=EPERM;return -1;}
+    mode_t previous=umask(0007);
+    int fd=openat(stage,token,O_RDWR|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,
+                  executable ? 0770 : 0660);
+    int saved=errno;umask(previous);errno=saved;
+    return fd;
+}
+
+int mano_publish_restore(int stage, const char *token, int parent, const char *leaf) {
+    struct stat directory,source;
+    if (!private_stage(stage) || !write_leaf(token,1) || !restore_leaf(leaf) ||
+        fstat(parent,&directory) || !S_ISDIR(directory.st_mode) ||
+        fstatat(stage,token,&source,AT_SYMLINK_NOFOLLOW) || !S_ISREG(source.st_mode) ||
+        source.st_uid!=geteuid() || source.st_gid!=directory.st_gid || source.st_nlink!=1 ||
+        source.st_size<0 || source.st_size>2097152 ||
+        ((source.st_mode&07777)!=0660 && (source.st_mode&07777)!=0770) ||
+        source.st_dev!=directory.st_dev) {errno=EPERM;return -1;}
+    return (int)syscall(SYS_renameat2,stage,token,parent,leaf,0);
+}
+
+int mano_restore_mkdir(int parent, const char *leaf) {
+    struct stat directory,created;
+    if (!restore_leaf(leaf) || fstat(parent,&directory) ||
+        !S_ISDIR(directory.st_mode)) {errno=EPERM;return -1;}
+    mode_t previous=umask(0007);
+    int result=mkdirat(parent,leaf,02770);
+    int saved=errno;umask(previous);errno=saved;
+    if (result<0) return -1;
+    int fd=openat(parent,leaf,O_PATH|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+    if (fd<0) return -1;
+    if (fstat(fd,&created) || created.st_uid!=geteuid() ||
+        created.st_gid!=directory.st_gid || created.st_dev!=directory.st_dev) {
+        close(fd);errno=EPERM;return -1;
+    }
+    return fd;
+}
+
+int mano_restore_remove(int parent, const char *leaf, int directory) {
+    if (!restore_leaf(leaf) || (directory!=0 && directory!=1)) {errno=EPERM;return -1;}
+    return unlinkat(parent,leaf,directory ? AT_REMOVEDIR : 0);
+}

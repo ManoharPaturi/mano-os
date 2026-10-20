@@ -1870,10 +1870,14 @@ finally:client.close()
     (ROOT / "evidence/mcp-discovery.json").write_text(json.dumps(mcp_records, indent=2) + "\n")
     from probe_checkpoints import run as probe_checkpoints
 
-    checkpoint_report = probe_checkpoints(rpc, human, identity, password)
+    checkpoint_report = probe_checkpoints(rpc, human, identity, password,
+                                          extra_gui_identities.append)
+    restore_context = checkpoint_report.pop("_ci_restore_context")
     terminal_report["git_workspace_checkpoint_native_pam_exact_bytes_and_scope"] = True
     terminal_report["git_workspace_checkpoint_untrusted_metadata_and_replay_denial"] = True
     terminal_report["git_workspace_checkpoint_witness"] = checkpoint_report
+    terminal_report["source_restore_native_pam_binary_modes_directories_and_scope"] = True
+    terminal_report["source_restore_stale_before_and_cross_task_consent"] = True
     (ROOT / "evidence/git-workspace-checkpoint.json").write_text(
         json.dumps(checkpoint_report, indent=2) + "\n")
     _, exhausted = profiled_request("files.read", dict(path="live-result"))
@@ -2131,6 +2135,10 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
         active_before_stop = database.execute('SELECT expires,revoked,used FROM grants WHERE id=?',
             (profile_stop_grant["grant_id"],)).fetchone()
         assert active_before_stop[0] > time.monotonic() and active_before_stop[1:] == (0, 0)
+    from probe_restoration import start_for_stop as start_restore_for_stop
+
+    restore_stop = start_restore_for_stop(rpc,human,identity,password,restore_context,broker_pid)
+    terminal_report["source_restore_stop_witness"] = restore_stop
     subprocess.run(["kill", "-STOP", *(str(pid) for pid in core_pids)], check=True)
     subprocess.run(["kill", "-STOP", str(broker_pid), str(launcher_pid)], check=True)
     try:
@@ -2170,6 +2178,11 @@ print(json.dumps(dict(generation=state.generation,latched=state.latched)))
         provider_idle.terminate()
         provider_idle.wait(timeout=3)
         pty_frozen.communicate(timeout=5)
+    from probe_restoration import verify_stopped as verify_restore_stopped
+
+    restore_stopped = verify_restore_stopped(rpc,identity,restore_context,restore_stop)
+    terminal_report["source_restore_frozen_native_stop_no_follow_on_effect"] = True
+    terminal_report["source_restore_stop_result"] = restore_stopped
     terminal_report["native_human_stop_client_frozen_core_and_authority"] = True
     terminal_report["native_stop_client_message"] = native_stopped.stdout.strip()
     terminal_report["native_stop_broker_and_launcher_frozen"] = True
@@ -2244,6 +2257,8 @@ finally:
 
     terminal_report["native_stop_root_preparation_denied"] = True
     terminal_report["native_stop_restart_no_rearm"] = True
+    verify_restore_stopped(rpc,identity,restore_context,restore_stop)
+    terminal_report["source_restore_restart_preserves_unknown_and_canary"] = True
     # Fault-inject an interrupted native state write while its daemon is stopped.
     subprocess.run(["systemctl", "stop", "mano-stopd.service"], check=True)
     pending_file = STOP_STATE / "state.pending"

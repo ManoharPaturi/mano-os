@@ -97,7 +97,7 @@ class Registry:
         prepared = Prepared(row["id"], request.resource_id)
         args = json.loads(request.args_json)
         try:
-            if request.capability == Capability.CHECKPOINT:
+            if request.capability in {Capability.CHECKPOINT,Capability.RESTORE}:
                 prepared.descriptors["root"] = resource.workspace.pin(".", directory=True)
             elif request.capability == Capability.READ:
                 prepared.descriptors["target"] = resource.workspace.pin(args["path"])

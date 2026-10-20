@@ -16,6 +16,7 @@ from .provider_jobs import ProviderJobs
 from .provider_worker import ProviderWorker
 from .pty_jobs import PTYJobs
 from .registry import Registry
+from .restoration import Restorer
 from .state import Denied
 from .stop_state import Snapshot, snapshot
 
@@ -34,6 +35,8 @@ class Runtime:
         self.pending = deque()
         self.file_pending = deque()
         self.checkpoint_pending = deque()
+        self.restore_pending = deque()
+        self.restorer = Restorer(self)
         self.write_pending = deque()
         self.pty_pending = deque()
         self.launcher = launcher
@@ -49,6 +52,7 @@ class Runtime:
         with state.transaction():
             state.recover()
             state.db.execute("UPDATE pty_operations SET state='unknown' WHERE state='intent'")
+            state.db.execute("UPDATE restore_steps SET state='unknown' WHERE state='intent'")
             state.db.execute("UPDATE grants SET revoked=1")
             state.db.execute("UPDATE actions SET state='failed' WHERE state='intent'")
             state.db.execute("UPDATE meta SET value=value+1 WHERE key='epoch'")
@@ -137,6 +141,8 @@ class Runtime:
                 self.pending.append(row["id"])
             if prepared is not None and request.capability == Capability.PTY and self.ptys:
                 self.pty_pending.append(row["id"])
+            if prepared is not None and request.capability == Capability.RESTORE:
+                self.restore_pending.append(row["id"])
             if prepared is not None and request.capability == Capability.CHECKPOINT:
                 self.checkpoint_pending.append(row["id"])
             if prepared is not None and request.capability == Capability.WRITE:
@@ -187,6 +193,19 @@ class Runtime:
 
     def tick(self):
         self.sync_stop()
+        for action_id in list(self.restorer.jobs):
+            try:
+                self.restorer.poll(action_id)
+            except (OSError,ValueError,KeyError,TypeError) as error:
+                self.state.event(action_id,"restore-denied",{"error_type":type(error).__name__})
+        if self.restore_pending and not self.restorer.jobs:
+            action_id = self.restore_pending.popleft()
+            try:
+                self.restorer.launch(action_id)
+            except (OSError,ValueError,KeyError,TypeError) as error:
+                self.settle_model(action_id)
+                self.registry.release(action_id)
+                self.state.event(action_id,"restore-denied",{"error_type":type(error).__name__})
         if self.checkpoint_pending:
             action_id = self.checkpoint_pending.popleft()
             try:
@@ -267,6 +286,11 @@ class Runtime:
             for action_id in self.checkpoint_pending:
                 self.settle_model(action_id)
             self.checkpoint_pending.clear()
+            for action_id in list(self.restorer.jobs):
+                self.restorer.fail(action_id)
+            for action_id in self.restore_pending:
+                self.settle_model(action_id)
+            self.restore_pending.clear()
             for action_id in self.write_pending:
                 self.settle_model(action_id)
             self.write_pending.clear()

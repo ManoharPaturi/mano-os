@@ -49,7 +49,7 @@ def dispatch(state, packet, *, peer, now, boot_id):
         result = chunk(state, **body, caller_uid=peer.uid, boot_id=boot_id)
         return dict(schema_version='1.0', ok=True, output=result['metadata'],
                     data=base64.b64encode(result['data']).decode('ascii'), eof=result['eof'])
-    if value['operation'] in {'checkpoint_result', 'checkpoint_read'}:
+    if value['operation'] in {'checkpoint_result', 'checkpoint_read', 'checkpoint_layout'}:
         from .checkpoints import read
 
         body = value['body']
@@ -60,6 +60,17 @@ def dispatch(state, packet, *, peer, now, boot_id):
             raise Denied('Unexpected checkpoint result fields')
         keys = {key: body[key] for key in ('task_id', 'action_id')}
         receipt, data = read(state, **keys, caller_uid=peer.uid, boot_id=boot_id)
+        if value['operation'] == 'checkpoint_layout':
+            from mano_protocol.restoration import layout
+
+            record = state.db.execute(
+                'SELECT layout_json FROM checkpoint_layouts WHERE action_id=?',
+                                      (body['action_id'],)).fetchone()
+            if record is None:
+                raise Denied('Fresh checkpoint layout unavailable')
+            value_layout = layout(json.loads(record[0]))
+            return dict(schema_version='1.0', ok=True, checkpoint=receipt,
+                layout_sha256=hashlib.sha256(canonical(value_layout).encode()).hexdigest())
         if value['operation'] == 'checkpoint_result':
             return dict(schema_version='1.0', ok=True, checkpoint=receipt)
         offset, length = body['offset'], body['length']
@@ -69,6 +80,14 @@ def dispatch(state, packet, *, peer, now, boot_id):
         piece = data[offset:offset+length]
         return dict(schema_version='1.0', ok=True, checkpoint=receipt,
                     data=base64.b64encode(piece).decode('ascii'), eof=offset+len(piece)==len(data))
+    if value['operation'] == 'restore_result':
+        from .restoration import result
+
+        body=value['body']
+        if not isinstance(body,dict) or set(body)!={'task_id','action_id'}:
+            raise Denied('Unexpected restore result fields')
+        return dict(schema_version='1.0',ok=True,
+            restore=result(state,**body,caller_uid=peer.uid,boot_id=boot_id))
     if value['operation'] == 'file_write_result':
         from .file_writes import result
 

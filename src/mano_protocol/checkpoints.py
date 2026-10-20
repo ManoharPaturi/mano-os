@@ -160,3 +160,107 @@ def metadata(value):
         if type(value[key]) is not int or not 0 <= value[key] <= maximum:
             raise ValueError("Invalid checkpoint byte/file accounting")
     return value
+
+
+def unpack(data):
+    """Bounded canonical Git object decoding, never filesystem archive extraction."""
+    if not isinstance(data, bytes) or not 10240 <= len(data) <= MAX_ARCHIVE:
+        raise ValueError("Bounded checkpoint archive required")
+    objects, members = {}, {}
+    raw_bytes = 0
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:") as source:
+        for member in source:
+            if (
+                not member.isfile()
+                or member.pax_headers
+                or member.name in members
+                or len(members) >= MAX_FILES + MAX_DIRECTORIES + 4
+                or not 0 <= member.size <= MAX_ARCHIVE
+            ):
+                raise ValueError("Invalid checkpoint archive member")
+            content = source.extractfile(member).read()
+            members[member.name] = content
+            if member.name in {"HEAD", "config", "refs/heads/checkpoint"}:
+                continue
+            if not re.fullmatch(r"objects/[a-f0-9]{2}/[a-f0-9]{38}", member.name):
+                raise ValueError("Unexpected checkpoint object path")
+            inflater = zlib.decompressobj()
+            raw = inflater.decompress(content, MAX_BYTES + 1024)
+            raw_bytes += len(raw)
+            if (
+                not inflater.eof
+                or inflater.unused_data
+                or inflater.unconsumed_tail
+                or raw_bytes > MAX_BYTES + 131072
+            ):
+                raise ValueError("Checkpoint decompression quota exhausted")
+            oid = member.name[8:10] + member.name[11:]
+            if hashlib.sha1(raw, usedforsecurity=False).hexdigest() != oid:
+                raise ValueError("Checkpoint Git object hash mismatch")
+            header, body = raw.split(b"\0", 1)
+            kind, size = header.split(b" ")
+            if kind not in {b"blob", b"tree", b"commit"} or size != str(len(body)).encode():
+                raise ValueError("Invalid checkpoint Git object header")
+            objects[oid] = kind, body
+    if set(members) - {"HEAD", "config", "refs/heads/checkpoint"} != {
+        "objects/" + oid[:2] + "/" + oid[2:] for oid in objects
+    }:
+        raise ValueError("Unexpected checkpoint archive entries")
+    reference = members.get("refs/heads/checkpoint", b"").decode("ascii")
+    if not re.fullmatch(r"[a-f0-9]{40}\n", reference):
+        raise ValueError("Invalid checkpoint reference")
+    commit = reference.strip()
+    if commit not in objects or objects[commit][0] != b"commit":
+        raise ValueError("Missing checkpoint commit")
+    line = objects[commit][1].split(b"\n", 1)[0]
+    if not re.fullmatch(b"tree [a-f0-9]{40}", line):
+        raise ValueError("Invalid checkpoint commit tree")
+    files, active = {}, set()
+    tree_count = source_bytes = 0
+
+    def tree(oid, prefix="", depth=0):
+        nonlocal tree_count, source_bytes
+        tree_count += 1
+        if (
+            tree_count > MAX_DIRECTORIES
+            or depth > MAX_DEPTH
+            or oid in active
+            or oid not in objects
+            or objects[oid][0] != b"tree"
+        ):
+            raise ValueError("Invalid cyclic or oversized checkpoint tree")
+        active.add(oid)
+        body = objects[oid][1]
+        while body:
+            mode_name, rest = body.split(b"\0", 1)
+            if len(rest) < 20:
+                raise ValueError("Truncated checkpoint tree entry")
+            child, body = rest[:20].hex(), rest[20:]
+            mode, leaf = mode_name.split(b" ", 1)
+            name = prefix + leaf.decode("utf8")
+            path(name)
+            if b"/" in leaf:
+                raise ValueError("Invalid Git tree leaf")
+            if mode == b"40000":
+                tree(child, name + "/", depth + 1)
+            else:
+                if (
+                    mode not in {b"100644", b"100755"}
+                    or name in files
+                    or child not in objects
+                    or objects[child][0] != b"blob"
+                    or len(files) >= MAX_FILES
+                ):
+                    raise ValueError("Invalid checkpoint source object")
+                blob = objects[child][1]
+                source_bytes += len(blob)
+                if source_bytes > MAX_BYTES:
+                    raise ValueError("Checkpoint source byte quota exhausted")
+                files[name] = blob, mode == b"100755"
+        active.remove(oid)
+
+    tree(line[5:].decode("ascii"))
+    canonical_data, receipt = archive(files)
+    if canonical_data != data or receipt["commit"] != commit:
+        raise ValueError("Checkpoint archive is not a canonical source export")
+    return files

@@ -14,7 +14,7 @@ from mano_protocol.transport import CREDENTIALS, Peer, reply
 PATH = '/run/mano-broker/request.sock'
 OPERATIONS = {'request_approval', 'approval_status', 'propose', 'status', 'artifact_read',
               'model_result', 'file_result', 'terminal_output', 'terminal_output_read',
-              'checkpoint_result', 'checkpoint_read',
+              'checkpoint_result', 'checkpoint_read', 'checkpoint_layout', 'restore_result',
               'pty_status', 'pty_read', 'pty_write', 'pty_resize', 'pty_close', 'file_write_result'}
 
 

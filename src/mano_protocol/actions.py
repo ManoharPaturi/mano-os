@@ -14,6 +14,7 @@ class Capability(StrEnum):
     INSPECT = "system.inspect_health"
     READ = "files.read"
     WRITE = "files.write"
+    RESTORE = "workspace.restore"
     CHECKPOINT = "workspace.checkpoint"
     MCP = "mcp.discover"
     RUN = "terminal.run"
@@ -124,6 +125,10 @@ class ActionRequest:
                 raise ValueError("Reserved broker write-custody directory")
             if capability == Capability.WRITE:
                 text(args["text"], 32768, allow_empty=True)
+        elif capability == Capability.RESTORE:
+            from .restoration import arguments
+
+            arguments(args)
         elif capability == Capability.CHECKPOINT:
             from .checkpoints import EXCLUDED
 

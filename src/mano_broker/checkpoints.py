@@ -50,10 +50,12 @@ def authority(runtime, action_id, expected, now):
     return row, request
 
 
-def capture(workspace, *, observe):
+def capture(workspace, *, observe, layout=None):
     """Stable individual inode reads and post-walk checks, not an atomic FS snapshot."""
     pins, directories, files = {}, {}, {}
     total = entries = 0
+    if layout is not None:
+        layout.update(directories=[], excluded=[])
     try:
 
         def walk(relative, depth):
@@ -77,6 +79,10 @@ def capture(workspace, *, observe):
                         if entries > MAX_ENTRIES:
                             raise Denied("Checkpoint entry quota exhausted")
                         if item.name in EXCLUDED:
+                            if layout is not None and item.name == ".git":
+                                layout["excluded"].append(
+                                    item.name if relative == "." else relative + "/" + item.name
+                                )
                             continue
                         name = item.name if relative == "." else relative + "/" + item.name
                         path(name)
@@ -85,6 +91,8 @@ def capture(workspace, *, observe):
             finally:
                 os.close(directory)
             directories[relative] = (identity(before), names)
+            if layout is not None and relative != ".":
+                layout["directories"].append(relative)
             for leaf in names:
                 observe()
                 name = leaf if relative == "." else relative + "/" + leaf
@@ -121,6 +129,9 @@ def capture(workspace, *, observe):
                 if identity(os.fstat(current.fd)) != expected:
                     raise Denied("Checkpoint source changed or was replaced during capture")
         observe()
+        if layout is not None:
+            layout["directories"].sort()
+            layout["excluded"].sort()
         return archive(files)
     finally:
         for pin in pins.values():
@@ -170,7 +181,8 @@ def execute(runtime, action_id, *, clock=None):
             if clock() >= deadline:
                 raise Denied("Checkpoint capture deadline exhausted")
 
-        data, receipt = capture(resource.workspace, observe=observe)
+        captured_layout = dict(directories=[], excluded=[])
+        data, receipt = capture(resource.workspace, observe=observe, layout=captured_layout)
         observe()
         receipt.update(task_id=request.task_id, action_id=action_id, boot_id=runtime.boot_id)
         metadata(receipt)
@@ -178,6 +190,10 @@ def execute(runtime, action_id, *, clock=None):
             observe()
             state.db.execute(
                 "INSERT INTO checkpoints VALUES(?,?,?)", (action_id, canonical(receipt), data)
+            )
+            state.db.execute(
+                "INSERT INTO checkpoint_layouts VALUES(?,?)",
+                (action_id, canonical(captured_layout)),
             )
             state.transition(action_id, "done", exit_code=0)
             state.event(action_id, "git-workspace-checkpoint-captured", receipt)
