@@ -9,6 +9,7 @@ import os
 import pwd
 import sqlite3
 import stat
+import subprocess
 import time
 from pathlib import Path
 
@@ -68,7 +69,23 @@ class PoweroffRestore:
         return self.raw_public(operation, body, actor)
 
     def sdk(self, managed, **body):
-        return self.python(SDK, body, managed["caller_name"])
+        try:
+            return self.python(SDK, body, managed["caller_name"])
+        except subprocess.CalledProcessError:
+            # Read-only, deliberately narrow diagnostics; never export request/grant
+            # JSON, private source bytes, protected approval views or passwords.
+            with sqlite3.connect("file:/var/lib/mano-broker/runtime/state.sqlite3?mode=ro",
+                                 uri=True) as database:
+                events = database.execute(
+                    "SELECT e.event,e.details_json FROM events e JOIN actions a "
+                    "ON e.action_id=a.id WHERE a.task_id=? "
+                    "AND e.event IN ('checkpoint-denied','restore-denied') ORDER BY e.sequence",
+                    (managed["context"]["task_id"],)).fetchall()
+            import json
+
+            Path("/opt/mano-lab/evidence/stock-source-denial.json").write_text(
+                json.dumps(dict(mode=body["mode"], events=events), indent=2) + "\n")
+            raise
 
     def approval(self, managed, proposed, password, *, cancel_first=False):
         response = self.public("request_approval", proposed, managed["caller_name"])
