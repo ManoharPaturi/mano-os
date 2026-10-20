@@ -118,3 +118,11 @@ Create that empty private directory alongside the other scratch structure. The
 actual host dpkg journal still must be empty at catalog creation, authorization,
 dispatch and result acceptance; this does not bypass that independent check.
 Local 455 tests/46 skips and static checks pass; guest acceptance pending.
+
+Run39453988077 progressed through package-plan assertions and reached native
+Stop. The probe read process State immediately after asynchronous SIGSTOP;
+wait up to two seconds for kernel-confirmed T and revalidate argv/UID/executable
+before inspecting mounts. Confirm both authorities stopped before invoking the
+independent Stop client. This changes only the observation protocol, not the
+product Stop path or guard. Add package-plans.json to the explicit host evidence
+export for independent acceptance. No final native/stock/GUI acceptance yet.

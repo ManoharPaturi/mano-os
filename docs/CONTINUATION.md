@@ -1,3 +1,5 @@
+PR119 run39453988077 reached final package Stop; immediate SIGSTOP-state assertion raced asynchronous delivery. Bounded wait for kernel T + exact argv/UID/exe recheck, wait authorities frozen before nativeStop. Add package-plans.json to host evidence export. 455 local tests/46 skips; full guest acceptance pending.
+
 PR119 run39452513187 cache FileNotFoundError: Python-APT dpkg_journal_dirty enumerates private var/lib/dpkg/updates. Add private empty directory; independent current_status host dirty-journal checks unchanged. 455 local tests/46 skips, native acceptance pending.
 
 PR119 run39450820576 reached cache; private lists directory must include writable scratch partial, not symlink entire directory to RO catalog. Individual signed-file symlinks/private config before APT import. Nativeguard unchanged. 455 local tests/46 skips, guest acceptance pending.

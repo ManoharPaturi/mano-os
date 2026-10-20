@@ -311,6 +311,17 @@ def run(rpc, human, identity, password):
     )
 
 
+def wait_stopped(proc, *, timeout=2):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        state = next(line for line in (proc / "status").read_text().splitlines()
+                     if line.startswith("State:"))
+        if state.split()[1] == "T":
+            return
+        time.sleep(0.01)
+    raise AssertionError("Kernel did not confirm stopped process: " + state)
+
+
 def stop_probe(rpc, human, identity, password, task, broker_pid, launcher_pid, stop_client):
     guard()
     from mano_broker.package_catalog import current_status, summary
@@ -355,10 +366,11 @@ def stop_probe(rpc, human, identity, password, task, broker_pid, launcher_pid, s
                 pidfd = os.pidfd_open(pid)
                 try:
                     signal.pidfd_send_signal(pidfd, signal.SIGSTOP)
-                    status = proc.joinpath("status").read_text()
-                    assert "T" in next(
-                        line for line in status.splitlines() if line.startswith("State:")
-                    )
+                    wait_stopped(proc)
+                    assert proc.joinpath("cmdline").read_bytes().rstrip(b"\0").split(b"\0") == argv
+                    assert proc.stat().st_uid == identity.uid
+                    assert proc.joinpath("exe").resolve(strict=True) == Path(
+                        "/usr/bin/python3").resolve(strict=True)
                     mounts = proc.joinpath("mountinfo").read_text().splitlines()
                     for mount in ("/workspace", "/task-cwd", "/usr/lib/mano-os/package-catalog"):
                         assert any(
@@ -404,6 +416,8 @@ def stop_probe(rpc, human, identity, password, task, broker_pid, launcher_pid, s
     authorities = [broker_pid, launcher_pid]
     subprocess.run(["kill", "-STOP", *map(str, authorities)], check=True)
     try:
+        for pid in authorities:
+            wait_stopped(Path("/proc") / str(pid))
         stopped = subprocess.run(
             ["/usr/sbin/runuser", "-u", "mano-human", "--", str(stop_client)],
             text=True,
