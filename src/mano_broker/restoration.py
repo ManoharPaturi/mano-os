@@ -149,8 +149,10 @@ class Restorer:
         from .file_writes import STAGING
 
         state, registry = self.runtime.state, self.runtime.registry
-        if self.jobs:
-            raise Denied("One restore may run at a time")
+        import threading
+
+        if self.jobs or threading.active_count() != 1:
+            raise Denied("One restore and a single-threaded broker required")
         row, request = self.authority(action_id, "intent")
         prepared = registry.leases.get(action_id)
         resource = registry.resources.get(request.resource_id)
@@ -262,7 +264,11 @@ class Restorer:
         job = self.jobs[action_id]
         state = self.runtime.state
         try:
+            import threading
+
             self.observe(job)
+            if threading.active_count() != 1:
+                raise Denied("Single-threaded fixed-mode creation required")
             native = library()
             if job["phase"] == "stage":
                 if job["file_name"] is None and job["stage_queue"]:

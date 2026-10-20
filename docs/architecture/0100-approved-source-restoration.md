@@ -37,7 +37,9 @@ private staged regular files with only fixed 0660/0770 modes, publish at most
 and unlink/rmdir only validated leaves. No user-selected root path, arbitrary
 flags, chmod/chown, root service or permission-bypass exception is added. Symlink
 paths, mount crossings and unsupported source files are rejected by the existing
-beneath-only resource library. The prior 32 KiB WRITE interface is unchanged.
+beneath-only resource library. The prior 32 KiB WRITE interface is unchanged. Restore launch and native polling
+require a single-threaded broker, preserving the fixed temporary-umask creation
+contract already enforced by WRITE.
 Executable bits are preserved; original ownership, ACLs and full permission modes
 are not promised by Git source checkpoints.
 

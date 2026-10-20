@@ -409,3 +409,13 @@ class RestoreLifecycleTests(unittest.TestCase):
             ).fetchone()[0],
             0,
         )
+
+    def test_threaded_broker_refuses_before_fixed_mode_staging(self):
+        with patch("threading.active_count", return_value=2):
+            with self.assertRaises(Denied):
+                self.worker.launch(self.action)
+        self.assertFalse((self.root / ".mano-write-staging").exists())
+        self.assertEqual(
+            self.state.db.execute("SELECT count(*) FROM restore_attempts").fetchone()[0], 0
+        )
+        self.assertEqual((self.root / "a").read_bytes(), b"was file")
