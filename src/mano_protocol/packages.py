@@ -1,0 +1,178 @@
+"""Explicit Debian package forecasts; a plan never grants installation authority."""
+
+import hashlib
+import re
+
+from .actions import canonical, text
+
+MAX_NAMES = 8
+MAX_CHANGES = 64
+MAX_RESULT = 49152
+TIMEOUT = 60
+
+
+def digest(value):
+    if not isinstance(value, str) or not re.fullmatch("[a-f0-9]{64}", value):
+        raise ValueError("Exact package catalog digest required")
+    return value
+
+
+def name(value):
+    if not isinstance(value, str) or not re.fullmatch("[a-z0-9][a-z0-9+.-]{1,63}", value):
+        raise ValueError("A canonical Debian package name is required")
+    return value
+
+
+def arguments(value):
+    if not isinstance(value, dict) or set(value) != {"names", "catalog_id"}:
+        raise ValueError("Only exact package names and a catalog ID are allowed")
+    names = value["names"]
+    if (
+        not isinstance(names, list)
+        or not 1 <= len(names) <= MAX_NAMES
+        or any(name(item) != item for item in names)
+        or names != sorted(set(names))
+    ):
+        raise ValueError("Bounded sorted unique package names required")
+    digest(value["catalog_id"])
+    return value
+
+
+def version(value):
+    if value is not None:
+        text(value, 256)
+        if not re.fullmatch("[A-Za-z0-9.+:~_-]+", value):
+            raise ValueError("Invalid package version")
+    return value
+
+
+def count(value, *, signed=False):
+    if type(value) is not int or not (-(2**40) if signed else 0) <= value <= 2**40:
+        raise ValueError("Invalid bounded package byte accounting")
+    return value
+
+
+def result(value, *, expected):
+    arguments(expected)
+    if (
+        not isinstance(value, dict)
+        or set(value)
+        != {
+            "schema_version",
+            "names",
+            "catalog_id",
+            "status_sha256",
+            "solver",
+            "requested",
+            "changes",
+            "download_bytes",
+            "net_installed_bytes",
+            "peak_space_bytes",
+            "free_space_bytes_at_catalog",
+            "catalog_expires_at",
+            "install_authorized",
+            "effect_verified",
+            "host_archive_cache_considered",
+            "network_used",
+            "maintainer_scripts_executed",
+        }
+        or value["schema_version"] != "1.0"
+        or value["names"] != expected["names"]
+        or value["catalog_id"] != expected["catalog_id"]
+        or any(
+            value[field] is not False
+            for field in (
+                "install_authorized",
+                "effect_verified",
+                "host_archive_cache_considered",
+                "network_used",
+                "maintainer_scripts_executed",
+            )
+        )
+        or value["peak_space_bytes"] is not None
+    ):
+        raise ValueError("Package forecast scope or authority changed")
+    digest(value["status_sha256"])
+    text(value["solver"], 128)
+    count(value["download_bytes"])
+    count(value["net_installed_bytes"], signed=True)
+    count(value["free_space_bytes_at_catalog"])
+    count(value["catalog_expires_at"])
+    requested = value["requested"]
+    if not isinstance(requested, list) or len(requested) != len(expected["names"]):
+        raise ValueError("Incomplete requested package accounting")
+    for row, package in zip(requested, expected["names"], strict=True):
+        if not isinstance(row, dict) or set(row) != {"name", "installed", "candidate"}:
+            raise ValueError("Invalid requested package state")
+        if row["name"] != package or version(row["candidate"]) is None:
+            raise ValueError("Requested package/candidate changed")
+        version(row["installed"])
+    changes = value["changes"]
+    if not isinstance(changes, list) or len(changes) > MAX_CHANGES:
+        raise ValueError("Package change set exceeds budget")
+    observed = []
+    for row in changes:
+        if not isinstance(row, dict) or set(row) != {
+            "name",
+            "operation",
+            "installed",
+            "candidate",
+            "architecture",
+            "archive_sha256",
+            "download_bytes",
+            "installed_bytes",
+        }:
+            raise ValueError("Invalid package change record")
+        observed.append(name(row["name"]))
+        if row["operation"] not in {"install", "upgrade", "downgrade", "reinstall", "remove"}:
+            raise ValueError("Unknown package operation")
+        version(row["installed"])
+        version(row["candidate"])
+        if row["architecture"] not in {"amd64", "all"}:
+            raise ValueError("Unsupported package architecture")
+        if row["operation"] == "remove":
+            if (
+                row["candidate"] is not None
+                or row["archive_sha256"] is not None
+                or row["installed"] is None
+                or row["download_bytes"] != 0
+            ):
+                raise ValueError("Removal cannot carry a replacement")
+        else:
+            if row["candidate"] is None:
+                raise ValueError("Candidate version required")
+            digest(row["archive_sha256"])
+        count(row["download_bytes"])
+        count(row["installed_bytes"])
+    if observed != sorted(set(observed)) or len(canonical(value).encode()) > MAX_RESULT:
+        raise ValueError("Duplicate, unsorted or excessive package result")
+    if sum(row["download_bytes"] for row in changes) != value["download_bytes"]:
+        raise ValueError("Package archive sizes do not match the forecast total")
+    return value
+
+
+def result_digest(value, *, expected):
+    return hashlib.sha256(canonical(result(value, expected=expected)).encode()).hexdigest()
+
+
+def receipt(value, *, expected, metadata):
+    from .terminal_output import metadata as parse
+
+    plan = result(value, expected=expected)
+    parse(metadata, task_id=metadata["task_id"], action_id=metadata["action_id"])
+    if metadata["return_code"] != 0 or metadata["reason"] != "completed":
+        raise ValueError("Only a completed forecast has a custody receipt")
+    return dict(
+        task_id=metadata["task_id"],
+        action_id=metadata["action_id"],
+        boot_id=metadata["boot_id"],
+        catalog_id=plan["catalog_id"],
+        names=plan["names"],
+        sha256=result_digest(plan, expected=expected),
+        download_bytes=plan["download_bytes"],
+        net_installed_bytes=plan["net_installed_bytes"],
+        peak_space_bytes=None,
+        install_authorized=False,
+        effect_verified=False,
+        current_applicability_verified=False,
+    )

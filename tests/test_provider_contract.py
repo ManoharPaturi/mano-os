@@ -30,7 +30,8 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(body['input'][1], dict(role='user', content='human goal'))
         self.assertEqual(body['tool_choice'], 'required')
         self.assertEqual({tool['name'] for tool in body['tools']},
-                         {'propose_terminal', 'propose_file_read', 'propose_file_write'})
+                         {'propose_terminal', 'propose_file_read', 'propose_file_write',
+                          'propose_package_plan'})
         tool = body['tools'][0]
         self.assertIs(tool['strict'], True)
         self.assertEqual(set(tool['parameters']['properties']), {'args', 'reason'})
@@ -141,3 +142,15 @@ class ProviderContractTests(unittest.TestCase):
                 status='completed', arguments=canonical(plan | dict(args=args)))])
             with self.assertRaises(ValueError):
                 self.parse(changed)
+
+    def test_package_tool_requires_catalog_and_cannot_smuggle_apply_or_options(self):
+        plan = dict(args=dict(names=['sl'],catalog_id='a'*64),reason='Preview dependencies')
+        def response(value):
+            return self.response|dict(output=[dict(type='function_call',
+                name='propose_package_plan',status='completed',arguments=canonical(value))])
+        self.assertEqual(self.parse(response(plan)),plan|dict(capability='packages.plan_install'))
+        for args in (dict(names=['-y'],catalog_id='a'*64),
+                     dict(names=['sl'],catalog_id='not-a-catalog'),
+                     dict(names=['sl'],catalog_id='a'*64,apply=True)):
+            with self.assertRaises(ValueError):
+                self.parse(response(plan|dict(args=args)))

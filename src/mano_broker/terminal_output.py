@@ -20,11 +20,28 @@ def persist(state, action_id, outcome, streams, *, boot_id):
                            'WHERE a.id=?', (identifier(action_id),)).fetchone()
     if (row is None or row['state'] != 'executing' or row['boot_id'] != boot_id
             or ActionRequest.parse(row['request_json'].encode()).capability
-            not in {Capability.RUN, Capability.MCP}
+            not in {Capability.RUN, Capability.MCP, Capability.PACKAGE}
             or set(streams) != {'stdout', 'stderr'}
             or any(not isinstance(b, bytes) or len(b) > STREAM_LIMIT for b in streams.values())):
         raise Denied('Exact executing terminal action and bounded bytes required')
     capacity(state)
+    request = ActionRequest.parse(row['request_json'].encode())
+    if request.capability == Capability.PACKAGE and outcome['return_code'] == 0:
+        from mano_protocol.actions import unique_object
+        from mano_protocol.packages import result
+
+        from .package_catalog import load
+
+        expected = json.loads(request.args_json)
+        _, catalog = load(expected['catalog_id'])
+        plan = result(json.loads(streams['stdout'],object_pairs_hook=unique_object),
+                      expected=expected)
+        if (plan['status_sha256'] != catalog['status_sha256']
+                or plan['solver'] != catalog['solver']
+                or plan['catalog_expires_at'] != catalog['expires_at']
+                or plan['free_space_bytes_at_catalog'] != catalog['free_space_bytes']
+                or streams['stderr']):
+            raise Denied('Package plan differs from approved catalog')
     meta = metadata(dict(task_id=row['task_id'], action_id=action_id, boot_id=boot_id,
         return_code=outcome['return_code'], reason=outcome['reason'],
         output_limit_reached=outcome['reason'] == 'output-limit', effect_verified=False,
@@ -49,7 +66,7 @@ def read(state, *, task_id, action_id, caller_uid, boot_id):
         (action_id, task_id, caller_uid, boot_id)).fetchone()
     if (action is None
             or ActionRequest.parse(action['request_json'].encode()).capability
-            not in {Capability.RUN, Capability.MCP}):
+            not in {Capability.RUN, Capability.MCP, Capability.PACKAGE}):
         raise Denied('Terminal output unavailable to this task/caller/boot')
     row = state.db.execute('SELECT * FROM terminal_outputs WHERE action_id=?',
                             (action_id,)).fetchone()

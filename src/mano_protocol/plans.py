@@ -2,7 +2,7 @@
 
 from .actions import ActionRequest, Capability, canonical
 
-EXECUTABLE = {Capability.RUN, Capability.READ, Capability.WRITE}
+EXECUTABLE = {Capability.RUN, Capability.READ, Capability.WRITE, Capability.PACKAGE}
 
 
 def parse_plan(value):

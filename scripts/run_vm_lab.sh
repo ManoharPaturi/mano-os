@@ -263,7 +263,8 @@ local-hostname: mano-runtime-stock
   ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo cloud-init status --wait'
   # Only the package and explicit test scripts enter this clean VM; no src/ or lab config.
   tar -cf - -C "$repo_root" scripts/guest_guard.sh scripts/ci_tty.py scripts/probe_stock_runtime.py \
-    scripts/probe_poweroff_restore.py scripts/install_stock_runtime.sh tests/desktop/stock_prompt_contract.py | \
+    scripts/probe_poweroff_restore.py scripts/probe_package_plans.py \
+    scripts/install_stock_runtime.sh tests/desktop/stock_prompt_contract.py | \
     ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo mkdir -p /opt/mano-lab; sudo tar -xf - -C /opt/mano-lab'
   cat "$repo_root/evidence/mano-runtime_0.1.0~prototype2_amd64.deb" | \
     ssh "${ssh_opts[@]}" lab@127.0.0.1 'sudo tee /var/tmp/mano-runtime.deb > /dev/null'

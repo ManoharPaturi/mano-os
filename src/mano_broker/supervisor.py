@@ -23,9 +23,9 @@ MAX_REPORT = 192 * 1024
 class Child:
     def __init__(self, manager, admission):
         request = ActionRequest.parse(canonical(admission.request.body()).encode())
-        if request.capability not in {Capability.RUN, Capability.MCP}:
+        if request.capability not in {Capability.RUN, Capability.MCP, Capability.PACKAGE}:
             raise Denied("Supervised terminal request required")
-        self.timeout = json.loads(request.args_json)["timeout_seconds"]
+        self.timeout = json.loads(request.args_json).get("timeout_seconds",60)
         self.group = manager.create(admission.action_id, admission.limits)
         self.started = False
         self.closed = False
@@ -78,11 +78,18 @@ class Child:
                     parent_pid=parent,
                 )
                 args = json.loads(admission.request.args_json)
+                package = {}
+                if request.capability == Capability.PACKAGE:
+                    from .package_catalog import argv
+
+                    package = dict(package_catalog_id=args['catalog_id'])
+                    args = dict(argv=argv(args),timeout_seconds=60)
                 with Home(args["argv"]) as home:
                     if request.capability == Capability.MCP and home.name is not None:
                         raise Denied("Coding profiles cannot be MCP servers")
                     command(self.workspace, self.cwd, args["argv"], home=home,
-                            read_only=request.capability == Capability.MCP)
+                            read_only=request.capability in {Capability.MCP,Capability.PACKAGE},
+                            **package)
                 # Fail before READY on invalid setup; no CLI process is created.
                 os.write(report_w, b"R")
                 if os.read(self.control_r, 1) != b"s":
@@ -96,6 +103,8 @@ class Child:
                     return True
 
                 execute, extra = run, {}
+                if request.capability == Capability.PACKAGE:
+                    extra = package
                 if request.capability == Capability.MCP:
                     from .mcp_discovery import run as discover
 

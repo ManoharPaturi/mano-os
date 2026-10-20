@@ -29,7 +29,8 @@ def guard():
     return str(GUARD)
 
 
-def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None, read_only=False):
+def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None, read_only=False,
+            package_catalog_id=None):
     if type(task_pty) is not bool or type(read_only) is not bool:
         raise ValueError('Explicit task PTY mode required')
     if sys.platform != "linux" or os.geteuid() == 0:
@@ -76,6 +77,17 @@ def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None, read_only=
         raise ValueError("Pinned delegate requires an immutable synthetic home")
     require_patched()  # Fail closed; no unsandboxed or old-package fallback.
     native = guard()
+    package_mounts = []
+    if package_catalog_id is not None:
+        from .package_catalog import load, trusted
+
+        catalog, _ = load(package_catalog_id)
+        solver = Path('/usr/lib/mano-os/mano_broker/package_solver.py')
+        trusted(solver)
+        if not read_only or argv[:3] != ['/usr/bin/python3','-I','/package-solver.py']:
+            raise ValueError('Only the fixed read-only package solver can receive a catalog')
+        package_mounts = ['--ro-bind',str(catalog),'/catalog',
+                          '--ro-bind',str(solver),'/package-solver.py']
     return [
         "/usr/bin/bwrap",
         "--unshare-all",
@@ -136,6 +148,7 @@ def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None, read_only=
         "--chdir",
         "/task-cwd",
         *(["--remount-ro", "/workspace", "--remount-ro", "/task-cwd"] if read_only else []),
+        *package_mounts,
         *(home.fragment() if home is not None else []),
         "--setenv",
         "PATH",

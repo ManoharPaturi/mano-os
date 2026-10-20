@@ -173,6 +173,10 @@ def run_step(managed, *, plan=None, model_policy=None):
             task['write_result'] = write_metadata(receipt, task_id=context['task_id'],
                 action_id=action_id, path=proposal['args']['path'])
             task['status'] = 'write_published'
+        elif proposal['capability'] == 'packages.plan_install':
+            task['package_result'] = control_request('inspect_package_plan',dict(
+                task_id=context['task_id'],action_id=action_id))['forecast']
+            task['status'] = 'package_plan_ready'
         else:
             task['status'] = 'completed' if action['verified'] else 'verifying'
     elif action['state'] in states:

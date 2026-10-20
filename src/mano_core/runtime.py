@@ -23,6 +23,7 @@ class TaskState(TypedDict, total=False):
     read_result: dict | None
     terminal_output: dict | None
     write_result: dict | None
+    package_result: dict | None
 
 
 class AgentRuntime:
@@ -61,7 +62,8 @@ class AgentRuntime:
                 or parsed.idempotency_key != state['operation_key']
                 or parsed.capability not in EXECUTABLE or 'grant_id' in proposal):
             raise ValueError('Checkpoint proposal changed task scope')
-        update = dict(proposal=proposal, read_result=None, terminal_output=None, write_result=None)
+        update = dict(proposal=proposal, read_result=None, terminal_output=None, write_result=None,
+                      package_result=None)
         action_id = state.get('action_id')
         if action_id is None:
             approval_id = state.get('approval_id')
@@ -101,6 +103,14 @@ class AgentRuntime:
                 if receipt is None:
                     raise ValueError('Completed write has no publication receipt')
                 update.update(status='write_published', write_result=receipt)
+            elif parsed.capability == 'packages.plan_install':
+                from mano_protocol.packages import receipt
+
+                from .packages import PackagePlan
+
+                observed = PackagePlan(self.broker,proposed=proposal,action_id=action_id).result()
+                update.update(status='package_plan_ready',package_result=receipt(
+                    observed['plan'],expected=proposal['args'],metadata=observed['metadata']))
             else:
                 update['status'] = 'completed' if action['verified'] else 'verifying'
         elif status == 'unknown':

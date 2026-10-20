@@ -1,3 +1,23 @@
+# Current package forecasts — not yet accepted
+
+PR118 mergedbf25d57828dae429114b8009c4813491c07a98c1 after final35b19f9/
+CI39390053998 ALLSUCCESS/artifact12250475386,54hashes/38flags/package/actual
+poweroff source recovery/privatejournalpreservation/all6rawGUI accepted.
+Postmain39392442977 verifiedSUCCESS. Fullphases0–7 remainACTIVE/incomplete.
+
+Currentfeat/approved-package-plans adds ADR0103 typed packages.plan_install with
+exactnames/catalogID, nativePAM separatefromAuto/Full, Root-onlyoffline signed
+catalogsnapshot refresh, existingreadonly network-off sandbox/cgroup/Stop solver,
+strictresult/durablecustody/SDK/core package_plan_ready receipt, nonexecuting
+providercontract, packageCLI/dependencies and guardedCIprobes including independent
+apt-getsimulation, corrupt/stalecatalog, unknownpkg, configinjection, frozenactual
+solver+broker+launcherStop/restartunknown, stockSDK/corePAM before/afterrealboot.
+Local451testsPASS/46Linuxskips andRuff; actualnewguestproofnotyetexecuted. No install/
+applyhelper, modelcall/key/disclosure, hostcredential or servicefilterbypass.
+CI/artifacts/all6freshpixels required beforemerge. Disk25GiBfree88%.
+Detailedcontinuation/evidence in outputs/CONTINUATION.md. Do notdeclarefullversion
+complete fromreadonlypackageplan; privilegedapply/snapshots/recovery remain.
+
 # Current recorded developer workflow (under review)
 
 Branch feat/durable-developer-workflow adds WRITE to strict typed/provider/core

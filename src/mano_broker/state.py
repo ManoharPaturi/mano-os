@@ -292,8 +292,8 @@ class State:
                 }
             ).encode()
         )
-        if (capability in {Capability.RUN, Capability.PTY, Capability.MCP}
-                and approved_args["timeout_seconds"] > max_timeout_seconds):
+        if (capability in {Capability.RUN, Capability.PTY, Capability.MCP, Capability.PACKAGE}
+                and approved_args.get("timeout_seconds",60) > max_timeout_seconds):
             raise ValueError("Approved timeout exceeds grant budget")
         grant_id = secrets.token_hex(16)
         with self.transaction():
@@ -369,8 +369,9 @@ class State:
             budget = json.loads(grant["budget_json"])
             args = json.loads(request.args_json)
             if (
-                request.capability in {Capability.RUN, Capability.PTY, Capability.MCP}
-                and args["timeout_seconds"] > budget["max_timeout_seconds"]
+                request.capability in {Capability.RUN, Capability.PTY, Capability.MCP,
+                                       Capability.PACKAGE}
+                and args.get("timeout_seconds",60) > budget["max_timeout_seconds"]
             ):
                 raise Denied("Requested timeout exceeds grant")
             from .feedback import validate
@@ -378,6 +379,9 @@ class State:
 
             validate(self, request, caller_uid=caller_uid, boot_id=boot_id)
             validate_restore(self, request, caller_uid=caller_uid, boot_id=boot_id)
+            from .package_catalog import validate as validate_packages
+
+            validate_packages(request)
             # All profiles retain the same boundaries. Network, external effects,
             # devices, credentials and host-system mutation have no capability here.
             action_id = secrets.token_hex(16)

@@ -273,7 +273,7 @@ try:
     joined = True
     CODE.mkdir(mode=0o755)
     for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core", "mano_protocol",
-                    "mano_provider", "mano_egress"):
+                    "mano_provider", "mano_egress", "mano_runtime"):
         shutil.copytree(
             ROOT / "src" / package, CODE / package, ignore=shutil.ignore_patterns("__pycache__")
         )
@@ -1868,6 +1868,13 @@ finally:client.close()
     terminal_report["mcp_discovery_official_sdk_native_pam_and_hostile_peers"] = True
     terminal_report["mcp_discovery_witness"] = mcp_records
     (ROOT / "evidence/mcp-discovery.json").write_text(json.dumps(mcp_records, indent=2) + "\n")
+    from probe_package_plans import run as probe_package_plans
+
+    package_records = probe_package_plans(rpc,human,identity,password)
+    terminal_report['package_plan_signed_catalog_native_pam_public_sdk'] = True
+    terminal_report['package_plan_no_install_workspace_config_or_replay_effect'] = True
+    terminal_report['package_plan_witness'] = package_records
+    (ROOT/'evidence/package-plans.json').write_text(json.dumps(package_records,indent=2)+'\n')
     from probe_checkpoints import run as probe_checkpoints
 
     checkpoint_report = probe_checkpoints(rpc, human, identity, password,
@@ -2548,6 +2555,13 @@ s.close()
         old_grant_journal_revocation_observed=True,
         rearm_after_drain=True, native_stop_replacement_launcher_drained=True,
         native_stop_generation=9)
+    from probe_package_plans import stop_probe as stop_package_plan
+
+    package_stop = stop_package_plan(rpc,human,identity,password,replaced_task,
+        ready(),replacement_launcher,STOP_CLIENT)
+    terminal_report['package_plan_frozen_native_stop_and_restart_no_effect'] = True
+    terminal_report['package_plan_stop_witness'] = package_stop
+    terminal_report['native_stop_generation'] = package_stop['stop_generation']
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,

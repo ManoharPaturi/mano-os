@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from mano_broker.approvals import Approvals
 from mano_broker.protocol import ActionRequest, canonical
@@ -151,3 +152,32 @@ class PermissionProfileTests(unittest.TestCase):
                         dict(mode='full-access', duration_seconds=301)):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 configuration(base | changed)
+
+    def test_package_forecast_needs_separate_consent_and_refuses_stale_catalog(self):
+        self.profile('full-access')
+        catalog = dict(catalog_id='f'*64,architecture='amd64',expires_at=5000)
+        proposed = self.proposal('packages.plan_install',dict(names=['sl'],catalog_id='f'*64))
+        with patch('mano_broker.package_catalog.load',return_value=(None,catalog)):
+            pending = self.request(proposed,12)
+            self.assertEqual(pending['state'],'pending')
+            self.assertIsNone(pending['grant_id'])
+            self.assertEqual(self.state.db.execute(
+                'SELECT remaining FROM task_profiles').fetchone()[0],4)
+            view = self.queue.view(pending['approval_id'],human_uid=1002)
+            self.assertFalse(view['package_scope']['installation_authorized'])
+            self.assertEqual(view['args'],proposed['args'])
+            grant = self.queue.approve(pending['approval_id'],authenticated_human_uid=1002,
+                nonce=view['nonce'],operation_digest=view['operation_digest'],now=13,boot_id='boot')
+            changed = proposed|dict(grant_id=grant,args=dict(names=['bash'],catalog_id='f'*64))
+            with self.assertRaises(Denied):
+                self.state.authorize(ActionRequest.parse(canonical(changed).encode()),
+                    caller_uid=1004,now=14,boot_id='boot')
+            request = ActionRequest.parse(canonical(proposed|dict(grant_id=grant)).encode())
+            with patch('mano_broker.package_catalog.load',side_effect=ValueError('stale catalog')):
+                with self.assertRaises(ValueError):
+                    self.state.authorize(request,caller_uid=1004,now=14,boot_id='boot')
+            self.assertEqual(self.state.db.execute('SELECT used FROM grants WHERE id=?',
+                                                  (grant,)).fetchone()[0],0)
+            self.state.emergency_stop()
+            with self.assertRaises(Denied):
+                self.state.authorize(request,caller_uid=1004,now=14,boot_id='boot')

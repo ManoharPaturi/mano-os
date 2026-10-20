@@ -29,6 +29,32 @@ def dispatch_control(state, packet, *, peer, now, boot_id, runtime=None):
     ):
         raise Denied("Unexpected control envelope")
     body = value["body"]
+    if value['operation'] == 'inspect_package_plan':
+        from mano_protocol.packages import receipt, result
+
+        from .terminal_output import read
+
+        if set(body) != {'task_id','action_id'}:
+            raise Denied('Exact package forecast custody query required')
+        task_id,action_id = identifier(body['task_id']),identifier(body['action_id'])
+        task = state.db.execute('SELECT caller_uid FROM tasks WHERE id=? AND boot_id=?',
+                                (task_id,boot_id)).fetchone()
+        if task is None:
+            raise Denied('No current package forecast task')
+        captured = read(state,task_id=task_id,action_id=action_id,
+                        caller_uid=task[0],boot_id=boot_id)
+        row = state.db.execute('SELECT request_json FROM actions WHERE id=?',
+                                (action_id,)).fetchone()
+        if captured is None or row is None:
+            raise Denied('No durable package forecast')
+        request = json.loads(row[0])
+        if request['capability'] != 'packages.plan_install':
+            raise Denied('Not a package forecast')
+        metadata,output = captured
+        plan = result(json.loads(output['stdout'],object_pairs_hook=unique_object),
+                      expected=request['args'])
+        return dict(schema_version='1.0',ok=True,forecast=receipt(plan,
+                    expected=request['args'],metadata=metadata))
     if value['operation'] in {'register_developer_workflow', 'developer_workflow_status'}:
         from .developer_workflows import register, status
 

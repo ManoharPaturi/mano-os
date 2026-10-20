@@ -25,7 +25,7 @@ class ProcessResult:
     stderr: bytes
 
 
-def run(workspace_fd, cwd_fd, argv, *, timeout, revoked, home=None):
+def run(workspace_fd, cwd_fd, argv, *, timeout, revoked, home=None, package_catalog_id=None):
     if type(timeout) is not int or not 1 <= timeout <= 300 or not callable(revoked):
         raise ValueError("Trusted deadline and revocation observer required")
 
@@ -38,7 +38,9 @@ def run(workspace_fd, cwd_fd, argv, *, timeout, revoked, home=None):
     if is_revoked():
         return ProcessResult("revoked", None, b"", b"")
     with (home if home is not None else Home(argv)) as home:
-        args = command(workspace_fd, cwd_fd, argv, home=home)
+        package = (dict(read_only=True,package_catalog_id=package_catalog_id)
+                   if package_catalog_id is not None else {})
+        args = command(workspace_fd, cwd_fd, argv, home=home, **package)
         if is_revoked():
             return ProcessResult("revoked", None, b"", b"")
         process = subprocess.Popen(
