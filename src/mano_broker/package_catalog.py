@@ -149,7 +149,7 @@ def argv(arguments):
     return [
         "/usr/bin/python3",
         "-I",
-        "/package-solver.py",
+        "/usr/lib/mano-os/package-solver.py",
         canonical(value["names"]),
         value["catalog_id"],
     ]

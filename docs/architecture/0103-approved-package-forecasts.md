@@ -91,3 +91,12 @@ trixie-security and `main` for the two other fixed suites. The signed index
 hash path and all signature/freshness checks remain required. Primary input:
 [Debian trixie-security InRelease](https://deb.debian.org/debian-security/dists/trixie-security/InRelease).
 454 local tests, 46 Linux-only skips; actual guest acceptance pending.
+
+Run39448926739 reached the worker after signed catalog creation. The existing
+native Landlock policy allows read/execute beneath /usr but denies unlisted
+top-level paths, so top-level solver/catalog mounts were inaccessible. Mount
+the exact solver and catalog read-only at `/usr/lib/mano-os/package-solver.py`
+and `/usr/lib/mano-os/package-catalog` inside the already masked implementation
+directory. The normal sandbox still exposes no implementation modules. Landlock
+and seccomp rules remain unchanged. Actual native mount/Stop acceptance remains
+required. Unexpected non-JSON worker stderr now has a bounded CI-only diagnostic.

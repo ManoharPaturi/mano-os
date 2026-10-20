@@ -32,7 +32,10 @@ try:
   failed=read_terminal_output(client,task_id=worker.task_id,action_id=worker.action_id)
   assert failed['metadata']['return_code']==2
   assert not failed['stdout']
-  failure=json.loads(failed['stderr'])
+  try:failure=json.loads(failed['stderr'])
+  except ValueError:
+   diagnostic=dict(metadata=failed['metadata'],stderr=failed['stderr'][:4096])
+   raise AssertionError(diagnostic) from None
   assert failure['error']=='package-plan-unavailable'
   assert failure['stage'] in {'admission','catalog','import','cache','resolve','forecast','recheck'}
   result=dict(failed=True,metadata=failed['metadata'])
@@ -343,7 +346,7 @@ def stop_probe(rpc, human, identity, password, task, broker_pid, launcher_pid, s
                 proc = Path("/proc") / str(pid)
                 argv = proc.joinpath("cmdline").read_bytes().rstrip(b"\0").split(b"\0")
                 if (
-                    argv[:3] != [b"/usr/bin/python3", b"-I", b"/package-solver.py"]
+                    argv[:3] != [b"/usr/bin/python3", b"-I", b"/usr/lib/mano-os/package-solver.py"]
                     or proc.stat().st_uid != identity.uid
                     or proc.joinpath("exe").resolve(strict=True)
                     != Path("/usr/bin/python3").resolve(strict=True)
@@ -357,7 +360,7 @@ def stop_probe(rpc, human, identity, password, task, broker_pid, launcher_pid, s
                         line for line in status.splitlines() if line.startswith("State:")
                     )
                     mounts = proc.joinpath("mountinfo").read_text().splitlines()
-                    for mount in ("/workspace", "/task-cwd", "/catalog"):
+                    for mount in ("/workspace", "/task-cwd", "/usr/lib/mano-os/package-catalog"):
                         assert any(
                             line.split()[4] == mount and "ro" in line.split()[5].split(",")
                             for line in mounts

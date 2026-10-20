@@ -14,6 +14,7 @@ import tempfile
 import time
 from pathlib import Path
 
+CATALOG = Path("/usr/lib/mano-os/package-catalog")
 STAGE = "admission"
 
 
@@ -34,7 +35,7 @@ def fingerprint(manifest):
             or not re.fullmatch("[A-Za-z0-9_./+-]+", name)
         ):
             raise ValueError("Invalid catalog input name")
-        path = Path("/catalog") / name
+        path = CATALOG / name
         if path.is_symlink() or not path.is_file():
             raise ValueError("Regular immutable catalog input required")
         digest = hashlib.sha256()
@@ -66,7 +67,7 @@ def solve(names, identifier):
     ):
         raise ValueError("Exact bounded Debian package request required")
     STAGE = "catalog"
-    manifest = json.loads(Path("/catalog/manifest.json").read_text())
+    manifest = json.loads((CATALOG / "manifest.json").read_text())
     body = {k: v for k, v in manifest.items() if k != "catalog_id"}
     if (
         manifest["catalog_id"] != identifier
@@ -92,13 +93,13 @@ def solve(names, identifier):
             "var/log/apt",
         ):
             (root / relative).mkdir(parents=True, exist_ok=True)
-        shutil.copyfile("/catalog/inputs/sources.list", root / "etc/apt/sources.list")
+        shutil.copyfile(CATALOG / "inputs/sources.list", root / "etc/apt/sources.list")
         shutil.copyfile(
-            "/catalog/inputs/debian-archive-keyring.gpg", root / "etc/apt/trusted.gpg.d/debian.gpg"
+            CATALOG / "inputs/debian-archive-keyring.gpg", root / "etc/apt/trusted.gpg.d/debian.gpg"
         )
-        (root / "var/lib/apt/lists").symlink_to("/catalog/inputs/lists", target_is_directory=True)
-        (root / "var/lib/dpkg/status").symlink_to("/catalog/inputs/status")
-        (root / "var/lib/apt/extended_states").symlink_to("/catalog/inputs/extended_states")
+        (root / "var/lib/apt/lists").symlink_to(CATALOG / "inputs/lists", target_is_directory=True)
+        (root / "var/lib/dpkg/status").symlink_to(CATALOG / "inputs/status")
+        (root / "var/lib/apt/extended_states").symlink_to(CATALOG / "inputs/extended_states")
         apt_pkg.init_config()  # /etc is an empty sandbox tree, never host APT config.
         apt_pkg.config.set("APT::Architecture", "amd64")
         apt_pkg.config.set("APT::Architectures::", "amd64")

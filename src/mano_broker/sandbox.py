@@ -84,10 +84,11 @@ def command(workspace_fd, cwd_fd, argv, *, task_pty=False, home=None, read_only=
         catalog, _ = load(package_catalog_id)
         solver = Path('/usr/lib/mano-os/mano_broker/package_solver.py')
         trusted(solver)
-        if not read_only or argv[:3] != ['/usr/bin/python3','-I','/package-solver.py']:
+        if (not read_only or argv[:3] !=
+                ['/usr/bin/python3','-I','/usr/lib/mano-os/package-solver.py']):
             raise ValueError('Only the fixed read-only package solver can receive a catalog')
-        package_mounts = ['--ro-bind',str(catalog),'/catalog',
-                          '--ro-bind',str(solver),'/package-solver.py']
+        package_mounts = ['--ro-bind',str(catalog),'/usr/lib/mano-os/package-catalog',
+                          '--ro-bind',str(solver),'/usr/lib/mano-os/package-solver.py']
     return [
         "/usr/bin/bwrap",
         "--unshare-all",
