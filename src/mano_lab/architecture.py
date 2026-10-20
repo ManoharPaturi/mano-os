@@ -278,6 +278,28 @@ def audit(root: Path, spec: Path, adr: Path):
         and recovery["root_mount"]["filesystems"][0]["fsroot"] == "/@recovery",
         "Root recovery not demonstrated",
     )
+    package_recovery = recovery.get('package_recovery', {})
+    prepared = package_recovery.get('prepared', {})
+    restored = package_recovery.get('actual_recovery_boot', {})
+    captured = package_recovery.get('created', {})
+    require(
+        recovery.get('package_change_recovery_verified') is True
+        and restored.get('boot_id') != captured.get('boot_id')
+        and restored.get('boot_id') == recovery['boot_id']
+        and restored.get('restored_status_sha256') == captured.get('status_sha256')
+        and package_recovery.get('source_status_after') != captured.get('status_sha256')
+        and restored.get('executable_absent') is True
+        and restored.get('binary_etc_canary_restored') is True
+        and restored.get('changed_source_preserved') is True
+        and prepared.get('source_root_preserved') is True
+        and prepared.get('source_snapshot_preserved') is True
+        and prepared.get('boot_selected') is False
+        and captured.get('snapshot_read_only') is True
+        and package_recovery.get('real_dpkg_lock_conflict') is True
+        and package_recovery.get('nested_package_subvolume_denied') is True
+        and package_recovery.get('duplicate_clone_denied') is True,
+        'Package-state recovery and admission evidence incomplete',
+    )
     resources = load("resources.json")
     require(
         resources.get("app_startup_observations")

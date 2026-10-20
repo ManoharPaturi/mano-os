@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 if [ "$1" = install ]; then
-    for path in /usr/lib/mano-os /usr/libexec/mano-approve /usr/libexec/mano-stopd /usr/libexec/mano-stop /usr/libexec/mano-sandbox-guard /usr/lib/mano-broker/libmano-resources.so /usr/sbin/mano-package-catalog; do
+    for path in /usr/lib/mano-os /usr/libexec/mano-approve /usr/libexec/mano-stopd /usr/libexec/mano-stop /usr/libexec/mano-sandbox-guard /usr/lib/mano-broker/libmano-resources.so /usr/sbin/mano-package-catalog /usr/sbin/mano-package-recovery; do
         if [ -e "$path" ] || [ -L "$path" ]; then
             echo 'Existing manual mano runtime files require operator reconciliation before first package install.' >&2
             exit 1

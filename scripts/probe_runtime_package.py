@@ -118,6 +118,37 @@ def main():
         command("dpkg", "--install", str(package))
         installed = True
         payload_count = verify_payload()
+        no_terminal = subprocess.run(
+            ["/usr/sbin/mano-package-recovery", "create"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert no_terminal.returncode != 0 and "Root controlling terminal" in no_terminal.stderr
+        recovery_code, recovery_output = native_terminal("mano_runtime.recovery", ("create",))
+        assert recovery_code == 0, recovery_output[-4096:]
+        recovery_rows = [
+            json.loads(line)
+            for line in recovery_output.decode().splitlines()
+            if line.startswith("{")
+        ]
+        assert len(recovery_rows) == 1
+        packaged_recovery = recovery_rows[0]
+        assert packaged_recovery["snapshot_read_only"] is True
+        assert packaged_recovery["package_install_authorized"] is False
+        (OUT / "packaged-root-recovery.json").write_text(
+            json.dumps(
+                dict(
+                    actual_installed_module=True,
+                    native_root_tty=True,
+                    non_tty_denied=True,
+                    receipt=packaged_recovery,
+                ),
+                indent=2,
+            )
+            + "\n"
+        )
+
         build = json.loads(Path("/usr/share/doc/mano-runtime/build-info.json").read_text())
         assert build["revision"] == source["revision"]
         assert build["source_date_epoch"] == source["epoch"]
@@ -285,6 +316,7 @@ print(json.dumps(control_request('prompt_context',dict(prompt_id=json.load(sys.s
             root_tty_enrollment_and_conflicting_binding_denial=True,
             package_owned_production_gui_pam_profile=True,
             package_owned_langgraph_mock_effect=True,
+            package_owned_root_recovery_snapshot=True,
             effect_verified=False,
             policy_data_preserved_on_reinstall=True,
             reinstall_no_old_authority=True,

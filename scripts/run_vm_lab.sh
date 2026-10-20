@@ -224,7 +224,7 @@ if [ "$result" = 0 ]; then
     'sudo env PYTHONPATH=/opt/mano-lab/src PYTHONDONTWRITEBYTECODE=1 python3 /opt/mano-lab/scripts/probe_runtime_package.py' \
     > "$repo_root/evidence/runtime-package.json"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
-    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json mano-runtime_0.1.0~prototype2_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
+    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json packaged-root-recovery.json mano-runtime_0.1.0~prototype2_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
 
 fi
 if [ "$result" = 0 ]; then

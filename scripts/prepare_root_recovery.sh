@@ -18,6 +18,8 @@ snapper --no-dbus -c mano-root create-config /
 mv /mnt/mano-root/@/.snapshots /mnt/mano-root/@snapshots
 mkdir -m 700 /.snapshots
 mount -o subvol=@snapshots /dev/vdc /.snapshots
+# Tighten only this newly created disposable Root snapshot store.
+chmod 0700 /.snapshots
 printf 'UUID=%s /.snapshots btrfs defaults,subvol=@snapshots 0 0\n' \
   "$(cat /etc/mano-lab-root-uuid)" >> /etc/fstab
 printf 'before\n' > /etc/mano/recovery-sentinel
@@ -25,10 +27,10 @@ chmod 600 /etc/mano/recovery-sentinel
 snapshot=$(snapper --no-dbus -c mano-root create --print-number --description phase0-root)
 case "$snapshot" in ''|*[!0-9]*) echo 'Invalid snapshot number' >&2; exit 1 ;; esac
 test "$(btrfs property get "/.snapshots/$snapshot/snapshot" ro)" = ro=true
-printf 'after\n' > /etc/mano/recovery-sentinel
-btrfs subvolume snapshot "/.snapshots/$snapshot/snapshot" /mnt/mano-root/@recovery
-# Match the recovery clone's fstab to the actual root selected for its next boot.
-sed -i 's/subvol=@ /subvol=@recovery /' /mnt/mano-root/@recovery/etc/fstab
+# The production Root-terminal helper creates another read-only Snapper snapshot,
+# then prepares the fixed clone around a real package change. No boot selection here.
+snapshot=$(python3 scripts/probe_root_package_recovery.py)
+case "$snapshot" in ''|*[!0-9]*) echo 'Invalid recovery snapshot' >&2; exit 1 ;; esac
 python3 - "$snapshot" <<'PY'
 import json,sys
 from pathlib import Path
