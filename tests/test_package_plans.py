@@ -227,6 +227,7 @@ class PrivateAptRootTests(unittest.TestCase):
             (private / "partial/cache-scratch").write_bytes(b"temporary")
             self.assertEqual(before, {p.name: p.read_bytes() for p in lists.iterdir()})
             self.assertEqual(list((root / "etc/apt/apt.conf.d").iterdir()), [])
+            self.assertEqual(list((root / "var/lib/dpkg/updates").iterdir()), [])
             self.assertEqual((root / "var/lib/dpkg/status").resolve(),
                              catalog / "inputs/status")
 

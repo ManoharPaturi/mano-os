@@ -111,3 +111,10 @@ signed inputs, network or nativeguard permission changes are introduced.
 A regression checks scratch writes cannot alter the catalog tree. 455 local
 tests pass, 46 Linux-only skips; actual guest acceptance remains pending.
 Primary implementation reference: [Python-APT Cache source](https://salsa.debian.org/apt-team/python-apt/-/blob/main/apt/cache.py).
+
+Run39452513187 passed earlier private-root initialization but Python-APT's
+`dpkg_journal_dirty` property enumerated the missing private `var/lib/dpkg/updates`.
+Create that empty private directory alongside the other scratch structure. The
+actual host dpkg journal still must be empty at catalog creation, authorization,
+dispatch and result acceptance; this does not bypass that independent check.
+Local 455 tests/46 skips and static checks pass; guest acceptance pending.

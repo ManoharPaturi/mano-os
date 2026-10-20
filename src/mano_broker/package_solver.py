@@ -57,7 +57,7 @@ def prepare_apt_root(root):
         "etc/apt/apt.conf.d",
         "etc/apt/preferences.d",
         "var/lib/apt/lists/partial",
-        "var/lib/dpkg",
+        "var/lib/dpkg/updates",
         "var/cache/apt/archives/partial",
         "var/log/apt",
     ):
