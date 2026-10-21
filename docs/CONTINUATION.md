@@ -1,3 +1,28 @@
+PR120 MCP observer additionally refreshes membership, pidfd-freezes and waits kernelT. Required server/child/broker/launcher must all be present; only exited setup processes tolerated. Actualnative acceptance pending; no production Stop changes.
+
+PR120 run39522700440 failed pre-existing MCP Stop observer PID vanished before /proc/exe. Bounded retry only exited-process races, exact live server/parent/session/cgroup criteria unchanged. 465 local tests/46 skips; final native acceptance pending.
+
+PR120 CI39471840714 failed stock baseline because installed-helper ext4 denial ran before install. Move to installed before-reboot phase, preserve pristine baseline. Root recovery and installed package stages reached; exact new final-head proof still required. Disk18GiB91% warning sent; no large localdownloads/deletion.
+
+PR120 CI39470715507 failed first lock-negative without denial transcript. Fix invalid os.tcgetsid API -> documented tcgetpgrp/getpgrp foreground check. Regression full guard branch; preserve denial/early failure artifacts. 465 local tests/46 skips; actual native acceptance pending.
+
+# Current PR120 work — Root package recovery prerequisite
+
+PR119 merged cfe944709e2ee04ef02ec3adfc98f7d19550a0d8 after exacthead91319f1,
+CI39456370571/54hashes/41flags/all6freshrawGUI accepted. Postmain39459074461 SUCCESS.
+New branch feat/root-package-recovery adds Root-terminal mano-package-recovery
+create/prepare-boot: private Snapper read-only snapshot and fixed @recovery clone,
+Root package-manager locks, mount/subvolume/space/retention/config/fstab checks.
+No agent install permission, public endpoint, auto boot/delete/overwrite. ADR0104.
+CI extends real pre-package recovery to signed sl install and actual recoveryboot,
+plus installed .deb btrfs positive/pristine ext4 refusal. Source root preserved.
+464 localtests/46Linux skips pass; all static checks pass. New native CI pending.
+Disk21GiBfree90%; warning sent, no local VM/model download or user data deletion.
+Full phases0–7 goal ACTIVE/incomplete; native approval/apply/peakspace, physical
+8GB/input, live provider, broad apps and signed OS/release remain unaccepted.
+
+Older notes below are historical; current evidence is outputs/PACKAGE_PLAN_PROGRESS.md.
+
 PR119 run39453988077 reached final package Stop; immediate SIGSTOP-state assertion raced asynchronous delivery. Bounded wait for kernel T + exact argv/UID/exe recheck, wait authorities frozen before nativeStop. Add package-plans.json to host evidence export. 455 local tests/46 skips; full guest acceptance pending.
 
 PR119 run39452513187 cache FileNotFoundError: Python-APT dpkg_journal_dirty enumerates private var/lib/dpkg/updates. Add private empty directory; independent current_status host dirty-journal checks unchanged. 455 local tests/46 skips, native acceptance pending.

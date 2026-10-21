@@ -158,11 +158,15 @@ from pathlib import Path
 root=Path(sys.argv[1])
 shutil.copytree(root,root/'first-root',ignore=shutil.ignore_patterns('first-root'))
 PY_COPY
+set +e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo bash /opt/mano-lab/scripts/prepare_root_recovery.sh' \
   2>&1 | tee "$repo_root/evidence/guest-snapshot.log"
+snapshot_result=${PIPESTATUS[0]}
+set -e
 ssh "${ssh_opts[@]}" lab@127.0.0.1 \
   'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+if [ "$snapshot_result" != 0 ]; then exit "$snapshot_result"; fi
 stop_vm
 start_vm recovery -kernel "$lab_dir/vmlinuz" -initrd "$lab_dir/initrd.img" \
   -append "root=UUID=$root_uuid rootfstype=btrfs rootflags=subvol=@recovery rw console=ttyS0"
@@ -224,7 +228,7 @@ if [ "$result" = 0 ]; then
     'sudo env PYTHONPATH=/opt/mano-lab/src PYTHONDONTWRITEBYTECODE=1 python3 /opt/mano-lab/scripts/probe_runtime_package.py' \
     > "$repo_root/evidence/runtime-package.json"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
-    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json mano-runtime_0.1.0~prototype2_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
+    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json packaged-root-recovery.json mano-runtime_0.1.0~prototype2_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
 
 fi
 if [ "$result" = 0 ]; then

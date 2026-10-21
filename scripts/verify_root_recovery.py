@@ -58,6 +58,40 @@ def main():
             )
         )
         assert snapshot_mount["filesystems"][0]["fsroot"] == "/@snapshots", snapshot_mount
+        package_source = json.loads(
+            Path("/mnt/mano-root/@/opt/mano-lab/evidence/package-root-recovery.json").read_text()
+        )
+        import hashlib
+
+        restored_status = hashlib.sha256(Path("/var/lib/dpkg/status").read_bytes()).hexdigest()
+        assert restored_status == package_source["created"]["status_sha256"]
+        assert not Path("/usr/games/sl").exists()
+        assert Path("/mnt/mano-root/@/usr/games/sl").is_file()
+        assert (
+            Path("/etc/mano/package-recovery-canary").read_bytes()
+            == b"before package change\x00\xff\n"
+        )
+        assert (
+            Path("/mnt/mano-root/@/etc/mano/package-recovery-canary").read_bytes()
+            == b"after package change\n"
+        )
+        assert (
+            hashlib.sha256(Path("/mnt/mano-root/@/var/lib/dpkg/status").read_bytes()).hexdigest()
+            == package_source["source_status_after"]
+        )
+        assert boot_id != package_source["created"]["boot_id"]
+        package_source["actual_recovery_boot"] = dict(
+            boot_id=boot_id,
+            restored_status_sha256=restored_status,
+            executable_absent=True,
+            binary_etc_canary_restored=True,
+            changed_source_preserved=True,
+            root_fsroot=root["fsroot"],
+            agent_install_authorized=False,
+        )
+        Path("evidence/package-root-recovery.json").write_text(
+            json.dumps(package_source, indent=2) + "\n"
+        )
         report = {
             "root_mount": mount,
             "boot_id": boot_id,
@@ -66,6 +100,8 @@ def main():
             "preserved_changed_root_sentinel": changed,
             "snapshot_id": source["snapshot_id"],
             "snapshot_mount": snapshot_mount,
+            "package_recovery": package_source,
+            "package_change_recovery_verified": True,
             "physical_recovery_verified": False,
             "firmware_installer_verified": False,
         }

@@ -11,13 +11,14 @@ import time
 from pathlib import Path
 
 
-def native_terminal(module, arguments=(), *, actor=None, answers=()):
+def native_terminal(module, arguments=(), *, actor=None, answers=(), source_tree=False):
     assert os.geteuid() == 0
     assert Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
     assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip() in {
         "kvm",
         "qemu",
     }
+    assert type(source_tree) is bool
     master, slave = os.openpty()
     child = os.fork()
     if child == 0:
@@ -41,7 +42,7 @@ def native_terminal(module, arguments=(), *, actor=None, answers=()):
                 "/usr/bin/python3",
                 ["python3", "-m", module, *arguments],
                 {
-                    "PYTHONPATH": "/usr/lib/mano-os",
+                    "PYTHONPATH": "/opt/mano-lab/src" if source_tree else "/usr/lib/mano-os",
                     "PYTHONDONTWRITEBYTECODE": "1",
                     "PATH": "/usr/bin:/bin",
                     "LANG": "C.UTF-8",

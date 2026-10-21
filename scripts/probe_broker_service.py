@@ -9,6 +9,7 @@ import os
 import pwd
 import secrets
 import shutil
+import signal
 import socket
 import sqlite3
 import subprocess
@@ -2515,9 +2516,28 @@ s.close()
     mcp_group = Path("/sys/fs/cgroup/system.slice/mano-launcher.service/task-" +
                      mcp_stop["action_id"])
     frozen_authorities = [ready(), replacement_launcher]
-    subprocess.run(["kill", "-STOP", *(str(pid) for pid in
-                   mcp_stop["pids"] + frozen_authorities)], check=True)
+    from probe_package_plans import wait_stopped
+
+    required_frozen = {*frozen_authorities, mcp_stop['detached_child_pid'],
+                       mcp_stop['detached_parent_pid']}
+    observed_frozen = set()
     try:
+        for candidate in mcp_stop['pids'] + frozen_authorities:
+            try:
+                handle = os.pidfd_open(candidate)
+            except ProcessLookupError:
+                assert candidate not in required_frozen
+                continue  # Only a transient setup PID may already have exited.
+            try:
+                signal.pidfd_send_signal(handle, signal.SIGSTOP)
+                wait_stopped(Path('/proc') / str(candidate))
+                observed_frozen.add(candidate)
+            except (FileNotFoundError, ProcessLookupError):
+                assert candidate not in required_frozen
+            finally:
+                os.close(handle)
+        assert required_frozen <= observed_frozen
+        mcp_stop['kernel_confirmed_frozen_pids'] = sorted(observed_frozen)
         stopped_mcp = subprocess.run(["/usr/sbin/runuser", "-u", "mano-human", "--",
             str(STOP_CLIENT)], check=True, capture_output=True, text=True, timeout=5)
         assert "Emergency Stop acknowledged" in stopped_mcp.stdout
