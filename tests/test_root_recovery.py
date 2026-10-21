@@ -161,3 +161,40 @@ class RecoveryCoverageTests(unittest.TestCase):
             self.layout(free=2**30 - 1)
         with self.assertRaises(ValueError):
             self.layout(storage_mode=0o755)
+
+
+class RecoveryJournalTests(unittest.TestCase):
+    def test_dirty_live_journal_is_preserved_for_clean_snapshot_recovery(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            saved = root / "snapshot/var/lib/dpkg/updates"
+            live = root / "live-updates"
+            saved.mkdir(parents=True)
+            live.mkdir()
+            with patch.object(recovery, "UPDATES", live), patch.object(recovery, "trusted"):
+                clean = recovery.recovery_journal_state(root / "snapshot")
+                self.assertTrue(clean["source_package_journal_clean"])
+                self.assertFalse(clean["live_package_journal_dirty"])
+                marker = live / "0000"
+                marker.write_bytes(b"opaque incomplete package journal\x00\xff")
+                observed = recovery.recovery_journal_state(root / "snapshot")
+                self.assertTrue(observed["live_package_journal_dirty"])
+                self.assertEqual(marker.read_bytes(), b"opaque incomplete package journal\x00\xff")
+                self.assertEqual(list(saved.iterdir()), [])
+
+    def test_dirty_saved_snapshot_is_never_recovery_authority(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            saved = root / "snapshot/var/lib/dpkg/updates"
+            live = root / "live-updates"
+            saved.mkdir(parents=True)
+            live.mkdir()
+            (saved / "0000").write_bytes(b"incomplete snapshot journal")
+            with patch.object(recovery, "UPDATES", live), patch.object(recovery, "trusted"):
+                with self.assertRaisesRegex(ValueError, "snapshot contains unsettled"):
+                    recovery.recovery_journal_state(root / "snapshot")
+                self.assertEqual((saved / "0000").read_bytes(), b"incomplete snapshot journal")

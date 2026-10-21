@@ -80,6 +80,13 @@ def main():
             == package_source["source_status_after"]
         )
         assert boot_id != package_source["created"]["boot_id"]
+        assert not any(Path("/var/lib/dpkg/updates").iterdir())
+        old_journal = Path("/mnt/mano-root/@/var/lib/dpkg/updates/0000")
+        assert (
+            hashlib.sha256(old_journal.read_bytes()).hexdigest()
+            == package_source["journal_fixture_sha256"]
+        )
+
         package_source["actual_recovery_boot"] = dict(
             boot_id=boot_id,
             restored_status_sha256=restored_status,
@@ -88,6 +95,8 @@ def main():
             changed_source_preserved=True,
             root_fsroot=root["fsroot"],
             agent_install_authorized=False,
+            restored_package_journal_clean=True,
+            source_dirty_journal_preserved=True,
         )
         Path("evidence/package-root-recovery.json").write_text(
             json.dumps(package_source, indent=2) + "\n"

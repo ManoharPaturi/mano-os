@@ -19,7 +19,7 @@ import time
 import uuid
 from pathlib import Path
 
-from mano_broker.package_catalog import MAX_STATUS, current_status, read, trusted
+from mano_broker.package_catalog import MAX_STATUS, UPDATES, current_status, read, trusted
 from mano_protocol.actions import canonical, unique_object
 
 STORAGE = Path("/.snapshots")
@@ -291,6 +291,19 @@ def recovery_fstab(original, root_uuid, source_fsroot):
     return "\n".join(lines) + "\n"
 
 
+def recovery_journal_state(source):
+    # A pre-existing clean read-only snapshot is the recovery authority. The live
+    # journal may be damaged by the failed change; never repair/delete/parse it.
+    saved = source / "var/lib/dpkg/updates"
+    trusted(saved, directory=True)
+    if any(saved.iterdir()):
+        raise ValueError("Recovery snapshot contains unsettled package journal")
+    trusted(UPDATES, directory=True)
+    return dict(
+        source_package_journal_clean=True, live_package_journal_dirty=any(UPDATES.iterdir())
+    )
+
+
 def prepare(identifier):
     guard()
     current = layout()
@@ -313,7 +326,7 @@ def prepare(identifier):
             current["root_uuid"],
             value["layout"]["source_fsroot"],
         )
-        current_status()  # A dirty live dpkg journal requires operator recovery first.
+        journals = recovery_journal_state(source)  # Package-manager locks remain held.
         try:
             TOP.mkdir(mode=0o700)
         except FileExistsError:
@@ -361,6 +374,7 @@ def prepare(identifier):
                 boot_selected=False,
                 reboot_performed=False,
                 package_install_authorized=False,
+                **journals,
             )
             save(BASE / (identifier + ".prepared.json"), result)
             return result

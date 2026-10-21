@@ -1,3 +1,20 @@
+# Current PR121 work — dirty live package journal recovery
+
+PR120 merged8a787c6ccc3cb66111d51aba64a6d127439e96d8 after exacthead7ad2f45,
+CI39524189782 ALLSUCCESS artifact12313486648 54hashes/41flags/newRootproof/all6GUI
+accepted. Postmain39526482746 still running; inspect terminal before green claim.
+Branch fix/dirty-package-recovery: prepare-boot may recover a verified clean saved
+snapshot while live journal is dirty, with all package-manager locks held. Create
+still refuses dirty state. Reject dirty saved snapshot, preserve live journal,
+no parsing/repair/delete/overwrite/new agent authority. ADR0105. CI explicit dirty
+journal fixture after real successful sl change, actual_dpkg_interruption=false;
+newboot clean exactbeforestate, changedsource retains journalhash. Actual dpkg
+interruption/agentapply still unproved. 467localtests/46Linuxskips +staticchecks pass.
+Native finalheadCI pending. Disk19GiBfree91% warning sent, no userdata deletion or
+localVM/modeldownloads. Full v2.1 phases0–7 goal ACTIVE/incomplete.
+
+Older notes below are historical, current outputs/CONTINUATION.md is authoritative.
+
 PR120 MCP observer additionally refreshes membership, pidfd-freezes and waits kernelT. Required server/child/broker/launcher must all be present; only exited setup processes tolerated. Actualnative acceptance pending; no production Stop changes.
 
 PR120 run39522700440 failed pre-existing MCP Stop observer PID vanished before /proc/exe. Bounded retry only exited-process races, exact live server/parent/session/cgroup criteria unchanged. 465 local tests/46 skips; final native acceptance pending.
