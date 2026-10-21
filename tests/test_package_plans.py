@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from mano_broker import package_catalog
@@ -113,6 +114,53 @@ class PackageProtocolTests(unittest.TestCase):
             PackagePlan.start(denied, proposed=self.proposed, grant_id="f" * 32)
         self.assertEqual(len(calls), 1)
 
+    def test_requested_rows_must_match_final_changes(self):
+        for field, replacement in (("candidate", "9.0"), ("installed", "0.1")):
+            plan = copy.deepcopy(self.plan)
+            plan["requested"][0][field] = replacement
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                result(plan, expected=self.args)
+        missing = self.plan | dict(changes=[], download_bytes=0)
+        with self.assertRaises(ValueError):
+            result(missing, expected=self.args)
+        removed = copy.deepcopy(self.plan)
+        removed["requested"][0]["installed"] = "1:5.02-1"
+        removed["changes"][0].update(operation="remove", installed="1:5.02-1",
+                                     candidate=None, archive_sha256=None, download_bytes=0)
+        removed["download_bytes"] = 0
+        with self.assertRaises(ValueError):
+            result(removed, expected=self.args)
+
+    def test_no_change_requires_already_installed_requested_candidate(self):
+        plan = copy.deepcopy(self.plan)
+        plan.update(changes=[], download_bytes=0, net_installed_bytes=0)
+        plan["requested"][0]["installed"] = plan["requested"][0]["candidate"]
+        self.assertEqual(result(plan, expected=self.args), plan)
+
+    def test_operation_requires_consistent_version_transition(self):
+        for operation, installed, candidate in (
+            ("install", "1", "2"), ("reinstall", None, "2"),
+            ("reinstall", "1", "2"), ("upgrade", None, "2"),
+            ("upgrade", "2", "2"), ("downgrade", None, "2"),
+            ("downgrade", "2", "2"),
+        ):
+            plan = copy.deepcopy(self.plan)
+            plan["requested"][0].update(installed=installed, candidate=candidate)
+            plan["changes"][0].update(operation=operation, installed=installed,
+                                      candidate=candidate)
+            with self.subTest(operation=operation, installed=installed), \
+                    self.assertRaises(ValueError):
+                result(plan, expected=self.args)
+        for operation, installed, candidate in (
+            ("install", None, "2"), ("reinstall", "2", "2"),
+            ("upgrade", "1", "2"), ("downgrade", "2", "1"),
+        ):
+            plan = copy.deepcopy(self.plan)
+            plan["requested"][0].update(installed=installed, candidate=candidate)
+            plan["changes"][0].update(operation=operation, installed=installed,
+                                      candidate=candidate)
+            self.assertEqual(result(plan, expected=self.args), plan)
+
     def test_catalog_administration_rejects_mac_or_unprivileged_identity(self):
         with (
             patch("mano_runtime.package_catalog.sys.platform", "darwin"),
@@ -125,6 +173,57 @@ class PackageProtocolTests(unittest.TestCase):
             self.assertRaises(PermissionError),
         ):
             guard()
+
+
+class FinalResolutionTests(unittest.TestCase):
+    def test_native_apt_upgrade_flag_for_absent_package_means_new_install(self):
+        from mano_broker.package_solver import change_operation
+
+        package = SimpleNamespace(installed=None, marked_delete=False,
+                                  marked_downgrade=False, marked_upgrade=True,
+                                  marked_reinstall=False)
+        self.assertEqual(change_operation(package), "install")
+        package.installed = SimpleNamespace(version="1")
+        self.assertEqual(change_operation(package), "upgrade")
+        package.marked_upgrade = False
+        package.marked_reinstall = True
+        self.assertEqual(change_operation(package), "reinstall")
+        package.marked_reinstall = False
+        with self.assertRaises(ValueError):
+            change_operation(package)
+        package.marked_delete = True
+        self.assertEqual(change_operation(package), "remove")
+
+    def cache(self, later_mark):
+        first = SimpleNamespace(candidate=SimpleNamespace(version="1", downloadable=True),
+                                installed=None, marked_delete=False,
+                                mark_install=lambda **_: None)
+        second = SimpleNamespace(candidate=SimpleNamespace(version="2", downloadable=True),
+                                 installed=None, marked_delete=False,
+                                 mark_install=lambda **_: later_mark(first))
+
+        class Cache(dict):
+            broken_count = 0
+
+        return Cache(alpha=first, bravo=second)
+
+    def test_later_resolution_changes_are_reflected_in_requested_versions(self):
+        from mano_broker.package_solver import resolve_requests
+
+        cache = self.cache(lambda first: setattr(first.candidate, "version", "3"))
+        rows = resolve_requests(cache, ["alpha", "bravo"])
+        self.assertEqual([row["candidate"] for row in rows], ["3", "2"])
+
+    def test_later_resolution_cannot_remove_requested_package(self):
+        from mano_broker.package_solver import resolve_requests
+
+        for mutate in (
+            lambda first: setattr(first, "marked_delete", True),
+            lambda first: setattr(first, "candidate", None),
+            lambda first: setattr(first.candidate, "downloadable", False),
+        ):
+            with self.subTest(mutate=mutate), self.assertRaises(ValueError):
+                resolve_requests(self.cache(mutate), ["alpha", "bravo"])
 
 
 class DebianKeyringPolicyTests(unittest.TestCase):

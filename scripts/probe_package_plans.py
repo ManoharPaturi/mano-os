@@ -180,6 +180,16 @@ def run(rpc, human, identity, password):
             assert plan["names"] == names and plan["catalog_id"] == catalog["catalog_id"]
             assert plan["install_authorized"] is False and plan["network_used"] is False
             assert plan["maintainer_scripts_executed"] is False
+            changes = {row["name"]: row for row in plan["changes"]}
+            for requested in plan["requested"]:
+                change = changes.get(requested["name"])
+                if change is None:
+                    assert requested["installed"] == requested["candidate"]
+                else:
+                    assert change["operation"] != "remove"
+                    assert change["installed"] == requested["installed"]
+                    assert change["candidate"] == requested["candidate"]
+            record["final_requested_versions_match_changes"] = True
             if key == "dependency-plan":
                 assert {"cowsay", "sl"} <= {row["name"] for row in plan["changes"]}
                 reference = subprocess.run(

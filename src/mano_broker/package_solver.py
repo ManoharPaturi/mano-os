@@ -75,6 +75,52 @@ def prepare_apt_root(root):
     (root / "var/lib/apt/extended_states").symlink_to(CATALOG / "inputs/extended_states")
 
 
+def change_operation(package):
+    if package.marked_delete:
+        return "remove"
+    # APT can mark a previously absent package as upgraded. Installed state
+    # distinguishes a new install before consulting the dependency-cache flags.
+    if package.installed is None:
+        return "install"
+    if package.marked_downgrade:
+        return "downgrade"
+    if package.marked_upgrade:
+        return "upgrade"
+    if package.marked_reinstall:
+        return "reinstall"
+    raise ValueError("Unsupported package version transition")
+
+
+def resolve_requests(cache, names):
+    for name in names:
+        if (
+            name not in cache
+            or cache[name].candidate is None
+            or not cache[name].candidate.downloadable
+        ):
+            raise ValueError("Requested package has no signed catalog candidate")
+        cache[name].mark_install(auto_fix=True, auto_inst=True, from_user=True)
+    if cache.broken_count:
+        raise ValueError("Requested package dependencies cannot be resolved")
+    # Later marks can change earlier candidates. Review only the final cache,
+    # and refuse a resolution that removes any explicitly requested package.
+    requested = []
+    for name in names:
+        package = cache[name]
+        if (
+            package.marked_delete
+            or package.candidate is None
+            or not package.candidate.downloadable
+        ):
+            raise ValueError("Final resolution does not retain a requested candidate")
+        requested.append(dict(
+            name=name,
+            installed=package.installed.version if package.installed else None,
+            candidate=package.candidate.version,
+        ))
+    return requested
+
+
 def solve(names, identifier):
     global STAGE
     if (
@@ -126,25 +172,7 @@ def solve(names, identifier):
             if cache.broken_count or cache.dpkg_journal_dirty:
                 raise ValueError("Installed package state needs operator recovery")
             STAGE = "resolve"
-            requested = []
-            for name in names:
-                if (
-                    name not in cache
-                    or cache[name].candidate is None
-                    or not cache[name].candidate.downloadable
-                ):
-                    raise ValueError("Requested package has no signed catalog candidate")
-                package = cache[name]
-                requested.append(
-                    dict(
-                        name=name,
-                        installed=package.installed.version if package.installed else None,
-                        candidate=package.candidate.version,
-                    )
-                )
-                package.mark_install(auto_fix=True, auto_inst=True, from_user=True)
-            if cache.broken_count:
-                raise ValueError("Requested package dependencies cannot be resolved")
+            requested = resolve_requests(cache, names)
             changed = cache.get_changes()
             if len(changed) > 64:
                 raise ValueError("Dependency change set exceeds review budget")
@@ -152,16 +180,7 @@ def solve(names, identifier):
             changes = []
             for package in sorted(changed, key=lambda p: p.name):
                 installed, candidate = package.installed, package.candidate
-                if package.marked_delete:
-                    operation = "remove"
-                elif package.marked_downgrade:
-                    operation = "downgrade"
-                elif package.marked_upgrade:
-                    operation = "upgrade"
-                elif package.marked_reinstall:
-                    operation = "reinstall"
-                else:
-                    operation = "install"
+                operation = change_operation(package)
                 removal = operation == "remove"
                 selected = installed if removal else candidate
                 if selected is None:

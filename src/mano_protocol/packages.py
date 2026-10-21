@@ -142,12 +142,34 @@ def result(value, *, expected):
             if row["candidate"] is None:
                 raise ValueError("Candidate version required")
             digest(row["archive_sha256"])
+            installed, candidate = row["installed"], row["candidate"]
+            if (
+                (row["operation"] == "install" and installed is not None)
+                or (row["operation"] == "reinstall" and installed != candidate)
+                or (
+                    row["operation"] in {"upgrade", "downgrade"}
+                    and (installed is None or installed == candidate)
+                )
+            ):
+                raise ValueError("Package operation contradicts its version transition")
         count(row["download_bytes"])
         count(row["installed_bytes"])
     if observed != sorted(set(observed)) or len(canonical(value).encode()) > MAX_RESULT:
         raise ValueError("Duplicate, unsorted or excessive package result")
     if sum(row["download_bytes"] for row in changes) != value["download_bytes"]:
         raise ValueError("Package archive sizes do not match the forecast total")
+    by_name = {row["name"]: row for row in changes}
+    for row in requested:
+        change = by_name.get(row["name"])
+        if change is None:
+            if row["installed"] != row["candidate"]:
+                raise ValueError("Requested version transition missing from changes")
+        elif (
+            change["operation"] == "remove"
+            or change["installed"] != row["installed"]
+            or change["candidate"] != row["candidate"]
+        ):
+            raise ValueError("Requested package contradicts the final change set")
     return value
 
 
