@@ -298,13 +298,16 @@ def audit(root: Path, spec: Path, adr: Path):
         and package_recovery.get('real_dpkg_lock_conflict') is True
         and package_recovery.get('nested_package_subvolume_denied') is True
         and package_recovery.get('duplicate_clone_denied') is True
-        and package_recovery.get('dirty_live_journal_fixture') is True
-        and package_recovery.get('actual_dpkg_interruption') is False
+        and package_recovery.get('dirty_live_journal_fixture') is False
+        and package_recovery.get('actual_dpkg_interruption') is True
         and package_recovery.get('dirty_journal_snapshot_creation_denied') is True
         and prepared.get('source_package_journal_clean') is True
         and prepared.get('live_package_journal_dirty') is True
         and restored.get('restored_package_journal_clean') is True
-        and restored.get('source_dirty_journal_preserved') is True,
+        and restored.get('source_dirty_journal_preserved') is True
+        and restored.get('interrupted_package_payload_absent') is True
+        and package_recovery.get('interrupted_package', {}).get(
+            'recovery_while_dpkg_live_denied') is True,
         'Package-state recovery and admission evidence incomplete',
     )
     resources = load("resources.json")

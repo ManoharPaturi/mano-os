@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+test "$(id -u)" = 0
+test "$(cat /etc/mano-lab-disposable)" = mano-phase0-ci
+case "$(systemd-detect-virt --vm)" in qemu|kvm) ;; *) exit 2 ;; esac
+case "$1" in
+    configure)
+        printf '%s\n' "$$" > /run/mano-package-interruption-ci/postinst-started
+        while [ ! -e /run/mano-package-interruption-ci/release ]; do sleep 0.1; done
+        printf 'completed\n' > /run/mano-package-interruption-ci/postinst-completed
+        ;;
+esac

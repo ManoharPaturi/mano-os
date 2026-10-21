@@ -1,0 +1,5 @@
+Package: mano-recovery-interrupt-ci
+Version: 0.1
+Architecture: all
+Maintainer: mano disposable CI <noreply@mano.invalid>
+Description: Unsigned disposable-VM interrupted-dpkg recovery fixture
