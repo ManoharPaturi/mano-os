@@ -7,6 +7,11 @@ only after all requested names are marked and the final cache has no broken
 dependencies. Refuse a solution that removes a requested package, drops its
 candidate, or leaves its candidate unavailable from the signed catalog.
 
+Preserved native CI evidence exposed another inconsistency: Python-APT marked
+previously absent cowsay, libncurses6 and sl packages as upgraded. Classify a
+package with no installed version as a new install before consulting the
+upgrade/downgrade flags. A local regression uses that observed flag combination.
+
 The shared result validator independently checks requested rows against the
 final change set. Every requested transition must have a matching change row,
 including identical installed and candidate versions. A requested package

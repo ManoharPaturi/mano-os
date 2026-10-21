@@ -75,6 +75,22 @@ def prepare_apt_root(root):
     (root / "var/lib/apt/extended_states").symlink_to(CATALOG / "inputs/extended_states")
 
 
+def change_operation(package):
+    if package.marked_delete:
+        return "remove"
+    # APT can mark a previously absent package as upgraded. Installed state
+    # distinguishes a new install before consulting the dependency-cache flags.
+    if package.installed is None:
+        return "install"
+    if package.marked_downgrade:
+        return "downgrade"
+    if package.marked_upgrade:
+        return "upgrade"
+    if package.marked_reinstall:
+        return "reinstall"
+    raise ValueError("Unsupported package version transition")
+
+
 def resolve_requests(cache, names):
     for name in names:
         if (
@@ -164,16 +180,7 @@ def solve(names, identifier):
             changes = []
             for package in sorted(changed, key=lambda p: p.name):
                 installed, candidate = package.installed, package.candidate
-                if package.marked_delete:
-                    operation = "remove"
-                elif package.marked_downgrade:
-                    operation = "downgrade"
-                elif package.marked_upgrade:
-                    operation = "upgrade"
-                elif package.marked_reinstall:
-                    operation = "reinstall"
-                else:
-                    operation = "install"
+                operation = change_operation(package)
                 removal = operation == "remove"
                 selected = installed if removal else candidate
                 if selected is None:

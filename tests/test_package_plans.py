@@ -176,6 +176,24 @@ class PackageProtocolTests(unittest.TestCase):
 
 
 class FinalResolutionTests(unittest.TestCase):
+    def test_native_apt_upgrade_flag_for_absent_package_means_new_install(self):
+        from mano_broker.package_solver import change_operation
+
+        package = SimpleNamespace(installed=None, marked_delete=False,
+                                  marked_downgrade=False, marked_upgrade=True,
+                                  marked_reinstall=False)
+        self.assertEqual(change_operation(package), "install")
+        package.installed = SimpleNamespace(version="1")
+        self.assertEqual(change_operation(package), "upgrade")
+        package.marked_upgrade = False
+        package.marked_reinstall = True
+        self.assertEqual(change_operation(package), "reinstall")
+        package.marked_reinstall = False
+        with self.assertRaises(ValueError):
+            change_operation(package)
+        package.marked_delete = True
+        self.assertEqual(change_operation(package), "remove")
+
     def cache(self, later_mark):
         first = SimpleNamespace(candidate=SimpleNamespace(version="1", downloadable=True),
                                 installed=None, marked_delete=False,
