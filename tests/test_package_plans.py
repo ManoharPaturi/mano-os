@@ -175,6 +175,153 @@ class PackageProtocolTests(unittest.TestCase):
             guard()
 
 
+class PackageInstallReviewTests(unittest.TestCase):
+    def setUp(self):
+        from mano_broker.runtime import Runtime
+        from mano_broker.state import State
+        from mano_broker.terminal_output import persist
+
+        fixture = PackageProtocolTests()
+        fixture.setUp()
+        self.plan, self.args = fixture.plan, fixture.args
+        self.temp = tempfile.TemporaryDirectory()
+        self.state = State(Path(self.temp.name).resolve() / 'state')
+        self.runtime = Runtime(self.state, boot_id='boot')
+        self.resource = 'c' * 32
+        self.task = self.state.create_task(human_uid=1002, caller_uid=1004,
+            mode='supervised', resource_id=self.resource, classification='internal', boot_id='boot')
+        self.runtime.registry.resources[self.resource] = SimpleNamespace(task_id=self.task,
+            human_uid=1002, caller_uid=1004, boot_id='boot',
+            workspace=SimpleNamespace(close=lambda: None))
+        self.proposed = proposal(task_id=self.task, resource_id=self.resource,
+            names=['sl'], catalog_id=self.args['catalog_id'], key='plan', reason='Review plan')
+        grant = self.state.issue_grant(self.task, approved_human_uid=1002,
+            approved_args=self.args, capability='packages.plan_install', resource_id=self.resource,
+            expires=100, max_count=1, memory_bytes=64*1024**2, pids=8, cpu_percent=10,
+            max_timeout_seconds=60)
+        request = ActionRequest.parse(canonical(self.proposed | dict(grant_id=grant)).encode())
+        self.catalog = dict(status_sha256=self.plan['status_sha256'],
+            solver=self.plan['solver'], expires_at=self.plan['catalog_expires_at'],
+            free_space_bytes=self.plan['free_space_bytes_at_catalog'])
+        self.patches = [patch('mano_broker.package_catalog.load',
+                             return_value=(None, self.catalog)),
+                        patch('mano_broker.package_reviews.load',
+                              return_value=(None, self.catalog)),
+                        patch('mano_broker.package_reviews.time.time', return_value=1000)]
+        for mocked in self.patches:
+            mocked.start()
+        action, _ = self.state.authorize(request, caller_uid=1004, now=10, boot_id='boot')
+        self.action = action['id']
+        self.state.start(self.action, now=10, boot_id='boot')
+        persist(self.state, self.action, dict(return_code=0, reason='completed'),
+                dict(stdout=canonical(self.plan).encode(), stderr=b''), boot_id='boot')
+        self.body = dict(task_id=self.task, resource_id=self.resource, action_id=self.action,
+                         plan_sha256=hashlib.sha256(canonical(self.plan).encode()).hexdigest())
+
+    def tearDown(self):
+        for mocked in reversed(self.patches):
+            mocked.stop()
+        self.runtime.close()
+        self.state.close()
+        self.temp.cleanup()
+
+    def call(self, body=None, uid=1004):
+        from mano_broker.ipc import Peer
+
+        return self.runtime.dispatch(canonical(dict(schema_version='1.0',
+            operation='package_install_review', body=self.body if body is None else body)).encode(),
+            peer=Peer(42, uid, uid), now=10)['review']
+
+    def test_owned_live_review_sdk_and_no_new_authority_or_effect(self):
+        from mano_broker.ipc import Peer
+        from mano_core.broker import BrokerClient
+        from mano_protocol.transport import CREDENTIALS
+
+        before = self.state.db.total_changes
+        service_peer = Peer(43, 999, 999)
+        with patch('mano_core.broker.pwd.getpwnam',
+                   return_value=SimpleNamespace(pw_uid=999, pw_gid=999)):
+            client = BrokerClient()
+        # Exercise the actual SDK operation filter and socket send path, with
+        # only kernel transport/credentials replaced by a local test adapter.
+        client.peer, client.pidfd = service_peer, 99
+        sent = []
+        def send(packet):
+            sent.append(packet)
+            return len(packet)
+        def receive(*args, **kwargs):
+            return service_peer, self.runtime.dispatch(sent[-1],
+                peer=Peer(42, 1004, 1004), now=10)
+        with patch('mano_core.broker.socket.socket') as socket, \
+                patch('mano_core.broker.socket.SO_PASSCRED', 16, create=True), \
+                patch('mano_core.broker.socket.SO_PEERCRED', 17, create=True), \
+                patch('mano_core.broker.select.select', return_value=([], [], [])), \
+                patch('mano_core.broker.reply', side_effect=receive):
+            connection = socket.return_value.__enter__.return_value
+            connection.getsockopt.return_value = CREDENTIALS.pack(1, 0, 0)
+            connection.send.side_effect = send
+            value = PackagePlan(client, proposed=self.proposed,
+                                action_id=self.action).review_install()
+        client.pidfd = None
+        client.close()
+        self.assertEqual(value, self.call())
+        self.assertEqual(value['plan'], self.plan)
+        self.assertEqual(value['expires_at'], 1060)
+        self.assertFalse(value['install_authorized'])
+        self.assertFalse(value['root_resolution_verified'])
+        self.assertTrue(value['fresh_apply_approval_required'])
+        self.assertEqual(self.state.db.total_changes, before)
+
+    def test_wrong_caller_task_resource_digest_and_extra_fields_denied(self):
+        from mano_broker.state import Denied
+
+        with self.assertRaises(Denied):
+            self.call(uid=1005)
+        for update in (dict(task_id='e'*32), dict(resource_id='e'*32),
+                       dict(action_id='e'*32), dict(plan_sha256='e'*64), dict(apply=True)):
+            with self.subTest(update=update), self.assertRaises((Denied, ValueError)):
+                self.call(self.body | update)
+
+    def test_stale_catalog_and_stop_during_review_refuse_readiness(self):
+        from mano_broker.state import Denied
+
+        with patch('mano_broker.package_reviews.load', side_effect=ValueError('stale')):
+            with self.assertRaises(ValueError):
+                self.call()
+        self.catalog['status_sha256'] = 'f'*64
+        with self.assertRaises(Denied):
+            self.call()
+        self.catalog['status_sha256'] = self.plan['status_sha256']
+        def stop_on_load(*_):
+            self.state.emergency_stop()
+            return None, self.catalog
+        with patch('mano_broker.package_reviews.load', side_effect=stop_on_load):
+            with self.assertRaises(Denied):
+                self.call()
+
+    def test_review_contract_rejects_authority_scope_and_hash_tampering(self):
+        from mano_protocol.packages import install_review
+
+        value = self.call()
+        binding = dict(expected=self.args, task_id=self.task, resource_id=self.resource,
+                       action_id=self.action, plan_sha256=self.body['plan_sha256'], boot_id='boot')
+        for change in (dict(install_authorized=True), dict(root_resolution_verified=True),
+                       dict(fresh_apply_approval_required=False), dict(action_id='f'*32),
+                       dict(expires_at=2000), dict(review_sha256='f'*64)):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                install_review(value | change, **binding)
+
+    def test_corrupt_custody_and_lost_live_resource_cannot_be_reviewed(self):
+        from mano_broker.state import Denied
+
+        self.state.db.execute('UPDATE terminal_outputs SET stdout=?', (b'corrupt',))
+        with self.assertRaises(Denied):
+            self.call()
+        self.runtime.registry.resources.clear()
+        with self.assertRaises(Denied):
+            self.call()
+
+
 class FinalResolutionTests(unittest.TestCase):
     def test_native_apt_upgrade_flag_for_absent_package_means_new_install(self):
         from mano_broker.package_solver import change_operation

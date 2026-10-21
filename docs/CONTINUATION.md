@@ -1,3 +1,21 @@
+# Current work: exact package installation review
+
+PR122 and124 merged with explicit user-authorized admin review bypass only; all
+exact-head CI/artifact/GUI gates preserved. Main5f07825decbce07c5e02e68429adf568abda9873.
+Postmain124CI39620541362 still running at last poll; poll SAMErun untilterminal.
+Current branch feat/package-install-review adds read-only package_install_review
+for owned current task/resource/action and exact durable forecast digest, current
+catalog checks, short lifetime and boot/epoch/Stop binding. SDK validatesresponse.
+No installation/Rootresolution/locks/space reservation/grant/action/process/new
+apply authority. Explicit false fields and fresh_apply_approval_required=true.
+ADR0108. Local478tests run/46Linuxskips +staticpass; final native CI pending.
+Native/publicSDK and installedstockbefore/after clients nowreview forecasts,
+with wrongscope/hash/extra/stalecatalog denials and existing no-effect/Stop gates.
+42ndflag package_install_review_owned_digest_and_stale_denials added. Fullv2.1
+remains incomplete. Disk22GiBfree90%, no silentdeletion/localVM/modeldownloads.
+
+Older historical notes below. outputs/CONTINUATION.md is runtimehandoff.
+
 # Current PR124 integration after PR122 merge
 
 Repository We-build-AI-Stuff/mano-os. User explicitly authorized admin review
