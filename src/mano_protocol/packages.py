@@ -142,17 +142,76 @@ def result(value, *, expected):
             if row["candidate"] is None:
                 raise ValueError("Candidate version required")
             digest(row["archive_sha256"])
+            installed, candidate = row["installed"], row["candidate"]
+            if (
+                (row["operation"] == "install" and installed is not None)
+                or (row["operation"] == "reinstall" and installed != candidate)
+                or (
+                    row["operation"] in {"upgrade", "downgrade"}
+                    and (installed is None or installed == candidate)
+                )
+            ):
+                raise ValueError("Package operation contradicts its version transition")
         count(row["download_bytes"])
         count(row["installed_bytes"])
     if observed != sorted(set(observed)) or len(canonical(value).encode()) > MAX_RESULT:
         raise ValueError("Duplicate, unsorted or excessive package result")
     if sum(row["download_bytes"] for row in changes) != value["download_bytes"]:
         raise ValueError("Package archive sizes do not match the forecast total")
+    by_name = {row["name"]: row for row in changes}
+    for row in requested:
+        change = by_name.get(row["name"])
+        if change is None:
+            if row["installed"] != row["candidate"]:
+                raise ValueError("Requested version transition missing from changes")
+        elif (
+            change["operation"] == "remove"
+            or change["installed"] != row["installed"]
+            or change["candidate"] != row["candidate"]
+        ):
+            raise ValueError("Requested package contradicts the final change set")
     return value
 
 
 def result_digest(value, *, expected):
     return hashlib.sha256(canonical(result(value, expected=expected)).encode()).hexdigest()
+
+
+def install_review(value, *, expected, task_id, resource_id, action_id, plan_sha256, boot_id):
+    fields = {
+        'schema_version', 'task_id', 'resource_id', 'action_id', 'boot_id', 'epoch',
+        'native_generation', 'plan_sha256', 'plan', 'issued_at', 'expires_at',
+        'catalog_inputs_current_at_review', 'package_locks_held',
+        'root_resolution_verified', 'fresh_apply_approval_required',
+        'install_authorized', 'apply_available', 'current_applicability_verified',
+        'external_effects_reversible', 'review_sha256',
+    }
+    if (not isinstance(value, dict) or set(value) != fields
+            or value['schema_version'] != '1.0'
+            or any(value[k] != v for k, v in dict(task_id=task_id, resource_id=resource_id,
+                   action_id=action_id, boot_id=boot_id, plan_sha256=plan_sha256).items())
+            or any(value[k] is not False for k in (
+                'package_locks_held', 'root_resolution_verified', 'install_authorized',
+                'apply_available', 'current_applicability_verified', 'external_effects_reversible'))
+            or value['catalog_inputs_current_at_review'] is not True
+            or value['fresh_apply_approval_required'] is not True):
+        raise ValueError('Package installation review scope or authority changed')
+    count(value['epoch'])
+    if type(value['native_generation']) is not int or not -1 <= value['native_generation'] <= 2**40:
+        raise ValueError('Invalid review Stop generation')
+    count(value['issued_at'])
+    count(value['expires_at'])
+    if not 0 < value['expires_at'] - value['issued_at'] <= 60:
+        raise ValueError('Invalid review lifetime')
+    plan = result(value['plan'], expected=expected)
+    if value['expires_at'] > plan['catalog_expires_at']:
+        raise ValueError('Review outlives its package catalog')
+    if result_digest(value['plan'], expected=expected) != digest(plan_sha256):
+        raise ValueError('Review differs from the captured package forecast')
+    body = {k: v for k, v in value.items() if k != 'review_sha256'}
+    if hashlib.sha256(canonical(body).encode()).hexdigest() != digest(value['review_sha256']):
+        raise ValueError('Package review digest changed')
+    return value
 
 
 def receipt(value, *, expected, metadata):

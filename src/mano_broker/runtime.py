@@ -132,6 +132,11 @@ class Runtime:
             from .package_catalog import summary
 
             return dict(schema_version='1.0',ok=True,catalog=summary())
+        if value['operation'] == 'package_install_review':
+            from .package_reviews import review
+
+            return dict(schema_version='1.0', ok=True,
+                        review=review(self, value['body'], peer=peer))
         if value["operation"] in {"pty_status", "pty_read", "pty_write", "pty_resize", "pty_close"}:
             if self.ptys is None:
                 raise Denied("PTY launcher unavailable")

@@ -1,3 +1,47 @@
+# Current work: exact package installation review
+
+PR122 and124 merged with explicit user-authorized admin review bypass only; all
+exact-head CI/artifact/GUI gates preserved. Main5f07825decbce07c5e02e68429adf568abda9873.
+Postmain124CI39620541362 still running at last poll; poll SAMErun untilterminal.
+Current branch feat/package-install-review adds read-only package_install_review
+for owned current task/resource/action and exact durable forecast digest, current
+catalog checks, short lifetime and boot/epoch/Stop binding. SDK validatesresponse.
+No installation/Rootresolution/locks/space reservation/grant/action/process/new
+apply authority. Explicit false fields and fresh_apply_approval_required=true.
+ADR0108. Local478tests run/46Linuxskips +staticpass; final native CI pending.
+Native/publicSDK and installedstockbefore/after clients nowreview forecasts,
+with wrongscope/hash/extra/stalecatalog denials and existing no-effect/Stop gates.
+42ndflag package_install_review_owned_digest_and_stale_denials added. Fullv2.1
+remains incomplete. Disk22GiBfree90%, no silentdeletion/localVM/modeldownloads.
+
+Older historical notes below. outputs/CONTINUATION.md is runtimehandoff.
+
+# Current PR124 integration after PR122 merge
+
+Repository We-build-AI-Stuff/mano-os. User explicitly authorized admin review
+bypass for PR122 and124, with merge commits and all CI gates retained. No branch
+protection or review policy changed. PR122 merged3190ce53454e2d286c21268d0c69193e572f1e00
+after exacthead5df915a4a9baab31296e2b5328b73d162da11f42/all3CI39529689174,
+artifact12315019184/54hashes/41flags and six actual original GUI views accepted.
+Real controlled unsigned dpkg interruption, held-lock recovery refusal, clean
+recovery boot and changed-source journal/payload preservation proved; no product
+Stop, production maintainer-script or agent install-authority claim.
+
+PR124 preintegration6450d34c74cd1e86ec13555b245db8319d653d56 passed all3CI39603741295,
+artifact12347793789/54hashes/41flags/final resolution checks and six originals.
+Requested rows now describe final APT resolution and must match changes; new
+installs classified by absent installed version before APT upgrade flags.
+
+Merge latest main into PR124; only continuation notes conflicted, now reconciled.
+All final combined-head CI/artifact/6freshGUI acceptance must pass again before
+admin merge with exact expected head. Postmain122 run39617543369 queued; verify
+terminal status. Keep protected rules active. ADR0106/0107 scopes preserved.
+Disk21GiBfree90%, warn/no silentdeletion/localVM/modeldownloads. Full v2.1 remains
+incomplete: privileged packageapply/productionStop/reconciliation, liveprovider/
+authenticatedcoding, physical8GB/input, broadapps/hardware and signedOS/release.
+
+Older historical entries below; outputs/CONTINUATION.md is runtime handoff.
+
 # Current PR121 work — dirty live package journal recovery
 
 PR120 merged8a787c6ccc3cb66111d51aba64a6d127439e96d8 after exacthead7ad2f45,
