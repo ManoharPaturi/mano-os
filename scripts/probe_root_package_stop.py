@@ -89,9 +89,11 @@ print(json.dumps(result))
     return call
 
 
-def run(human, password, broker_pid, launcher_pid, stop_client, *, actor='mano-human'):
+def run(human, password, broker_pid, launcher_pid, stop_client, *, actor='mano-human',
+        snapshot=None):
     guard()
-    from mano_protocol.stop_state import snapshot
+    if snapshot is None:
+        from mano_protocol.stop_state import snapshot
 
     if not snapshot().latched:
         initial = command('/usr/sbin/runuser', '-u', actor, '--', str(stop_client))

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from ci_tty import native_terminal
 from probe_poweroff_restore import PoweroffRestore
@@ -477,12 +478,20 @@ finally:client.close()
             from probe_root_package_stop import human_client
             from probe_root_package_stop import run as stop_root_package
 
+            def installed_stop_snapshot():
+                value = python('''import json
+from mano_protocol.stop_state import snapshot
+value=snapshot()
+print(json.dumps(dict(generation=value.generation,latched=value.latched)))
+''')
+                return SimpleNamespace(**value)
+
             root_stop = stop_root_package(human_client(ACTOR), password,
                 int(command('systemctl', 'show', 'mano-broker.service',
                             '--property=MainPID', '--value').stdout),
                 int(command('systemctl', 'show', 'mano-launcher.service',
                             '--property=MainPID', '--value').stdout),
-                Path('/usr/libexec/mano-stop'), actor=ACTOR)
+                Path('/usr/libexec/mano-stop'), actor=ACTOR, snapshot=installed_stop_snapshot)
             stopped = command("/usr/sbin/runuser", "-u", ACTOR, "--", "/usr/libexec/mano-stop")
             assert "Emergency Stop acknowledged" in stopped.stdout
             assert Path("/var/lib/mano-stopd/state").read_text().endswith(":latched\n")
