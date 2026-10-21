@@ -1,3 +1,26 @@
+# Current work: privileged package Stop domain
+
+Main3a860c5e87bea2ca60e36284edd0913755c0047b includes package-install-review
+(PR126; GitHub also auto-marked original125 merged). Postmain126 CI39630028188
+nowverifiedSUCCESS onexactmain (outputs/pr126-postmerge-ci.json).
+Currentbranchfeat/privileged-package-stop-domain adds emptyreserved
+mano-package.slice and extends nativeCStop/rearm to wholefixedRootdomain. Stopd
+requiresnewSlice, Rootcapabilitysetunchangedempty. Runtime disable/removal stops
+newSlice. No packageexecutor/socket/grant/permission/installer added. ADR0109.
+NativeCIprobe verifies RootUID0parent+detachedsessionchild, CapEff0/NNP1/cgroupRO
+writeEROFS, pidfd/kernelT forRootpair+broker+launcher, populateddomainnativePAM
+rearmrefusal, nativehumanStopdrain/Rootpidfdexit/stablecanary/controllersstillT,
+staleviewrefusal/freshPAMrearm/noRootrestart/survivingnativeStopdaemon+Rootobserver.
+Repeat sameprobe against installed runtime afterstockactualreboot, allowedCI
+driveronly copied. RuntimeMax60/read-onlysystem/privateIPC/network forfixture.
+No productionmaintainerscripts/fullyprivilegedhostileRoot/kernelDstate proof;
+fullRootapply/freshconsent/Rootreresolve/archives/space/snapshot/crashremaining.
+Local478tests/46Linuxskips+Ruff/compile/shell/diff pass. NewnativeCcompile/probe/
+43rdflag/artifacts/sixfreshGUI acceptance stillpending. Disk17GiBfree92% warning,
+no silentdeletion/localVM/modeldownloads. Fullv2.1 goalACTIVE/incomplete.
+
+Older historical notes below; outputs/CONTINUATION.md is currentruntimehandoff.
+
 # Current work: exact package installation review
 
 PR122 and124 merged with explicit user-authorized admin review bypass only; all

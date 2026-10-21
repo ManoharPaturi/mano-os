@@ -1,7 +1,7 @@
 [Unit]
 Description=mano native independent emergency Stop
-Requires=mano-stopd.socket mano-stopd-control.socket mano-core.slice
-After=mano-stopd.socket mano-stopd-control.socket mano-core.slice
+Requires=mano-stopd.socket mano-stopd-control.socket mano-core.slice mano-package.slice
+After=mano-stopd.socket mano-stopd-control.socket mano-core.slice mano-package.slice
 
 [Service]
 Type=notify
@@ -25,7 +25,7 @@ ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectControlGroups=no
-ReadWritePaths=-/sys/fs/cgroup/system.slice/mano-launcher.service /sys/fs/cgroup/mano.slice/mano-core.slice
+ReadWritePaths=-/sys/fs/cgroup/system.slice/mano-launcher.service /sys/fs/cgroup/mano.slice/mano-core.slice /sys/fs/cgroup/mano.slice/mano-package.slice
 RestrictSUIDSGID=yes
 RestrictRealtime=yes
 RestrictNamespaces=yes

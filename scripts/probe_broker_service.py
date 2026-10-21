@@ -58,6 +58,7 @@ UNITS = (
     "mano-stopd.socket",
     "mano-stopd-control.socket",
     "mano-core.slice",
+    "mano-package.slice",
     "mano-provider.socket",
     "mano-provider@.service",
     "mano-controller.service",
@@ -2583,6 +2584,12 @@ s.close()
     terminal_report['package_plan_frozen_native_stop_and_restart_no_effect'] = True
     terminal_report['package_plan_stop_witness'] = package_stop
     terminal_report['native_stop_generation'] = package_stop['stop_generation']
+    from probe_root_package_stop import run as stop_root_package
+
+    root_stop = stop_root_package(human,password,ready(),replacement_launcher,STOP_CLIENT)
+    terminal_report['root_package_uid_zero_frozen_native_stop_domain'] = True
+    terminal_report['root_package_stop_witness'] = root_stop
+    terminal_report['native_stop_generation'] = root_stop['final_generation']
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
