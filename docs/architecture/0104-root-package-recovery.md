@@ -69,3 +69,9 @@ pre-install baseline, so it exercised a missing module. Move it to the installed
 before-reboot phase; preserve the pristine no-code/no-accounts baseline. Include
 the bounded rejection transcript in any assertion failure. No product policy
 or filesystem admission check changes. Actual final-head acceptance pending.
+
+CI39522700440 failed in the pre-existing MCP Stop observer: an enumerated PID
+exited before its /proc/exe read. Retry only FileNotFoundError/ProcessLookupError
+within the existing ten-second observation deadline. Preserve exact server-code,
+parent argv/executable, detached session and cgroup requirements; other errors
+remain failures and absence of a live match still fails. No product Stop change.

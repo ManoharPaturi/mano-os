@@ -1,3 +1,5 @@
+PR120 run39522700440 failed pre-existing MCP Stop observer PID vanished before /proc/exe. Bounded retry only exited-process races, exact live server/parent/session/cgroup criteria unchanged. 465 local tests/46 skips; final native acceptance pending.
+
 PR120 CI39471840714 failed stock baseline because installed-helper ext4 denial ran before install. Move to installed before-reboot phase, preserve pristine baseline. Root recovery and installed package stages reached; exact new final-head proof still required. Disk18GiB91% warning sent; no large localdownloads/deletion.
 
 PR120 CI39470715507 failed first lock-negative without denial transcript. Fix invalid os.tcgetsid API -> documented tcgetpgrp/getpgrp foreground check. Regression full guard branch; preserve denial/early failure artifacts. 465 local tests/46 skips; actual native acceptance pending.

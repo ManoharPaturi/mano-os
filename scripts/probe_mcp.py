@@ -119,23 +119,29 @@ def start_for_stop(rpc, human, identity, password, task):
         if group.exists():
             pids = [int(pid) for pid in (group / "cgroup.procs").read_text().split()]
             for pid in pids:
-                status = Path(f"/proc/{pid}/status").read_text()
-                parent = int(next(line.split()[1] for line in status.splitlines()
-                                  if line.startswith("PPid:")))
-                if parent not in pids:
+                try:
+                    status = Path(f"/proc/{pid}/status").read_text()
+                    parent = int(next(line.split()[1] for line in status.splitlines()
+                                      if line.startswith("PPid:")))
+                    if parent not in pids:
+                        continue
+                    own_args = Path(f"/proc/{pid}/cmdline").read_bytes()
+                    parent_args = Path(f"/proc/{parent}/cmdline").read_bytes()
+                    # Actual server fork, not the supervisor/bwrap topology. The
+                    # child is its own session leader and cannot escape its cgroup.
+                    executable = os.readlink(f"/proc/{pid}/exe")
+                    parent_executable = os.readlink(f"/proc/{parent}/exe")
+                    if (code.encode() in own_args and own_args == parent_args
+                            and os.getsid(pid) == pid
+                            and executable == parent_executable
+                            and Path(executable).name.startswith("python3")):
+                        return dict(action_id=action, pids=pids, detached_child_pid=pid,
+                                    detached_parent_pid=parent, detached_executable=executable,
+                                    detached_session_id=os.getsid(pid))
+                except (FileNotFoundError, ProcessLookupError):
+                    # Exiting supervisor/bwrap transitions can vanish between
+                    # /proc reads. Only an exact live Python server fork above
+                    # can satisfy this probe; keep observing within the deadline.
                     continue
-                own_args = Path(f"/proc/{pid}/cmdline").read_bytes()
-                parent_args = Path(f"/proc/{parent}/cmdline").read_bytes()
-                # Actual server fork, not the supervisor/bwrap topology. The
-                # child is its own session leader and cannot escape its cgroup.
-                executable = os.readlink(f"/proc/{pid}/exe")
-                parent_executable = os.readlink(f"/proc/{parent}/exe")
-                if (code.encode() in own_args and own_args == parent_args
-                        and os.getsid(pid) == pid
-                        and executable == parent_executable
-                        and Path(executable).name.startswith("python3")):
-                    return dict(action_id=action, pids=pids, detached_child_pid=pid,
-                                detached_parent_pid=parent, detached_executable=executable,
-                                detached_session_id=os.getsid(pid))
         time.sleep(.1)
     raise AssertionError("MCP forked server did not start before Stop")
