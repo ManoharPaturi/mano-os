@@ -81,3 +81,7 @@ server pair. Freeze via pidfds and wait for kernel T before native Stop; missing
 transient setup PIDs are harmless, but missing server/child/broker/launcher is
 a failure. Record the confirmed set. This strengthens the existing frozen-worker
 proof without changing production execution, cgroup draining or Stop authority.
+
+ADR0105 supersedes the clean-live-journal prerequisite for clone preparation only;
+snapshot creation still requires clean live state. Saved snapshot cleanliness and
+all existing authority/locking/provenance controls remain mandatory.
