@@ -234,13 +234,36 @@ class PackageInstallReviewTests(unittest.TestCase):
 
     def test_owned_live_review_sdk_and_no_new_authority_or_effect(self):
         from mano_broker.ipc import Peer
-
-        def client(packet):
-            return self.runtime.dispatch(canonical(packet).encode(),
-                peer=Peer(42, 1004, 1004), now=10)
+        from mano_core.broker import BrokerClient
+        from mano_protocol.transport import CREDENTIALS
 
         before = self.state.db.total_changes
-        value = PackagePlan(client, proposed=self.proposed, action_id=self.action).review_install()
+        service_peer = Peer(43, 999, 999)
+        with patch('mano_core.broker.pwd.getpwnam',
+                   return_value=SimpleNamespace(pw_uid=999, pw_gid=999)):
+            client = BrokerClient()
+        # Exercise the actual SDK operation filter and socket send path, with
+        # only kernel transport/credentials replaced by a local test adapter.
+        client.peer, client.pidfd = service_peer, 99
+        sent = []
+        def send(packet):
+            sent.append(packet)
+            return len(packet)
+        def receive(*args, **kwargs):
+            return service_peer, self.runtime.dispatch(sent[-1],
+                peer=Peer(42, 1004, 1004), now=10)
+        with patch('mano_core.broker.socket.socket') as socket, \
+                patch('mano_core.broker.socket.SO_PASSCRED', 16, create=True), \
+                patch('mano_core.broker.socket.SO_PEERCRED', 17, create=True), \
+                patch('mano_core.broker.select.select', return_value=([], [], [])), \
+                patch('mano_core.broker.reply', side_effect=receive):
+            connection = socket.return_value.__enter__.return_value
+            connection.getsockopt.return_value = CREDENTIALS.pack(1, 0, 0)
+            connection.send.side_effect = send
+            value = PackagePlan(client, proposed=self.proposed,
+                                action_id=self.action).review_install()
+        client.pidfd = None
+        client.close()
         self.assertEqual(value, self.call())
         self.assertEqual(value['plan'], self.plan)
         self.assertEqual(value['expires_at'], 1060)

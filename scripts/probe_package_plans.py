@@ -193,9 +193,11 @@ def run(rpc, human, identity, password):
             query = dict(schema_version='1.0', operation='package_install_review', body=dict(
                 task_id=task['task_id'], resource_id=task['resource_id'],
                 action_id=record['action_id'], plan_sha256=record['result']['sha256']))
+            time.sleep(.12)
             assert rpc('request', query)['ok'] is False
             for update in (dict(task_id='0'*32), dict(resource_id='0'*32),
                            dict(action_id='0'*32), dict(plan_sha256='0'*64), dict(apply=True)):
+                time.sleep(.12)
                 assert rpc('request', query | dict(body=query['body'] | update),
                            actor=identity.name)['ok'] is False
             record['install_review_scope_denials'] = True
