@@ -30,6 +30,7 @@ UNITS = (
     "mano-egress@*.service",
     "mano-agent-step-*.service",
     "mano-core.slice",
+    "mano-package.slice",
     "mano-launcher.service",
     "mano-broker.service",
     "mano-approve.service",

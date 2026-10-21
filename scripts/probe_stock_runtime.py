@@ -474,11 +474,21 @@ finally:client.close()
                 os.fsync(stream.fileno())
         else:
             recovered_source = restoration.after(previous, managed, password)
+            from probe_root_package_stop import human_client
+            from probe_root_package_stop import run as stop_root_package
+
+            root_stop = stop_root_package(human_client(ACTOR), password,
+                int(command('systemctl', 'show', 'mano-broker.service',
+                            '--property=MainPID', '--value').stdout),
+                int(command('systemctl', 'show', 'mano-launcher.service',
+                            '--property=MainPID', '--value').stdout),
+                Path('/usr/libexec/mano-stop'), actor=ACTOR)
             stopped = command("/usr/sbin/runuser", "-u", ACTOR, "--", "/usr/libexec/mano-stop")
             assert "Emergency Stop acknowledged" in stopped.stdout
             assert Path("/var/lib/mano-stopd/state").read_text().endswith(":latched\n")
             report = dict(
                 schema_version="1.0",
+                root_package_stop=root_stop,
                 boot_id_before=original["boot_id"],
                 boot_id_after=boot,
                 pristine_baseline=original,
