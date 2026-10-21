@@ -26,7 +26,9 @@ try:
   state=worker.status()
   if state['state'] in {'done','failed','unknown'}:break
   time.sleep(.12)
- if state['state']=='done':result=worker.result()
+ if state['state']=='done':
+  result=worker.result()
+  result['install_review']=worker.review_install()
  else:
   assert state['state']=='failed',state
   failed=read_terminal_output(client,task_id=worker.task_id,action_id=worker.action_id)
@@ -180,6 +182,23 @@ def run(rpc, human, identity, password):
             assert plan["names"] == names and plan["catalog_id"] == catalog["catalog_id"]
             assert plan["install_authorized"] is False and plan["network_used"] is False
             assert plan["maintainer_scripts_executed"] is False
+            review = record['result']['install_review']
+            assert review['plan'] == plan
+            assert review['plan_sha256'] == record['result']['sha256']
+            assert review['install_authorized'] is False and review['apply_available'] is False
+            assert review['fresh_apply_approval_required'] is True
+            assert review['package_locks_held'] is False
+            assert review['root_resolution_verified'] is False
+            assert review['expires_at'] <= catalog['expires_at']
+            query = dict(schema_version='1.0', operation='package_install_review', body=dict(
+                task_id=task['task_id'], resource_id=task['resource_id'],
+                action_id=record['action_id'], plan_sha256=record['result']['sha256']))
+            assert rpc('request', query)['ok'] is False
+            for update in (dict(task_id='0'*32), dict(resource_id='0'*32),
+                           dict(action_id='0'*32), dict(plan_sha256='0'*64), dict(apply=True)):
+                assert rpc('request', query | dict(body=query['body'] | update),
+                           actor=identity.name)['ok'] is False
+            record['install_review_scope_denials'] = True
             changes = {row["name"]: row for row in plan["changes"]}
             for requested in plan["requested"]:
                 change = changes.get(requested["name"])
@@ -262,6 +281,12 @@ def run(rpc, human, identity, password):
             actor=identity.name,
         )
         assert rejected["ok"] is False
+        captured_plan = records['dependency-plan']
+        stale_review = dict(schema_version='1.0', operation='package_install_review', body=dict(
+            task_id=task['task_id'], resource_id=task['resource_id'],
+            action_id=captured_plan['action_id'],
+            plan_sha256=captured_plan['result']['sha256']))
+        assert rpc('request', stale_review, actor=identity.name)['ok'] is False
         with sqlite3.connect(
             "file:/var/lib/mano-broker/runtime/state.sqlite3?mode=ro", uri=True
         ) as database:
@@ -312,6 +337,7 @@ def run(rpc, human, identity, password):
         malicious_workspace_config_ignored=True,
         unknown_package_failed=True,
         stale_catalog_denied_without_grant_use=True,
+        install_review_stale_catalog_denied=True,
         corrupted_input_failed_without_effect=True,
         completed_replay_no_solver=True,
         wrong_caller_denied=True,

@@ -2,9 +2,10 @@
 
 import hashlib
 import json
+import time
 
 from mano_protocol.actions import ActionRequest, canonical, identifier, unique_object
-from mano_protocol.packages import digest, result, result_digest
+from mano_protocol.packages import digest, install_review, result, result_digest
 
 from .broker import read_terminal_output
 
@@ -124,3 +125,17 @@ class PackagePlan:
             effect_verified=False,
             current_applicability_verified=False,
         )
+
+    def review_install(self):
+        captured = self.result()
+        value = self.client(dict(schema_version='1.0', operation='package_install_review',
+            body=dict(task_id=self.task_id, resource_id=self.proposed['resource_id'],
+                      action_id=self.action_id, plan_sha256=captured['sha256'])))
+        if value.get('schema_version') != '1.0' or value.get('ok') is not True:
+            raise ValueError('Package install review unavailable; refresh inputs without applying')
+        reviewed = install_review(value['review'], expected=self.expected, task_id=self.task_id,
+            resource_id=self.proposed['resource_id'], action_id=self.action_id,
+            plan_sha256=captured['sha256'], boot_id=captured['metadata']['boot_id'])
+        if time.time() >= reviewed['expires_at']:
+            raise ValueError('Package review expired; no apply authorization exists')
+        return reviewed

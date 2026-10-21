@@ -1874,6 +1874,7 @@ finally:client.close()
     package_records = probe_package_plans(rpc,human,identity,password)
     terminal_report['package_plan_signed_catalog_native_pam_public_sdk'] = True
     terminal_report['package_plan_no_install_workspace_config_or_replay_effect'] = True
+    terminal_report['package_install_review_owned_digest_and_stale_denials'] = True
     terminal_report['package_plan_witness'] = package_records
     (ROOT/'evidence/package-plans.json').write_text(json.dumps(package_records,indent=2)+'\n')
     from probe_checkpoints import run as probe_checkpoints
