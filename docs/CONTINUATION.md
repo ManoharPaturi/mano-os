@@ -1,3 +1,5 @@
+PR120 MCP observer additionally refreshes membership, pidfd-freezes and waits kernelT. Required server/child/broker/launcher must all be present; only exited setup processes tolerated. Actualnative acceptance pending; no production Stop changes.
+
 PR120 run39522700440 failed pre-existing MCP Stop observer PID vanished before /proc/exe. Bounded retry only exited-process races, exact live server/parent/session/cgroup criteria unchanged. 465 local tests/46 skips; final native acceptance pending.
 
 PR120 CI39471840714 failed stock baseline because installed-helper ext4 denial ran before install. Move to installed before-reboot phase, preserve pristine baseline. Root recovery and installed package stages reached; exact new final-head proof still required. Disk18GiB91% warning sent; no large localdownloads/deletion.

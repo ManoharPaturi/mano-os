@@ -135,7 +135,11 @@ def start_for_stop(rpc, human, identity, password, task):
                             and os.getsid(pid) == pid
                             and executable == parent_executable
                             and Path(executable).name.startswith("python3")):
-                        return dict(action_id=action, pids=pids, detached_child_pid=pid,
+                        current = [int(value) for value in
+                                   (group / "cgroup.procs").read_text().split()]
+                        if pid not in current or parent not in current:
+                            continue
+                        return dict(action_id=action, pids=current, detached_child_pid=pid,
                                     detached_parent_pid=parent, detached_executable=executable,
                                     detached_session_id=os.getsid(pid))
                 except (FileNotFoundError, ProcessLookupError):

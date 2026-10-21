@@ -75,3 +75,9 @@ exited before its /proc/exe read. Retry only FileNotFoundError/ProcessLookupErro
 within the existing ten-second observation deadline. Preserve exact server-code,
 parent argv/executable, detached session and cgroup requirements; other errors
 remain failures and absence of a live match still fails. No product Stop change.
+
+The MCP observer also refreshes membership after matching the live detached
+server pair. Freeze via pidfds and wait for kernel T before native Stop; missing
+transient setup PIDs are harmless, but missing server/child/broker/launcher is
+a failure. Record the confirmed set. This strengthens the existing frozen-worker
+proof without changing production execution, cgroup draining or Stop authority.
