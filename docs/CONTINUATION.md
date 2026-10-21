@@ -1,3 +1,21 @@
+# Current PR122 work — actual interrupted dpkg recovery validation
+
+PR121 merged28881bb325e0be06f587734ae81324ad470fab24, exacthead3ad230b,
+CI39526998931 ALLSUCCESS/artifact12314590994 54hashes/41flags/dirtyfixture/all6GUI
+accepted. Postmain39528902980 still running; poll SAMErun untilterminal.
+Currentbranch test/interrupted-dpkg-recovery extends recovery CI with unsigned
+controlled test .deb, real dpkg statusFD/postinst checkpoint, exact process/pidfd/
+T/payload checks, recovery refusal while live locksheld, processgroupSIGKILL,
+real half-configured journal inventory preserved, clean-source prepare + actual
+recoveryboot cleanstatus/emptyjournal/absentfixturepayload +oldsourceexactjournal.
+No production apply/capability/permission change. actual_dpkg_interruption=true,
+dirty_live_journal_fixture=false, unsigned_ci_package=true, product_stop_invoked=false.
+Not proof of production maintscripts/productStop/agentapply/arbitrarycrashpoints.
+467localtests/46skips pass; staticchecks pass. New native CI pending. ADR0106.
+Disk18GiBfree91% warning; no userdatadeletion/localVM/modeldownloads. GoalACTIVE.
+
+Older notes historical; outputs/CONTINUATION.md is current runtime handoff.
+
 # Current PR121 work — dirty live package journal recovery
 
 PR120 merged8a787c6ccc3cb66111d51aba64a6d127439e96d8 after exacthead7ad2f45,
