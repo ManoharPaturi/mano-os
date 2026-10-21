@@ -62,3 +62,10 @@ evidence without hiding the original SSH failure status. Static review found
 Python has no os.tcgetsid; use documented tcgetpgrp/getpgrp to require the Root
 terminal's foreground process group. Add a fully mocked admission regression;
 actual Root-terminal acceptance remains pending. 465 local tests/46 skips.
+
+CI39471840714 passed the Root recovery/package stages and reached pristine-stock
+setup. The new installed-helper ext4 refusal test was incorrectly run during
+pre-install baseline, so it exercised a missing module. Move it to the installed
+before-reboot phase; preserve the pristine no-code/no-accounts baseline. Include
+the bounded rejection transcript in any assertion failure. No product policy
+or filesystem admission check changes. Actual final-head acceptance pending.

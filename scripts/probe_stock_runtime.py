@@ -327,6 +327,22 @@ def mock_effect(managed, filename):
 
 
 def phase(after_reboot):
+    if not after_reboot:
+        denied_code, denied_output = native_terminal("mano_runtime.recovery", ("create",))
+        assert denied_code != 0 and b"btrfs subvolume required" in denied_output, denied_output
+        assert not Path("/.snapshots/.mano-package-recovery").exists()
+        (OUT / "stock-root-recovery-denial.json").write_text(
+            json.dumps(
+                dict(
+                    installed_cli=True,
+                    native_root_tty=True,
+                    unsupported_ext4_denied=True,
+                    no_snapshot_created=True,
+                ),
+                indent=2,
+            )
+            + "\n"
+        )
     original = json.loads((OUT / "stock-baseline.json").read_text())
     boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
     assert original["human_uid"] == pwd.getpwnam(ACTOR).pw_uid
@@ -500,22 +516,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("phase", choices=("baseline", "before", "after"))
     args = parser.parse_args()
-    if args.phase == "baseline":
-        denied_code, denied_output = native_terminal("mano_runtime.recovery", ("create",))
-        assert denied_code != 0 and b"btrfs subvolume required" in denied_output
-        assert not Path("/.snapshots/.mano-package-recovery").exists()
-        (OUT / "stock-root-recovery-denial.json").write_text(
-            json.dumps(
-                dict(
-                    installed_cli=True,
-                    native_root_tty=True,
-                    unsupported_ext4_denied=True,
-                    no_snapshot_created=True,
-                ),
-                indent=2,
-            )
-            + "\n"
-        )
     if args.phase == "baseline":
         baseline()
     else:
