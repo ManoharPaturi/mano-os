@@ -1,3 +1,22 @@
+# Current work: final package-plan consistency
+
+PR122 remains OPEN at5df915a4a9baab31296e2b5328b73d162da11f42, all3CI pass and
+artifact/6original GUI accepted, but required approving review outstanding. Repo
+transferred to We-build-AI-Stuff/mano-os. User authorized enabling merge commits;
+repository flag and active ruleset25545937 now allow merge. All review/CI
+protections preserved. Never bypass required review or claim PR122 merged.
+
+Independent branch fix/package-plan-consistency starts from main28881bb. Record
+requested versions only after all APT marks; refuse requested removal/lostcandidate.
+Shared parser requires requested/final-change agreement and consistent operation
+version transitions. Add local regression tests and actual native SDK probe checks.
+ADR0107. Final-head native/package/stock/recovery/6freshGUI evidence pending.
+Disk22GiB free89%; no localVM/modeldownloads/userdatadeletion. Full v2.1 remains
+incomplete, particularly privileged packageapply/productionStop/reconciliation,
+liveprovider/authenticatedcoding, physical8GB/input and signedOS/release.
+
+Older historical entries below; outputs/CONTINUATION.md is runtime handoff.
+
 # Current PR121 work — dirty live package journal recovery
 
 PR120 merged8a787c6ccc3cb66111d51aba64a6d127439e96d8 after exacthead7ad2f45,
