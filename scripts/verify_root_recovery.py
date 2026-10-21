@@ -81,11 +81,14 @@ def main():
         )
         assert boot_id != package_source["created"]["boot_id"]
         assert not any(Path("/var/lib/dpkg/updates").iterdir())
-        old_journal = Path("/mnt/mano-root/@/var/lib/dpkg/updates/0000")
+        from probe_dpkg_interruption import PAYLOAD, PAYLOAD_BYTES, journal_inventory
+
         assert (
-            hashlib.sha256(old_journal.read_bytes()).hexdigest()
-            == package_source["journal_fixture_sha256"]
+            journal_inventory(Path("/mnt/mano-root/@/var/lib/dpkg/updates"))[0]
+            == package_source["interrupted_package"]["journal_entries"]
         )
+        assert not PAYLOAD.exists()
+        assert (Path("/mnt/mano-root/@") / PAYLOAD.relative_to("/")).read_bytes() == PAYLOAD_BYTES
 
         package_source["actual_recovery_boot"] = dict(
             boot_id=boot_id,
@@ -97,6 +100,8 @@ def main():
             agent_install_authorized=False,
             restored_package_journal_clean=True,
             source_dirty_journal_preserved=True,
+            interrupted_package_payload_absent=True,
+            changed_source_interrupted_payload_preserved=True,
         )
         Path("evidence/package-root-recovery.json").write_text(
             json.dumps(package_source, indent=2) + "\n"

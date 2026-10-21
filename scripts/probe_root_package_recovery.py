@@ -80,18 +80,18 @@ def main():
     assert changed_status != status
     canary.write_bytes(b"after package change\n")
     Path("/etc/mano/recovery-sentinel").write_text("after\n")
-    # Explicit deterministic journal fixture after a real successful package
-    # change. This proves dirty-state recovery admission, not a real dpkg crash.
-    journal = Path("/var/lib/dpkg/updates/0000")
-    assert not journal.exists()
-    journal_bytes = b"mano disposable CI dirty journal witness\x00\xff\n"
-    journal.write_bytes(journal_bytes)
-    journal.chmod(0o600)
+    from probe_dpkg_interruption import interrupt_install, journal_inventory
+
+    interrupted = interrupt_install(
+        lambda: terminal("prepare-boot", created["recovery_id"], success=False)
+    )
+    journal_entries = interrupted["journal_entries"]
     assert "Unsettled dpkg journal" in terminal("create", success=False)
+    changed_status = hashlib.sha256(Path("/var/lib/dpkg/status").read_bytes()).hexdigest()
     prepared = terminal("prepare-boot", created["recovery_id"])
     assert prepared["source_package_journal_clean"] is True
     assert prepared["live_package_journal_dirty"] is True
-    assert journal.read_bytes() == journal_bytes
+    assert journal_inventory(Path("/var/lib/dpkg/updates"))[0] == journal_entries
 
     assert prepared["boot_selected"] is prepared["reboot_performed"] is False
     assert prepared["source_root_preserved"] is prepared["source_snapshot_preserved"] is True
@@ -101,6 +101,7 @@ def main():
         clone / "etc/mano/package-recovery-canary"
     ).read_bytes() == b"before package change\x00\xff\n"
     assert not (clone / "usr/games/sl").exists()
+    assert not (clone / "usr/share/mano-recovery-interrupt-ci/payload.bin").exists()
     assert canary.read_bytes() == b"after package change\n"
     assert hashlib.sha256(Path("/var/lib/dpkg/status").read_bytes()).hexdigest() == changed_status
     assert "already exists" in terminal("prepare-boot", created["recovery_id"], success=False)
@@ -117,11 +118,11 @@ def main():
         duplicate_clone_denied=True,
         current_root_unchanged_by_prepare=True,
         source_tree_cli=True,
-        dirty_live_journal_fixture=True,
-        actual_dpkg_interruption=False,
+        dirty_live_journal_fixture=False,
+        actual_dpkg_interruption=True,
         dirty_journal_snapshot_creation_denied=True,
-        source_journal_fixture_preserved=True,
-        journal_fixture_sha256=hashlib.sha256(journal_bytes).hexdigest(),
+        source_journal_preserved=True,
+        interrupted_package=interrupted,
         live_model_connected=False,
         agent_package_install_authorized=False,
     )
