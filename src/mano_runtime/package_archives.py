@@ -78,7 +78,7 @@ def copy_sealed(source, size, generation):
         if total != size:
             raise ValueError("Package archive size changed during custody")
         fcntl.fcntl(fd, fcntl.F_ADD_SEALS, seals())
-        if fcntl.fcntl(fd, fcntl.F_GET_SEALS) != seals():
+        if fcntl.fcntl(fd, fcntl.F_GET_SEALS) & seals() != seals():
             raise ValueError("All archive immutability seals required")
         os.lseek(fd, 0, os.SEEK_SET)
         return fd, digest.hexdigest()
@@ -166,7 +166,7 @@ def verified_archives(plan):
                                 bytes=before.st_size,
                                 fd=sealed,
                                 cache_name=name,
-                                kernel_seals=seals(),
+                                kernel_seals=fcntl.fcntl(sealed, fcntl.F_GET_SEALS),
                             )
                             descriptors.append(sealed)
                             sealed = None  # Context owns this FD from here.
