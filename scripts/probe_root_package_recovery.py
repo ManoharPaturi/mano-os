@@ -86,14 +86,6 @@ def main():
     attempt_id = "14" * 16
     # CI context only: this digest is not a broker grant or a human approval.
     request_sha256 = hashlib.sha256(b"controlled CI sl + interrupted dpkg fixture").hexdigest()
-    intent = package_attempts.begin(attempt_id, request_sha256, created["recovery_id"])
-    assert intent["state"] == "intent" and intent["installation_authorized"] is False
-    try:
-        package_attempts.begin(attempt_id, request_sha256, created["recovery_id"])
-    except FileExistsError:
-        pass
-    else:
-        raise AssertionError("Lost-acknowledgement attempt identity was reused")
     # Only this explicitly guarded CI driver installs the fixed signed Debian test package.
     installed = command("/usr/bin/apt-get", "--no-install-recommends", "-y", "install", "sl")
     assert installed.returncode == 0
@@ -105,9 +97,60 @@ def main():
     Path("/etc/mano/recovery-sentinel").write_text("after\n")
     from probe_dpkg_interruption import interrupt_install, journal_inventory
 
-    interrupted = interrupt_install(
-        lambda: terminal("prepare-boot", created["recovery_id"], success=False)
-    )
+    with recovery_runtime.locked() as scope:
+        coherent = recovery_runtime.create_locked()
+        intent = package_attempts.begin_locked(attempt_id, request_sha256, coherent["recovery_id"])
+        assert intent["state"] == "intent" and intent["installation_authorized"] is False
+        try:
+            package_attempts.begin_locked(attempt_id, request_sha256, coherent["recovery_id"])
+        except FileExistsError:
+            pass
+        else:
+            raise AssertionError("Lost-acknowledgement attempt identity was reused")
+        with scope.dpkg_backend() as frontend_env:
+            assert frontend_env == {"DPKG_FRONTEND_LOCKED": "1"}
+            backend = command(
+                "/usr/bin/python3",
+                "-I",
+                "-c",
+                "import fcntl;f=open('/var/lib/dpkg/lock','r+');"
+                "fcntl.lockf(f,fcntl.LOCK_EX|fcntl.LOCK_NB)",
+            )
+            assert backend.returncode == 0
+            competitor = subprocess.run(
+                ["/usr/bin/dpkg", "--configure", "--pending"],
+                env=recovery_runtime.ENV,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            assert competitor.returncode != 0 and "frontend lock" in competitor.stderr
+            for operation in (
+                recovery_runtime.create_locked,
+                lambda: package_attempts.begin_locked(
+                    "15" * 16, request_sha256, coherent["recovery_id"]
+                ),
+            ):
+                try:
+                    operation()
+                except PermissionError:
+                    pass
+                else:
+                    raise AssertionError("Checkpoint/intent admitted without backend lock")
+            interrupted = interrupt_install(
+                lambda: terminal("prepare-boot", created["recovery_id"], success=False),
+                frontend_scope=scope,
+            )
+        assert recovery_runtime.require_locked() is scope and scope.backend_held
+        coherent_locks = dict(
+            checkpoint_and_intent_same_scope=True,
+            frontend_retained_backend_temporarily_released=True,
+            other_process_backend_lock_succeeded_before_child=True,
+            direct_dpkg_frontend_conflict_denied=True,
+            checkpoint_and_intent_denied_during_handoff=True,
+            backend_reacquired_after_child=True,
+            native_dpkg_returncode=interrupted["return_code"],
+        )
     journal_entries = interrupted["journal_entries"]
     attempts = package_attempts.reconcile()
     assert len(attempts) == 1 and attempts[0]["intent"] == intent
@@ -152,6 +195,8 @@ def main():
         source_journal_preserved=True,
         interrupted_package=interrupted,
         package_attempts=attempts,
+        coherent_checkpoint=coherent,
+        coherent_package_locks=coherent_locks,
         duplicate_attempt_denied=True,
         nested_scope_denied_outer_posix_lock_preserved=True,
         repeated_reconciliation_unchanged=True,

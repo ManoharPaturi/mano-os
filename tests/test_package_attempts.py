@@ -34,6 +34,7 @@ class PackageAttemptTests(unittest.TestCase):
         for target, kwargs in (
             ("layout", dict(return_value={"root_uuid": BOOT})),
             ("locked", dict(side_effect=contextlib.nullcontext)),
+            ("require_locked", dict(return_value=None)),
             ("current_status", dict(return_value=DIGEST)),
             ("subvolume", dict(return_value={"uuid": BOOT})),
             ("command", dict(return_value="ro=true")),

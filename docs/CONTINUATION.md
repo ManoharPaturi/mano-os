@@ -1,3 +1,30 @@
+# Current work: coherent package transaction scope
+
+Main2e1eb27a3bfe0bcc65758d8d363f903bf4f565c8 includesmergedPR130 sealedarchives
+(accepted621c6a7CI39707159259/all45flags/54hashes/6freshGUI). Postmain130
+CI39804921537 verifiedSUCCESS exact2e1eb27 (APIrun_attempt1); savefinalreceipt.
+Branchfeat/coherent-package-transaction addsprocess/thread-ownedPackageLocks:
+frontend/APTlocksretained, backendtemporarilyreleasedfordpkgwithdocumented
+DPKG_FRONTEND_LOCKED=1, reacquirebeforeproceeding, failclosedifbusy. create_locked
+andbegin_locked requireactiveownedbackend-heldscope; CLIforegroundRootguards
+preserved. Publicwrappersretainownscopes. No nestedlocking/reopeningbackendfds.
+NativeCIcreatescoherentcheckpoint+intent afterseparatesignedslfixture, immediately
+beforecontrolledunsigneddpkg/postinst underonescope. OtherPIDbackendacquiremust
+workbeforechild, directdpkgdeniedfrontend, operationsdeniedduringhandoff, /proc/locks
+pinsfrontenddriver/backendactualdpkgPID, backendreacquiredafterSIGKILL. Original
+RootTTYcheckpointremainsrecoverytarget; unknownintentrefersadditionalcheckpoint,
+preservedacrossrealboot. Architectureauditrequiresnewproof. ADR0113.
+Local505tests/48Linuxskips+Ruff/compile/shell/diffpass; nativeCI/acceptancepending.
+Spec'strustedbrokerispolicyauthority: distinctfreshnativePAMapplycapability
+throughprotectedexistingchannel, notanewparallelRootpolicy/grantissuer. Roothelper
+willauthenticateBrokerpeerandtypedrequest; existingforecast/profilecannotapply.
+Fullprivilegedexecutor/isolation/acquisition/space/postconditions/Stop/boot still
+unfinished. Broaderliveprovider/authenticatedcoding/apps/hardware/physical8GB/
+input/signedOSreleasealsoopen. GoalACTIVE/incomplete. No RootMac/localVM/paid/
+secrets/agentmessages/deletions. Preserve3untracked' 2'files, selectivestageonly.
+
+Historicalnotesbelow; outputs/CONTINUATION.md currentruntimehandoff.
+
 # Current work: verified package archive custody
 
 Mainb755d910b670e256d27f4e9506020adcb417a55d containsmergedPR129 Rootresolution
