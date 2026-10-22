@@ -312,14 +312,15 @@ def audit(root: Path, spec: Path, adr: Path):
     )
     resources = load("resources.json")
     attempts = package_recovery.get("package_attempts", [])
+    attempt_checkpoint = package_recovery.get('coherent_checkpoint', captured)
     require(isinstance(attempts, list) and len(attempts) == 1,
             "Package attempt custody evidence missing")
     intent, outcome = attempts[0].get("intent", {}), attempts[0].get("outcome", {})
     require(
         intent.get("state") == "intent"
-        and intent.get("recovery_id") == captured.get("recovery_id")
-        and intent.get("status_sha256") == captured.get("status_sha256")
-        and intent.get("boot_id") == captured.get("boot_id")
+        and intent.get("recovery_id") == attempt_checkpoint.get("recovery_id")
+        and intent.get("status_sha256") == attempt_checkpoint.get("status_sha256")
+        and intent.get("boot_id") == attempt_checkpoint.get("boot_id")
         and intent.get("installation_authorized") is False
         and intent.get("automatic_replay_allowed") is False
         and outcome.get("attempt_id") == intent.get("attempt_id")
@@ -333,6 +334,21 @@ def audit(root: Path, spec: Path, adr: Path):
         and restored.get("package_attempt_unknown_without_replay") is True,
         "Package attempt lost-acknowledgement/recovery-boot evidence incomplete",
     )
+    coherent = package_recovery.get('coherent_package_locks', {})
+    require(all(coherent.get(key) is True for key in (
+        'checkpoint_and_intent_same_scope',
+        'frontend_retained_backend_temporarily_released',
+        'other_process_backend_lock_succeeded_before_child',
+        'direct_dpkg_frontend_conflict_denied',
+        'checkpoint_and_intent_denied_during_handoff',
+        'backend_reacquired_after_child')) and coherent.get('native_dpkg_returncode') == -9,
+        'Coherent checkpoint/intent/dpkg frontend protocol evidence incomplete')
+    owners = package_recovery['interrupted_package'].get('frontend_protocol_lock_owners', {})
+    require(owners.get('backend', {}).get('pid') ==
+            package_recovery['interrupted_package']['dpkg_pid']
+            and owners.get('frontend', {}).get('pid', 0) > 0
+            and owners['frontend']['pid'] != owners['backend']['pid'],
+            'Actual dpkg and coordinator kernel lock owners missing')
     require(
         resources.get("app_startup_observations")
         == {

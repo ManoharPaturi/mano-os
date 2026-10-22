@@ -111,54 +111,64 @@ def begin(attempt_id, request_sha256, recovery_id):
     identifier(attempt_id)
     identifier(recovery_id)
     digest(request_sha256)
-    current = recovery.layout()
+    recovery.layout()
     with recovery.locked():
-        saved = recovery.recovery_record(recovery_id)
-        status = recovery.current_status()
-        if (
-            saved["status_sha256"] != status
-            or saved["boot_id"] != boot()
-            or any(current[key] != saved["layout"][key] for key in current if key != "free_bytes")
-        ):
-            raise ValueError("Fresh current-boot recovery checkpoint required")
-        snapshot = recovery.STORAGE / str(saved["snapshot_number"]) / "snapshot"
-        if (
-            recovery.subvolume(snapshot) != saved["snapshot"]
-            or recovery.command("/usr/bin/btrfs", "property", "get", str(snapshot), "ro")
-            != "ro=true"
-            or hashlib.sha256(
-                recovery.read(snapshot / "var/lib/dpkg/status", recovery.MAX_STATUS)
-            ).hexdigest()
-            != status
-        ):
-            raise ValueError("Recovery checkpoint identity or read-only state changed")
-        try:
-            BASE.mkdir(mode=0o700)
-            sync(BASE.parent)
-        except FileExistsError:
-            pass
-        existing = inventory()
-        if attempt_id in existing:
-            raise FileExistsError("Package attempt ID is already reserved")
-        if existing:
-            raise ValueError("Unresolved package attempt requires operator recovery")
-        directory = BASE / attempt_id
-        directory.mkdir(mode=0o700)  # Never reuse an ID after a lost acknowledgement.
-        sync(BASE)
-        value = dict(
-            schema_version="1.0",
-            attempt_id=attempt_id,
-            request_sha256=request_sha256,
-            recovery_id=recovery_id,
-            status_sha256=status,
-            boot_id=boot(),
-            created_at=int(time.time()),
-            state="intent",
-            installation_authorized=False,
-            automatic_replay_allowed=False,
-        )
-        recovery.save(directory / "intent.json", value)
-        return value
+        return begin_locked(attempt_id, request_sha256, recovery_id)
+
+
+def begin_locked(attempt_id, request_sha256, recovery_id):
+    """Persist intent without reopening or dropping an existing lock scope."""
+    guard()
+    recovery.require_locked()
+    identifier(attempt_id)
+    identifier(recovery_id)
+    digest(request_sha256)
+    current = recovery.layout()
+    saved = recovery.recovery_record(recovery_id)
+    status = recovery.current_status()
+    if (
+        saved["status_sha256"] != status
+        or saved["boot_id"] != boot()
+        or any(current[key] != saved["layout"][key] for key in current if key != "free_bytes")
+    ):
+        raise ValueError("Fresh current-boot recovery checkpoint required")
+    snapshot = recovery.STORAGE / str(saved["snapshot_number"]) / "snapshot"
+    if (
+        recovery.subvolume(snapshot) != saved["snapshot"]
+        or recovery.command("/usr/bin/btrfs", "property", "get", str(snapshot), "ro") != "ro=true"
+        or hashlib.sha256(
+            recovery.read(snapshot / "var/lib/dpkg/status", recovery.MAX_STATUS)
+        ).hexdigest()
+        != status
+    ):
+        raise ValueError("Recovery checkpoint identity or read-only state changed")
+    try:
+        BASE.mkdir(mode=0o700)
+        sync(BASE.parent)
+    except FileExistsError:
+        pass
+    existing = inventory()
+    if attempt_id in existing:
+        raise FileExistsError("Package attempt ID is already reserved")
+    if existing:
+        raise ValueError("Unresolved package attempt requires operator recovery")
+    directory = BASE / attempt_id
+    directory.mkdir(mode=0o700)  # Never reuse an ID after a lost acknowledgement.
+    sync(BASE)
+    value = dict(
+        schema_version="1.0",
+        attempt_id=attempt_id,
+        request_sha256=request_sha256,
+        recovery_id=recovery_id,
+        status_sha256=status,
+        boot_id=boot(),
+        created_at=int(time.time()),
+        state="intent",
+        installation_authorized=False,
+        automatic_replay_allowed=False,
+    )
+    recovery.save(directory / "intent.json", value)
+    return value
 
 
 def reconcile():
