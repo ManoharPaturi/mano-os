@@ -1,3 +1,34 @@
+# PR133 native dependency-set correction
+
+Initial b911bf3 CI39825969416 failed before effects: fixture assumed exactly one
+sl change, but real APT solution contains dependencies. Raw log preserved in
+outputs/pr133-first-ci-failure.log. Fixture now requires the full bounded signed
+install solution, finds each exact archive by SHA256 and length, and installs all
+approved archives. No omitted dependencies or postcondition relaxation. Audit and
+independent acceptance compare every approved transition and all unrelated states.
+CI rerun on new head pending. No merge on failed initial head.
+
+# Current: durable package database postconditions
+
+Main23c41d9e1129e896c564a667fbb5b626b0f743af includes PR132. Exact post-main
+run39821675553 VERIFIED all3SUCCESS; save authoritative receipt in outputs.
+Branch feat/package-postconditions adds private Root complete_locked over the
+owned backend-held scope, original request/current boot/RO checkpoint, clean dpkg
+journal and exact before/after database transitions. Verified history allows a
+new separately approved attempt ID; unknown/partial/corrupt outcomes stay blocked.
+Historical receipts never authorize execution or prove state after rollback.
+
+Native guarded CI now uses a real signed sl forecast/intent/controlled dpkg commit,
+rejects completion before effect/during handoff, verifies postconditions, then
+runs existing interrupted-dpkg fixture. Real recovery must preserve both receipts
+while restoring pre-sl status. Existing unknown attempt remains first (id14),
+verified id16 second. Native CI pending. ADR0115; full apply integration still
+unfinished, not redefined around these prerequisites. Keep all prior gates.
+No Root/VM experiments on Mac, no paid-provider/key operations or deletions.
+Three unrelated duplicate-suffix files remain untracked; selective stage only.
+
+## Historical notes (superseded where above differs)
+
 # Current work: live APT package marks
 
 Main PR131 merged at febab37bd4ac6811f3d8055b8cbd84790bb32bc4 after all three
