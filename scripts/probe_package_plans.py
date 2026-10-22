@@ -102,6 +102,7 @@ def run(rpc, human, identity, password):
     from mano_broker.package_catalog import BASE, current_status, load, summary
     from mano_broker.workspaces import create_workspace
     from mano_core.packages import proposal
+    from mano_runtime.package_resolution import current_plan
 
     refreshed = subprocess.run(
         [
@@ -152,6 +153,7 @@ def run(rpc, human, identity, password):
     for filename in ("apt.py", "sitecustomize.py"):
         (workspace / filename).write_text(malicious)
     (workspace / "apt.conf").write_text(
+        'APT::Architecture "arm64";'
         'DPkg::Pre-Invoke { "touch /workspace/package-config-canary"; };'
     )
     initial = {
@@ -182,6 +184,34 @@ def run(rpc, human, identity, password):
             assert plan["names"] == names and plan["catalog_id"] == catalog["catalog_id"]
             assert plan["install_authorized"] is False and plan["network_used"] is False
             assert plan["maintainer_scripts_executed"] is False
+            old_apt_config = os.environ.get('APT_CONFIG')
+            os.environ['APT_CONFIG'] = str(workspace / 'apt.conf')
+            try:
+                with current_plan(plan) as root_resolution:
+                    assert root_resolution['plan_sha256'] == record['result']['sha256']
+                    assert root_resolution['independent_root_resolution'] is True
+                    assert root_resolution['package_locks_held_in_context'] is True
+                    assert root_resolution['install_authorized'] is False
+                    lock_check = subprocess.run(['/usr/bin/python3', '-I', '-c',
+                        "import fcntl; f=open('/var/lib/dpkg/lock','r+');"
+                        "fcntl.lockf(f,fcntl.LOCK_EX|fcntl.LOCK_NB)"],
+                        capture_output=True, text=True, timeout=5)
+                    assert lock_check.returncode != 0 and 'BlockingIOError' in lock_check.stderr
+            finally:
+                if old_apt_config is None:
+                    os.environ.pop('APT_CONFIG')
+                else:
+                    os.environ['APT_CONFIG'] = old_apt_config
+            altered = plan | dict(net_installed_bytes=plan['net_installed_bytes'] + 1)
+            try:
+                with current_plan(altered):
+                    raise AssertionError('Root accepted a different package delta')
+            except ValueError as error:
+                assert 'Root resolution differs' in str(error)
+            root_resolution['tampered_forecast_delta_denied'] = True
+            root_resolution['actual_other_process_lock_denied'] = True
+            root_resolution['ambient_apt_config_cleared'] = True
+            record['root_resolution'] = root_resolution
             review = record['result']['install_review']
             assert review['plan'] == plan
             assert review['plan_sha256'] == record['result']['sha256']
@@ -289,6 +319,11 @@ def run(rpc, human, identity, password):
             action_id=captured_plan['action_id'],
             plan_sha256=captured_plan['result']['sha256']))
         assert rpc('request', stale_review, actor=identity.name)['ok'] is False
+        try:
+            with current_plan(captured_plan['result']['plan']):
+                raise AssertionError('Root accepted a superseded catalog')
+        except ValueError:
+            pass
         with sqlite3.connect(
             "file:/var/lib/mano-broker/runtime/state.sqlite3?mode=ro", uri=True
         ) as database:
@@ -320,6 +355,11 @@ def run(rpc, human, identity, password):
         saved.write_bytes(b"changed after snapshot approval")
         corrupted = client(identity, corrupt, corrupt_grant)
         assert corrupted["state"] == "failed"
+        try:
+            with current_plan(records['dependency-plan']['result']['plan']):
+                raise AssertionError('Root accepted a corrupt catalog input')
+        except ValueError:
+            pass
     finally:
         saved.write_bytes(original)
     assert current_status() == status
@@ -337,6 +377,8 @@ def run(rpc, human, identity, password):
         dpkg_state_unchanged=True,
         workspace_unchanged=True,
         malicious_workspace_config_ignored=True,
+        root_stale_catalog_denied=True,
+        root_corrupt_catalog_input_denied=True,
         unknown_package_failed=True,
         stale_catalog_denied_without_grant_use=True,
         install_review_stale_catalog_denied=True,

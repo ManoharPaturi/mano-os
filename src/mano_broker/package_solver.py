@@ -22,7 +22,8 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def fingerprint(manifest):
+def fingerprint(manifest, *, catalog=None):
+    catalog = CATALOG if catalog is None else catalog
     total = 0
     files = manifest["files"]
     if not isinstance(files, dict) or not 5 <= len(files) <= 16:
@@ -35,7 +36,7 @@ def fingerprint(manifest):
             or not re.fullmatch("[A-Za-z0-9_./+-]+", name)
         ):
             raise ValueError("Invalid catalog input name")
-        path = CATALOG / name
+        path = catalog / name
         if path.is_symlink() or not path.is_file():
             raise ValueError("Regular immutable catalog input required")
         digest = hashlib.sha256()
@@ -51,7 +52,8 @@ def fingerprint(manifest):
             raise ValueError("Signed catalog snapshot integrity changed")
 
 
-def prepare_apt_root(root):
+def prepare_apt_root(root, *, catalog=None):
+    catalog = CATALOG if catalog is None else catalog
     for relative in (
         "etc/apt/trusted.gpg.d",
         "etc/apt/apt.conf.d",
@@ -62,17 +64,17 @@ def prepare_apt_root(root):
         "var/log/apt",
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(CATALOG / "inputs/sources.list", root / "etc/apt/sources.list")
+    shutil.copyfile(catalog / "inputs/sources.list", root / "etc/apt/sources.list")
     shutil.copyfile(
-        CATALOG / "inputs/debian-archive-keyring.gpg", root / "etc/apt/trusted.gpg.d/debian.gpg"
+        catalog / "inputs/debian-archive-keyring.gpg", root / "etc/apt/trusted.gpg.d/debian.gpg"
     )
     # apt.Cache(rootdir=...) requires a writable lists/partial directory even
     # without update/fetch. Only that scratch directory is private and writable;
     # each actual signed list remains a read-only catalog file.
-    for path in (CATALOG / "inputs/lists").iterdir():
+    for path in (catalog / "inputs/lists").iterdir():
         (root / "var/lib/apt/lists" / path.name).symlink_to(path)
-    (root / "var/lib/dpkg/status").symlink_to(CATALOG / "inputs/status")
-    (root / "var/lib/apt/extended_states").symlink_to(CATALOG / "inputs/extended_states")
+    (root / "var/lib/dpkg/status").symlink_to(catalog / "inputs/status")
+    (root / "var/lib/apt/extended_states").symlink_to(catalog / "inputs/extended_states")
 
 
 def change_operation(package):
@@ -136,8 +138,18 @@ def solve(names, identifier):
         or not re.fullmatch("[a-f0-9]{64}", identifier)
     ):
         raise ValueError("Exact bounded Debian package request required")
+    return _resolve_catalog(names, identifier, catalog=CATALOG)
+
+
+def _resolve_catalog(names, identifier, *, catalog):
+    """Read-only APT calculation shared with the isolated Root verifier.
+
+    The caller owns identity, fixed catalog-path custody and current host checks.
+    This never fetches, commits or executes package scripts.
+    """
+    global STAGE
     STAGE = "catalog"
-    manifest = json.loads((CATALOG / "manifest.json").read_text())
+    manifest = json.loads((catalog / "manifest.json").read_text())
     body = {k: v for k, v in manifest.items() if k != "catalog_id"}
     if (
         manifest["catalog_id"] != identifier
@@ -147,13 +159,13 @@ def solve(names, identifier):
         or not manifest["created_at"] <= time.time() < manifest["expires_at"]
     ):
         raise ValueError("Package catalog identity/freshness changed")
-    fingerprint(manifest)
+    fingerprint(manifest, catalog=catalog)
     STAGE = "import"
     import apt_pkg
 
     with tempfile.TemporaryDirectory(prefix="apt-plan-", dir="/tmp") as temporary:
         root = Path(temporary)
-        prepare_apt_root(root)
+        prepare_apt_root(root, catalog=catalog)
         # Importing apt initializes configuration. Point it at the empty private
         # tree first; missing host /etc/apt is neither an input nor a warning.
         apt_pkg.config.set("Dir", str(root))
@@ -220,7 +232,7 @@ def solve(names, identifier):
         finally:
             cache.close()
     STAGE = "recheck"
-    fingerprint(manifest)
+    fingerprint(manifest, catalog=catalog)
     if time.time() >= manifest["expires_at"]:
         raise ValueError("Catalog expired during package resolution")
     return value

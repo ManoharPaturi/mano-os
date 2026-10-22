@@ -1,3 +1,27 @@
+# Current work: locked Root package re-resolution
+
+Main4a85548a19c7aa72fc62105db271fdfb7ef953ff includes merged PR128 attemptcustody
+(accepted488tests/46skips, exact7d50452CI39697785239/all43flags/54hashes/
+all6freshGUI accepted). Postmain128CI39699941820 currentlyrunning; pollSAMErun.
+Branchfeat/root-package-resolution adds LinuxRoot-only current_plan context:
+fulltypedforecast, supportedbtrfs, nativeStop, coherentpackage locks, currentRoot
+catalog/status/index/keyring checks, freshfixedPythonAPT calculation with explicit
+Rootownedsourcepath/clearedambientconfig, fullresult equality, finalcustody/Stop
+recheck, lockscopeheldthroughyield. SharedreadonlyAPTalgorithm; normalTaskCLI
+stillrefusesRoot/fixedmount/sandbox. No publicendpoint/service/grant/apply added.
+Rootchild currentlytrusted/unconfined; no cancellation/frozenStopdomain claim.
+Must enforceprocess/capability/IPC/resource/Stop isolation beforebrokerexposure.
+ADR0111. CI addsactualRootdependency/noopresolution, deltadenial, actualotherPID
+lockdenial, hostileambientAPT_CONFIG, stale/corruptinputs andlatchedStop. Stock
+installedmodule before/afterboot mustdenyext4 andunprivilegedcaller. New44thflag.
+Local495tests/46Linuxskips + Ruff/compile/shell/diff pass. Native/artifact/6freshGUI
+pending. Preserve3untracked ' 2'files, selectivecommitonly. Disk25GiBfree88%.
+Fullv2.1active/incomplete: exactnativePAMapply, verifiedarchives/download+space,
+same-scopecheckpoint/commit, realRootStopexecutor/postconditions/reconciliation,
+liveprovider/authenticatedcoding, apps/hardware, physical8GB/input,signedrelease.
+
+Historical notes below; outputs/CONTINUATION.md is currentruntimehandoff.
+
 # Current work: package-attempt custody
 
 Main 65e9661c425c5a5179e58dccb91ebb02a6dae64e includes merged PR127 with

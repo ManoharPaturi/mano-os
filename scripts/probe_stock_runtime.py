@@ -411,12 +411,33 @@ finally:client.close()
                                 managed['caller_name'],timeout=75)
         assert package_result['state'] == 'done'
         assert package_result['result']['plan']['install_authorized'] is False
+        root_resolution_denial = python("""import json,sys
+from mano_runtime.package_resolution import current_plan
+plan=json.load(sys.stdin)
+try:
+ with current_plan(plan):raise AssertionError('Unsupported Root layout admitted')
+except ValueError as error:
+ assert 'btrfs' in str(error)
+ print(json.dumps(dict(installed_module=True,unsupported_ext4_denied=True)))
+""", package_result['result']['plan'])
+        non_root_resolution_denial = python("""import json,sys
+from mano_runtime.package_resolution import current_plan
+plan=json.load(sys.stdin)
+try:
+ with current_plan(plan):raise AssertionError('Unprivileged Root resolution admitted')
+except PermissionError:
+ print(json.dumps(dict(non_root_denied=True)))
+""", package_result['result']['plan'], managed['caller_name'])
+        assert root_resolution_denial['unsupported_ext4_denied'] is True
+        assert non_root_resolution_denial['non_root_denied'] is True
         status_after = hashlib.sha256(Path('/var/lib/dpkg/status').read_bytes()).hexdigest()
         assert status_after == status_before
         label = 'after' if after_reboot else 'before'
         (OUT/('stock-package-plan-'+label+'.json')).write_text(json.dumps(dict(
             result=package_result,actual_native_tty_pam=True,dpkg_state_unchanged=True,
-            install_authorized=False,model_disclosure=False),indent=2)+'\n')
+            install_authorized=False,model_disclosure=False,
+            root_resolution_denial=root_resolution_denial,
+            non_root_resolution_denial=non_root_resolution_denial),indent=2)+'\n')
         package_context = managed|dict(context=managed['context']|dict(
             operation_key='typed-package-'+label))
         package_packet = dict(managed=package_context,plan=dict(capability='packages.plan_install',
