@@ -22,6 +22,8 @@ from mano_broker.package_catalog import (
     MAX_STATUS,
     STATUS,
     current_status,
+    extended_identity,
+    extended_states,
     read,
     source_identity,
 )
@@ -189,15 +191,13 @@ def build_locked():
     now = int(time.time())
     status = read(STATUS, MAX_STATUS)
     original_status = hashlib.sha256(status).hexdigest()
+    original_extended = extended_states()
     with tempfile.TemporaryDirectory(prefix=".catalog-", dir=BASE) as temporary:
         stage = Path(temporary)
         inputs = stage / "inputs"
         (inputs / "lists").mkdir(parents=True)
         (inputs / "status").write_bytes(status)
-        extended = Path("/var/lib/apt/extended_states")
-        (inputs / "extended_states").write_bytes(
-            read(extended, 2 * 1024**2) if extended.exists() else b""
-        )
+        (inputs / "extended_states").write_bytes(original_extended or b"")
         (inputs / "debian-archive-keyring.gpg").write_bytes(read(KEYRING, 2 * 1024**2))
         repos, sources = [], []
         source_inputs = {}
@@ -261,6 +261,8 @@ def build_locked():
             source_identity(LISTS / name) != identity for name, identity in source_inputs.items()
         ):
             raise ValueError("APT indexes changed while creating catalog")
+        if extended_states() != original_extended:
+            raise ValueError("APT package marks changed while creating catalog")
         files, total = {}, 0
         for path in sorted(inputs.rglob("*")):
             if not path.is_file():
@@ -292,6 +294,7 @@ def build_locked():
             repositories=repos,
             files=files,
             source_inputs=source_inputs,
+            extended_states_source=extended_identity(original_extended),
         )
         identifier = hashlib.sha256(canonical(body).encode()).hexdigest()
         value = body | dict(catalog_id=identifier)

@@ -15,6 +15,8 @@ BASE = Path("/var/lib/mano-packages")
 STATUS = Path("/var/lib/dpkg/status")
 LISTS = Path("/var/lib/apt/lists")
 KEYRING = Path("/usr/share/keyrings/debian-archive-keyring.pgp")
+EXTENDED = Path("/var/lib/apt/extended_states")
+MAX_EXTENDED = 2 * 1024**2
 UPDATES = Path("/var/lib/dpkg/updates")
 MAX_STATUS = 16 * 1024**2
 MAX_INPUT = 128 * 1024**2
@@ -63,6 +65,21 @@ def read(path, maximum):
         os.close(fd)
 
 
+def extended_states():
+    """Read automatic/manual marks; absence is distinct from an empty file."""
+    trusted(EXTENDED.parent, directory=True)
+    try:
+        EXTENDED.lstat()
+    except FileNotFoundError:
+        return None
+    return read(EXTENDED, MAX_EXTENDED)
+
+
+def extended_identity(data):
+    return dict(present=data is not None, bytes=len(data or b""),
+                sha256=hashlib.sha256(data or b"").hexdigest())
+
+
 def current_status():
     if any(UPDATES.iterdir()):
         raise ValueError("Unsettled dpkg journal requires operator recovery")
@@ -101,6 +118,11 @@ def load(identifier=None, *, check_current=True):
     if check_current and current_status() != value["status_sha256"]:
         raise ValueError("Installed package state changed; refresh catalog and approval")
     if check_current:
+        marks = extended_identity(extended_states())
+        if (value.get("extended_states_source") != marks
+                or value["files"].get("inputs/extended_states") != {
+                    "bytes": marks["bytes"], "sha256": marks["sha256"]}):
+            raise ValueError("APT package marks changed; refresh catalog and approval")
         sources = value.get("source_inputs")
         if not isinstance(sources, dict) or not 1 <= len(sources) <= 16:
             raise ValueError("Missing package catalog source identity")
