@@ -1,3 +1,26 @@
+# Current work: live APT package marks
+
+Main PR131 merged at febab37bd4ac6811f3d8055b8cbd84790bb32bc4 after all three
+exact-head CI jobs and full artifact/GUI acceptance. Post-main run 39816404372
+is live; poll that same run to terminal. Review override was user-authorized;
+branch protection and CI remain required. Three unrelated duplicate-suffix
+untracked files are preserved; stage only named intended paths.
+
+Branch fix/package-mark-freshness closes a live-input freshness gap before apply:
+APT automatic/manual package marks now bind catalog identity by presence, size,
+and SHA256. Creation rechecks them; existing catalog admission compares the live
+input, so approval/review/Root resolution/archive custody reject stale marks.
+Disposable CI changes marks without changing dpkg status, rejects the old plan,
+restores exact bytes and verifies admission again. ADR0114. Native CI pending.
+
+Full privileged apply, fresh native approval, isolated executor, acquisition,
+space admission, postconditions and durable recovery remain unfinished. Broker
+is the trusted grant authority; no parallel Root policy issuer. All Root and VM
+experiments remain CI-only. No provider/key experiments or local VM downloads.
+Disk last checked 29 GiB free / 86%; no cleanup. Goal remains active.
+
+## Historical notes (superseded where above differs)
+
 # Current work: coherent package transaction scope
 
 Main2e1eb27a3bfe0bcc65758d8d363f903bf4f565c8 includesmergedPR130 sealedarchives

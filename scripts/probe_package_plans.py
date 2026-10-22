@@ -208,6 +208,48 @@ def run(rpc, human, identity, password):
                     raise AssertionError('Root accepted a different package delta')
             except ValueError as error:
                 assert 'Root resolution differs' in str(error)
+            if key == 'dependency-plan':
+                # Disposable Root VM only: change live APT marks without changing
+                # installed versions. Both public review and Root admission must
+                # reject the old catalog; always restore the exact original bytes.
+                from mano_broker import package_catalog as custody
+
+                marks = custody.EXTENDED
+                original_marks = custody.extended_states()
+                original_identity = custody.extended_identity(original_marks)
+                assert catalog_manifest['extended_states_source'] == original_identity
+                try:
+                    marks.write_bytes((original_marks or b'') +
+                        b'\nPackage: mano-stale-marks-ci\nArchitecture: amd64\nAuto-Installed: 1\n')
+                    changed_identity = custody.extended_identity(custody.extended_states())
+                    changed_status = custody.current_status()
+                    assert changed_status == plan['status_sha256']
+                    assert changed_identity != original_identity
+                    try:
+                        with current_plan(plan):
+                            raise AssertionError('Root admitted stale APT package marks')
+                    except ValueError as error:
+                        assert 'APT package marks changed' in str(error)
+                    try:
+                        custody.load(plan['catalog_id'])
+                        raise AssertionError('Catalog admitted stale APT package marks')
+                    except ValueError as error:
+                        assert 'APT package marks changed' in str(error)
+                finally:
+                    if original_marks is None:
+                        marks.unlink()
+                    else:
+                        marks.write_bytes(original_marks)
+                custody.load(plan['catalog_id'])
+                with current_plan(plan):
+                    pass
+                root_resolution['live_apt_marks'] = dict(
+                    original=original_identity, changed=changed_identity,
+                    restored=custody.extended_identity(custody.extended_states()),
+                    status_sha256_during_change=changed_status)
+                assert root_resolution['live_apt_marks']['restored'] == original_identity
+                root_resolution['changed_live_apt_marks_denied'] = True
+                root_resolution['restored_live_apt_marks_admitted'] = True
             root_resolution['tampered_forecast_delta_denied'] = True
             root_resolution['actual_other_process_lock_denied'] = True
             root_resolution['ambient_apt_config_cleared'] = True
