@@ -217,7 +217,7 @@ def run(rpc, human, identity, password):
                 marks = custody.EXTENDED
                 original_marks = custody.extended_states()
                 original_identity = custody.extended_identity(original_marks)
-                assert catalog['extended_states_source'] == original_identity
+                assert catalog_manifest['extended_states_source'] == original_identity
                 try:
                     marks.write_bytes((original_marks or b'') +
                         b'\nPackage: mano-stale-marks-ci\nArchitecture: amd64\nAuto-Installed: 1\n')
