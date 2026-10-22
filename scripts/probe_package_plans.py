@@ -212,6 +212,10 @@ def run(rpc, human, identity, password):
             root_resolution['actual_other_process_lock_denied'] = True
             root_resolution['ambient_apt_config_cleared'] = True
             record['root_resolution'] = root_resolution
+            if key == 'dependency-plan':
+                from probe_package_archives import run as archive_probe
+
+                record['root_archives'] = archive_probe(plan)
             review = record['result']['install_review']
             assert review['plan'] == plan
             assert review['plan_sha256'] == record['result']['sha256']

@@ -1877,6 +1877,7 @@ finally:client.close()
     terminal_report['package_plan_no_install_workspace_config_or_replay_effect'] = True
     terminal_report['package_install_review_owned_digest_and_stale_denials'] = True
     terminal_report['root_package_resolution_locked_exact_plan_and_stale_denials'] = True
+    terminal_report['root_package_archives_signed_hash_identity_and_kernel_seals'] = True
     terminal_report['package_plan_witness'] = package_records
     (ROOT/'evidence/package-plans.json').write_text(json.dumps(package_records,indent=2)+'\n')
     from probe_checkpoints import run as probe_checkpoints

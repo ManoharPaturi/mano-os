@@ -1,3 +1,28 @@
+# Current work: verified package archive custody
+
+Mainb755d910b670e256d27f4e9506020adcb417a55d containsmergedPR129 Rootresolution
+(accepted456b1f1CI39701965902/all44flags/54hashes/6freshGUI). Postmain129
+CI39704065843 currentlyrunning; pollSAMErununtilterminal.
+Branchfeat/verified-package-archives addsRoot-only verified_archives context over
+freshcurrent_plan/locks: fixedRootAPTcache, boundedscan, exactsignedcatalogSHA/size,
+sealedmemfdcopies, dpkg-deb name/version/archmatch, sourceidentityrecheck, nativeStop
+checks, closeFDsonexit. No download/install/grant/servicelistener. Admission64MiB/
+archive128MiBtotal256MiBscan256entries; missingarchivesfailclosed. Peakinstallspace
+unknown. Finalproductauthorizedacquisition/spacepolicy stillrequired (notanoffline
+onlyscope). Rootchildren remaintrusted/unconfined, notbrokerexposed. ADR0112.
+NativeCI fixtureexplicitlyprefetchesfixedversionsoutsideproductcode, thenchecks
+realSHA/metadata/seals/Rootwrite+truncatedenial/cachemutationunchangedsealedbytes,
+corrupt/symlink/missingdenials/FDclosure/noFDleak/dpkgstatusunchanged. New45thflag.
+Local500tests/48Linuxskips + Ruff/compile/shell/diffpassed; twoactualmemfdtestsrun
+LinuxCIwithoutRoot. Native/artifact/6freshGUI stillpending beforeanymerge.
+Preserve3untracked ' 2'files; selectivecommitonly. Disk25GiBfree88%.
+Fulloriginalv2.1ACTIVE/incomplete: exactnativePAMapply, verifiedauthorizedacquisition,
+space/checkpoint/commit, constrainedRootStopdomainexecutor, verifiedoutcomes/
+registryrefresh/recovery, liveprovider/authenticatedcoding/apps/hardware,
+physical8GB/input,signedOSrelease. No RootMac/paid/secrets/localVM/deletions.
+
+Historical notesbelow; outputs/CONTINUATION.md iscurrentruntimehandoff.
+
 # Current work: locked Root package re-resolution
 
 Main4a85548a19c7aa72fc62105db271fdfb7ef953ff includes merged PR128 attemptcustody
