@@ -216,10 +216,15 @@ def run(rpc, human, identity, password):
 
                 marks = custody.EXTENDED
                 original_marks = custody.extended_states()
+                original_identity = custody.extended_identity(original_marks)
+                assert catalog['extended_states_source'] == original_identity
                 try:
                     marks.write_bytes((original_marks or b'') +
                         b'\nPackage: mano-stale-marks-ci\nArchitecture: amd64\nAuto-Installed: 1\n')
-                    assert custody.current_status() == plan['status_sha256']
+                    changed_identity = custody.extended_identity(custody.extended_states())
+                    changed_status = custody.current_status()
+                    assert changed_status == plan['status_sha256']
+                    assert changed_identity != original_identity
                     try:
                         with current_plan(plan):
                             raise AssertionError('Root admitted stale APT package marks')
@@ -238,6 +243,11 @@ def run(rpc, human, identity, password):
                 custody.load(plan['catalog_id'])
                 with current_plan(plan):
                     pass
+                root_resolution['live_apt_marks'] = dict(
+                    original=original_identity, changed=changed_identity,
+                    restored=custody.extended_identity(custody.extended_states()),
+                    status_sha256_during_change=changed_status)
+                assert root_resolution['live_apt_marks']['restored'] == original_identity
                 root_resolution['changed_live_apt_marks_denied'] = True
                 root_resolution['restored_live_apt_marks_admitted'] = True
             root_resolution['tampered_forecast_delta_denied'] = True
