@@ -68,3 +68,14 @@ class PackagePostconditionTests(unittest.TestCase):
                state='deinstall ok config-files'), plan)
         with self.assertRaises(ValueError):
             verify(installed, installed, plan)
+
+
+    def test_full_dependency_set_is_verified_without_single_package_assumption(self):
+        plan = copy.deepcopy(self.plan)
+        dependency = plan['changes'][0] | dict(name='libncurses6', archive_sha256='c' * 64)
+        plan['changes'].insert(0, dependency)
+        plan['download_bytes'] = sum(row['download_bytes'] for row in plan['changes'])
+        after = self.after + status('libncurses6', dependency['candidate'])
+        self.assertEqual(verify(self.before, after, plan)['changes_verified'], 2)
+        with self.assertRaises(ValueError):
+            verify(self.before, self.after, plan)

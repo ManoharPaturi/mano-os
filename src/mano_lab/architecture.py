@@ -350,7 +350,8 @@ def audit(root: Path, spec: Path, adr: Path):
         and completed.get('automatic_replay_allowed') is False
         and proof.get('before_status_sha256') == captured.get('status_sha256')
         and proof.get('after_status_sha256') != restored.get('restored_status_sha256')
-        and proof.get('changes_verified') == 1
+        and proof.get('changes_verified') == len(successful.get('plan', {}).get('changes', []))
+        and 1 <= proof.get('changes_verified', 0) <= 64
         and proof.get('all_package_versions_checked') is True
         and proof.get('execution_authority_verified') is False,
         'Successful package state/version observation or historical recovery scope missing')

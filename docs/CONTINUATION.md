@@ -1,3 +1,13 @@
+# PR133 native dependency-set correction
+
+Initial b911bf3 CI39825969416 failed before effects: fixture assumed exactly one
+sl change, but real APT solution contains dependencies. Raw log preserved in
+outputs/pr133-first-ci-failure.log. Fixture now requires the full bounded signed
+install solution, finds each exact archive by SHA256 and length, and installs all
+approved archives. No omitted dependencies or postcondition relaxation. Audit and
+independent acceptance compare every approved transition and all unrelated states.
+CI rerun on new head pending. No merge on failed initial head.
+
 # Current: durable package database postconditions
 
 Main23c41d9e1129e896c564a667fbb5b626b0f743af includes PR132. Exact post-main

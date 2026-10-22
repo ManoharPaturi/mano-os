@@ -95,12 +95,20 @@ def main():
     catalog_admin.build()
     catalog_root, catalog_manifest = custody.load()
     successful_plan = _resolve_catalog(['sl'], catalog_manifest['catalog_id'], catalog=catalog_root)
-    assert len(successful_plan['changes']) == 1
-    row = successful_plan['changes'][0]
-    assert row['name'] == 'sl' and row['operation'] == 'install'
-    archives = list(Path('/var/cache/apt/archives').glob('sl_*.deb'))
-    assert len(archives) == 1
-    assert hashlib.sha256(archives[0].read_bytes()).hexdigest() == row['archive_sha256']
+    # The actual signed solution includes dependencies (e.g. libncurses6).
+    # Verify every archive and pass the whole bounded solution to dpkg.
+    changes = successful_plan['changes']
+    assert 1 <= len(changes) <= 64 and any(row['name'] == 'sl' for row in changes)
+    assert all(row['operation'] == 'install' for row in changes), changes
+    cached = list(Path('/var/cache/apt/archives').glob('*.deb'))
+    assert len(cached) <= 256
+    archive_hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in cached}
+    archives = []
+    for row in changes:
+        matches = [path for path, sha in archive_hashes.items() if sha == row['archive_sha256']]
+        assert len(matches) == 1, row['name']
+        assert Path(matches[0]).stat().st_size == row['download_bytes']
+        archives.append(matches[0])
     successful_id = '16' * 16  # Sort after the existing interrupted-attempt identity.
     successful_request = hashlib.sha256(b'controlled CI successful sl journal').hexdigest()
     before_bytes = Path('/var/lib/dpkg/status').read_bytes()
@@ -122,7 +130,7 @@ def main():
             else:
                 raise AssertionError('Postconditions checked without backend ownership')
             installed = subprocess.run(
-                ['/usr/bin/dpkg', '--install', str(archives[0])],
+                ['/usr/bin/dpkg', '--install', *archives],
                 env=recovery_runtime.ENV | frontend_env, capture_output=True,
                 text=True, timeout=120)
             assert installed.returncode == 0, installed.stderr
