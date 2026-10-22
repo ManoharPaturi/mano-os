@@ -141,6 +141,90 @@ class PackageAttemptTests(unittest.TestCase):
         self.assertEqual(list(self.base.iterdir()), [self.base / ATTEMPT])
 
 
+    def complete_fixture(self):
+        from test_package_plans import PackageProtocolTests
+        from test_package_postconditions import status
+
+        fixture = PackageProtocolTests()
+        fixture.setUp()
+        before = status('bash')
+        after = before + status('sl', fixture.plan['changes'][0]['candidate'])
+        plan = fixture.plan | dict(status_sha256=hashlib.sha256(before).hexdigest())
+        recovery.current_status.return_value = plan['status_sha256']
+        recovery.recovery_record.return_value['status_sha256'] = plan['status_sha256']
+        recovery.read.side_effect = lambda path, maximum: (
+            before if 'snapshot' in path.parts else after)
+        self.begin()
+        recovery.current_status.return_value = hashlib.sha256(after).hexdigest()
+        return plan
+
+    def test_verified_observation_is_durable_and_never_replayed(self):
+        plan = self.complete_fixture()
+        completed = attempts.complete_locked(ATTEMPT, DIGEST, plan)
+        rows = attempts.reconcile()
+        self.assertEqual(rows[0]['outcome'], completed)
+        self.assertEqual(completed['state'], 'postconditions-verified')
+        self.assertIs(completed['automatic_replay_allowed'], False)
+        self.assertIs(completed['postconditions']['execution_authority_verified'], False)
+        with self.assertRaises(ValueError):
+            attempts.complete_locked(ATTEMPT, DIGEST, plan)
+        self.assertEqual(attempts.reconcile(), rows)
+        # This is history from the original boot, not proof of a later system state.
+        with patch.object(attempts, 'boot', return_value='fedcba98-7654-3210-fedc-ba9876543210'):
+            self.assertEqual(attempts.reconcile(), rows)
+
+    def test_unknown_attempt_cannot_be_promoted_by_late_success(self):
+        plan = self.complete_fixture()
+        attempts.reconcile()
+        with self.assertRaises(ValueError):
+            attempts.complete_locked(ATTEMPT, DIGEST, plan)
+        self.assertFalse((self.base / ATTEMPT / 'verified.json').exists())
+
+    def test_failed_or_partial_completion_never_allows_another_effect(self):
+        plan = self.complete_fixture()
+        with patch.object(recovery, 'save', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                attempts.complete_locked(ATTEMPT, DIGEST, plan)
+        with self.assertRaises(ValueError):
+            attempts.begin('d' * 32, DIGEST, RECOVERY)
+        self.assertEqual(attempts.reconcile()[0]['outcome']['state'], 'unknown')
+
+    def test_corrupt_verified_outcome_is_preserved_and_blocks_reconciliation(self):
+        plan = self.complete_fixture()
+        attempts.complete_locked(ATTEMPT, DIGEST, plan)
+        path = self.base / ATTEMPT / 'verified.json'
+        path.write_bytes(b'{"state":')
+        with self.assertRaises(ValueError):
+            attempts.reconcile()
+        self.assertEqual(path.read_bytes(), b'{"state":')
+
+    def test_new_attempt_can_follow_verified_history_but_never_reuse_id(self):
+        plan = self.complete_fixture()
+        attempts.complete_locked(ATTEMPT, DIGEST, plan)
+        # Supply a fresh checkpoint over the new current status for the next attempt.
+        after = recovery.read(Path('/var/lib/dpkg/status'), recovery.MAX_STATUS)
+        recovery.recovery_record.return_value['status_sha256'] = hashlib.sha256(after).hexdigest()
+        recovery.read.side_effect = lambda path, maximum: after
+        with self.assertRaises(FileExistsError):
+            attempts.begin(ATTEMPT, DIGEST, RECOVERY)
+        next_intent = attempts.begin('d' * 32, DIGEST, RECOVERY)
+        self.assertEqual(next_intent['state'], 'intent')
+        self.assertEqual(len(attempts.reconcile()), 2)
+
+
+    def test_completion_requires_current_boot_exact_request_and_owned_scope(self):
+        plan = self.complete_fixture()
+        with self.assertRaises(ValueError):
+            attempts.complete_locked(ATTEMPT, 'e' * 64, plan)
+        with patch.object(attempts, 'boot', return_value='fedcba98-7654-3210-fedc-ba9876543210'):
+            with self.assertRaises(ValueError):
+                attempts.complete_locked(ATTEMPT, DIGEST, plan)
+        with patch.object(recovery, 'require_locked', side_effect=PermissionError):
+            with self.assertRaises(PermissionError):
+                attempts.complete_locked(ATTEMPT, DIGEST, plan)
+        self.assertEqual({p.name for p in (self.base / ATTEMPT).iterdir()}, {'intent.json'})
+
+
 class PackageAttemptGuardTests(unittest.TestCase):
     def test_mac_guard_precedes_any_root_observation(self):
         with (

@@ -150,8 +150,13 @@ def begin_locked(attempt_id, request_sha256, recovery_id):
     existing = inventory()
     if attempt_id in existing:
         raise FileExistsError("Package attempt ID is already reserved")
-    if existing:
-        raise ValueError("Unresolved package attempt requires operator recovery")
+    if len(existing) >= MAX_ATTEMPTS:
+        raise ValueError("Package attempt retention needs operator review")
+    for prior in existing:
+        previous = BASE / prior
+        if {p.name for p in previous.iterdir()} != {"intent.json", "verified.json"}:
+            raise ValueError("Unresolved package attempt requires operator recovery")
+        verified_record(previous / "verified.json", record(previous / "intent.json"))
     directory = BASE / attempt_id
     directory.mkdir(mode=0o700)  # Never reuse an ID after a lost acknowledgement.
     sync(BASE)
@@ -188,9 +193,14 @@ def reconcile():
             if {path.name for path in directory.iterdir()} not in (
                 {"intent.json"},
                 {"intent.json", "unknown.json"},
+                {"intent.json", "verified.json"},
             ):
                 raise ValueError("Incomplete or foreign package attempt files; inspect custody")
             intent = record(directory / "intent.json")
+            if (directory / "verified.json").exists() or (directory / "verified.json").is_symlink():
+                results.append(dict(intent=intent,
+                    outcome=verified_record(directory / "verified.json", intent)))
+                continue
             path = directory / "unknown.json"
             if not path.exists():
                 recovery.save(
@@ -224,3 +234,83 @@ def reconcile():
                 raise ValueError("Invalid reconciliation boot identity")
             results.append(dict(intent=intent, outcome=outcome))
         return results
+
+
+def verified_record(path, intent):
+    """Validate a historical observation; it never proves current boot state."""
+    value = json.loads(read(path, 4096), object_pairs_hook=unique_object)
+    fields = {"schema_version", "attempt_id", "state", "observed_boot_id",
+              "automatic_replay_allowed", "request_sha256", "plan_sha256", "postconditions"}
+    if (not isinstance(value, dict) or set(value) != fields
+            or value["schema_version"] != "1.0"
+            or value["attempt_id"] != intent["attempt_id"]
+            or value["state"] != "postconditions-verified"
+            or value["observed_boot_id"] != intent["boot_id"]
+            or value["request_sha256"] != intent["request_sha256"]
+            or value["automatic_replay_allowed"] is not False):
+        raise ValueError("Invalid package postcondition record")
+    digest(value["plan_sha256"])
+    proof = value["postconditions"]
+    if (not isinstance(proof, dict) or set(proof) != {
+            "before_status_sha256", "after_status_sha256", "packages_before", "packages_after",
+            "changes_verified", "all_package_versions_checked", "execution_authority_verified",
+            "maintainer_effects_verified"}
+            or proof["before_status_sha256"] != intent["status_sha256"]
+            or proof["all_package_versions_checked"] is not True
+            or proof["execution_authority_verified"] is not False
+            or proof["maintainer_effects_verified"] is not False
+            or any(type(proof[key]) is not int or not 0 <= proof[key] <= 100000
+                   for key in ("packages_before", "packages_after", "changes_verified"))
+            or proof["changes_verified"] > 64):
+        raise ValueError("Invalid package postcondition proof")
+    digest(proof["after_status_sha256"])
+    return value
+
+
+def complete_locked(attempt_id, request_sha256, plan):
+    """Durably verify database transitions under an owned backend-held scope.
+
+    This checks package states/versions only, never approval, arbitrary maintainer
+    effects, payload contents or the current state after a later recovery boot.
+    A published unknown outcome cannot be promoted or automatically retried.
+    """
+    guard()
+    recovery.require_locked()
+    identifier(attempt_id)
+    digest(request_sha256)
+    current_layout = recovery.layout()
+    inventory()
+    directory = BASE / attempt_id
+    if {path.name for path in directory.iterdir()} != {"intent.json"}:
+        raise ValueError("Package outcome is already reserved or requires operator recovery")
+    intent = record(directory / "intent.json")
+    if intent["request_sha256"] != request_sha256 or intent["boot_id"] != boot():
+        raise ValueError("Current-boot exact package attempt required")
+    checkpoint = recovery.recovery_record(intent["recovery_id"])
+    source = recovery.STORAGE / str(checkpoint["snapshot_number"]) / "snapshot"
+    if (checkpoint["status_sha256"] != intent["status_sha256"]
+            or checkpoint["boot_id"] != intent["boot_id"]
+            or any(current_layout[key] != checkpoint["layout"][key]
+                   for key in current_layout if key != "free_bytes")
+            or recovery.subvolume(source) != checkpoint["snapshot"]
+            or recovery.command("/usr/bin/btrfs", "property", "get", str(source), "ro")
+            != "ro=true"):
+        raise ValueError("Before-checkpoint provenance changed")
+    from mano_broker.package_catalog import MAX_STATUS, STATUS
+    from mano_protocol.packages import result_digest
+    from mano_runtime.package_postconditions import verify
+
+    before = recovery.read(source / "var/lib/dpkg/status", MAX_STATUS)
+    current = recovery.current_status()  # Reject an unsettled write-ahead journal.
+    after = recovery.read(STATUS, MAX_STATUS)
+    proof = verify(before, after, plan)
+    if current != proof["after_status_sha256"] or recovery.current_status() != current:
+        raise ValueError("Package status changed during postcondition verification")
+    value = dict(schema_version="1.0", attempt_id=attempt_id, state="postconditions-verified",
+                 observed_boot_id=intent["boot_id"], automatic_replay_allowed=False,
+                 request_sha256=request_sha256,
+                 plan_sha256=result_digest(plan, expected={key: plan[key]
+                                           for key in ("names", "catalog_id")}),
+                 postconditions=proof)
+    recovery.save(directory / "verified.json", value)
+    return verified_record(directory / "verified.json", intent)

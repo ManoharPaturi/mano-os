@@ -313,7 +313,7 @@ def audit(root: Path, spec: Path, adr: Path):
     resources = load("resources.json")
     attempts = package_recovery.get("package_attempts", [])
     attempt_checkpoint = package_recovery.get('coherent_checkpoint', captured)
-    require(isinstance(attempts, list) and len(attempts) == 1,
+    require(isinstance(attempts, list) and len(attempts) == 2,
             "Package attempt custody evidence missing")
     intent, outcome = attempts[0].get("intent", {}), attempts[0].get("outcome", {})
     require(
@@ -334,6 +334,26 @@ def audit(root: Path, spec: Path, adr: Path):
         and restored.get("package_attempt_unknown_without_replay") is True,
         "Package attempt lost-acknowledgement/recovery-boot evidence incomplete",
     )
+    successful = package_recovery.get('successful_package_postconditions', {})
+    completed = successful.get('outcome', {})
+    proof = completed.get('postconditions', {})
+    require(
+        attempts[1] == dict(intent=successful.get('intent'), outcome=completed)
+        and successful.get('native_dpkg_returncode') == 0
+        and successful.get('premature_completion_denied') is True
+        and successful.get('backend_handoff_completion_denied') is True
+        and successful.get('historical_receipt_survived_recovery_boot') is True
+        and successful.get('historical_receipt_does_not_prove_restored_state') is True
+        and successful.get('privileged_apply_verified') is False
+        and successful.get('broker_approval_verified') is False
+        and completed.get('state') == 'postconditions-verified'
+        and completed.get('automatic_replay_allowed') is False
+        and proof.get('before_status_sha256') == captured.get('status_sha256')
+        and proof.get('after_status_sha256') != restored.get('restored_status_sha256')
+        and proof.get('changes_verified') == 1
+        and proof.get('all_package_versions_checked') is True
+        and proof.get('execution_authority_verified') is False,
+        'Successful package state/version observation or historical recovery scope missing')
     coherent = package_recovery.get('coherent_package_locks', {})
     require(all(coherent.get(key) is True for key in (
         'checkpoint_and_intent_same_scope',

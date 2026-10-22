@@ -96,6 +96,15 @@ def main():
         assert attempts[0]["intent"]["boot_id"] != boot_id
         assert attempts[0]["outcome"]["state"] == "unknown"
         assert attempts[0]["outcome"]["automatic_replay_allowed"] is False
+        if 'successful_package_postconditions' in package_source:
+            successful = package_source['successful_package_postconditions']
+            assert len(attempts) == 2 and attempts[1] == dict(
+                intent=successful['intent'], outcome=successful['outcome'])
+            assert successful['outcome']['state'] == 'postconditions-verified'
+            assert restored_status != successful['outcome']['postconditions']['after_status_sha256']
+            successful['historical_receipt_survived_recovery_boot'] = True
+            successful['historical_receipt_does_not_prove_restored_state'] = True
+
 
         package_source["actual_recovery_boot"] = dict(
             boot_id=boot_id,
