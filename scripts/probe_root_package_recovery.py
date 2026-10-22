@@ -71,6 +71,29 @@ def main():
     created = terminal("create")
     assert created["status_sha256"] == status and created["snapshot_read_only"] is True
     assert created["package_install_authorized"] is False
+    from mano_runtime import package_attempts
+    from mano_runtime import recovery as recovery_runtime
+
+    with recovery_runtime.locked():
+        try:
+            with recovery_runtime.locked():
+                raise AssertionError("Nested package-manager lock scope admitted")
+        except BlockingIOError:
+            pass
+        # Prove the refused nested scope did not release the outer POSIX locks.
+        assert "BlockingIOError" in terminal("create", success=False)
+
+    attempt_id = "14" * 16
+    # CI context only: this digest is not a broker grant or a human approval.
+    request_sha256 = hashlib.sha256(b"controlled CI sl + interrupted dpkg fixture").hexdigest()
+    intent = package_attempts.begin(attempt_id, request_sha256, created["recovery_id"])
+    assert intent["state"] == "intent" and intent["installation_authorized"] is False
+    try:
+        package_attempts.begin(attempt_id, request_sha256, created["recovery_id"])
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("Lost-acknowledgement attempt identity was reused")
     # Only this explicitly guarded CI driver installs the fixed signed Debian test package.
     installed = command("/usr/bin/apt-get", "--no-install-recommends", "-y", "install", "sl")
     assert installed.returncode == 0
@@ -86,6 +109,11 @@ def main():
         lambda: terminal("prepare-boot", created["recovery_id"], success=False)
     )
     journal_entries = interrupted["journal_entries"]
+    attempts = package_attempts.reconcile()
+    assert len(attempts) == 1 and attempts[0]["intent"] == intent
+    assert attempts[0]["outcome"]["state"] == "unknown"
+    assert attempts[0]["outcome"]["automatic_replay_allowed"] is False
+    assert package_attempts.reconcile() == attempts
     assert "Unsettled dpkg journal" in terminal("create", success=False)
     changed_status = hashlib.sha256(Path("/var/lib/dpkg/status").read_bytes()).hexdigest()
     prepared = terminal("prepare-boot", created["recovery_id"])
@@ -123,6 +151,11 @@ def main():
         dirty_journal_snapshot_creation_denied=True,
         source_journal_preserved=True,
         interrupted_package=interrupted,
+        package_attempts=attempts,
+        duplicate_attempt_denied=True,
+        nested_scope_denied_outer_posix_lock_preserved=True,
+        repeated_reconciliation_unchanged=True,
+        attempt_request_is_ci_context_not_approval=True,
         live_model_connected=False,
         agent_package_install_authorized=False,
     )

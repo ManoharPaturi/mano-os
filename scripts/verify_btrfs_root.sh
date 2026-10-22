@@ -30,6 +30,6 @@ PY
 uname -a > evidence/kernel.txt
 findmnt --json > evidence/mounts.json
 free -b > evidence/memory-before.txt
-if [ "$root_subvol" = @recovery ]; then python3 scripts/verify_root_recovery.py; fi
+if [ "$root_subvol" = @recovery ]; then PYTHONPATH=src python3 scripts/verify_root_recovery.py; fi
 PYTHONPATH=src python3 scripts/probe_lab.py
 free -b > evidence/memory-after.txt

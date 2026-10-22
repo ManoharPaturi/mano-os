@@ -89,6 +89,13 @@ def main():
         )
         assert not PAYLOAD.exists()
         assert (Path("/mnt/mano-root/@") / PAYLOAD.relative_to("/")).read_bytes() == PAYLOAD_BYTES
+        from mano_runtime import package_attempts
+
+        attempts = package_attempts.reconcile()
+        assert attempts == package_source["package_attempts"]
+        assert attempts[0]["intent"]["boot_id"] != boot_id
+        assert attempts[0]["outcome"]["state"] == "unknown"
+        assert attempts[0]["outcome"]["automatic_replay_allowed"] is False
 
         package_source["actual_recovery_boot"] = dict(
             boot_id=boot_id,
@@ -102,6 +109,8 @@ def main():
             source_dirty_journal_preserved=True,
             interrupted_package_payload_absent=True,
             changed_source_interrupted_payload_preserved=True,
+            package_attempt_custody_survived_recovery_boot=True,
+            package_attempt_unknown_without_replay=True,
         )
         Path("evidence/package-root-recovery.json").write_text(
             json.dumps(package_source, indent=2) + "\n"

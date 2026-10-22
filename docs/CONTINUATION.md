@@ -1,3 +1,29 @@
+# Current work: package-attempt custody
+
+Main 65e9661c425c5a5179e58dccb91ebb02a6dae64e includes merged PR127 with
+accepted native/installed Root Stop evidence. Its post-main CI39696070999 is
+still running; poll the same run to terminal, do not restart on observer timeout.
+Branch feat/package-attempt-journal adds Root-private immutable write-ahead
+intent under the persistent snapshot subvolume, bound to a fresh current-boot
+checkpoint/current layout/status. Exclusive ID reservation and fsync precede
+return. Unknown outcomes block new IDs; no retry, clear, success, CLI, service,
+public endpoint or apply authority is added. Partial/corrupt custody fails closed.
+Nonreentrant package-manager lock scope prevents POSIX-lock release by nesting.
+CI records intent before controlled package changes, requires duplicate denial
+and outer-lock preservation, reconciles after actual interrupted dpkg, then
+requires identical custody after real clean recovery-clone boot. ADR0110.
+Local 488 tests/46 Linux skips plus Ruff/compile/shell/diff passed. New native
+CI and complete artifact/six-original-GUI acceptance still required before merge.
+Disk 25GiB free/88%. Three unrelated untracked files with suffix ' 2' appeared;
+preserve them and commit only this change's explicit paths. No local VM/model
+assets, Root experiments on Mac, reviewer requests or silent deletion.
+Full original v2.1 goal remains ACTIVE/incomplete: fresh native-PAM apply consent,
+current independent Root resolution, archives/space, same-scope checkpoint and
+commit, actual execution inside Stop domain, postconditions/service reconciliation,
+live provider/authenticated coding, apps/hardware, physical8GB/input, signed release.
+
+Historical notes below; outputs/CONTINUATION.md is the current runtime handoff.
+
 # Current work: privileged package Stop domain
 
 Main3a860c5e87bea2ca60e36284edd0913755c0047b includes package-install-review
