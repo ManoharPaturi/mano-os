@@ -29,7 +29,7 @@ case "$snapshot" in ''|*[!0-9]*) echo 'Invalid snapshot number' >&2; exit 1 ;; e
 test "$(btrfs property get "/.snapshots/$snapshot/snapshot" ro)" = ro=true
 # The production Root-terminal helper creates another read-only Snapper snapshot,
 # then prepares the fixed clone around a real package change. No boot selection here.
-snapshot=$(python3 scripts/probe_root_package_recovery.py)
+snapshot=$(PYTHONPATH=src python3 scripts/probe_root_package_recovery.py)
 case "$snapshot" in ''|*[!0-9]*) echo 'Invalid recovery snapshot' >&2; exit 1 ;; esac
 python3 - "$snapshot" <<'PY'
 import json,sys

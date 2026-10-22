@@ -311,6 +311,28 @@ def audit(root: Path, spec: Path, adr: Path):
         'Package-state recovery and admission evidence incomplete',
     )
     resources = load("resources.json")
+    attempts = package_recovery.get("package_attempts", [])
+    require(isinstance(attempts, list) and len(attempts) == 1,
+            "Package attempt custody evidence missing")
+    intent, outcome = attempts[0].get("intent", {}), attempts[0].get("outcome", {})
+    require(
+        intent.get("state") == "intent"
+        and intent.get("recovery_id") == captured.get("recovery_id")
+        and intent.get("status_sha256") == captured.get("status_sha256")
+        and intent.get("boot_id") == captured.get("boot_id")
+        and intent.get("installation_authorized") is False
+        and intent.get("automatic_replay_allowed") is False
+        and outcome.get("attempt_id") == intent.get("attempt_id")
+        and outcome.get("state") == "unknown"
+        and outcome.get("automatic_replay_allowed") is False
+        and package_recovery.get("duplicate_attempt_denied") is True
+        and package_recovery.get("nested_scope_denied_outer_posix_lock_preserved") is True
+        and package_recovery.get("repeated_reconciliation_unchanged") is True
+        and package_recovery.get("attempt_request_is_ci_context_not_approval") is True
+        and restored.get("package_attempt_custody_survived_recovery_boot") is True
+        and restored.get("package_attempt_unknown_without_replay") is True,
+        "Package attempt lost-acknowledgement/recovery-boot evidence incomplete",
+    )
     require(
         resources.get("app_startup_observations")
         == {

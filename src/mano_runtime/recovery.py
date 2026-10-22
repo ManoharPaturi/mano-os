@@ -15,6 +15,7 @@ import re
 import stat
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -28,6 +29,7 @@ TOP = Path("/run/mano-package-recovery-top")
 CONFIG = Path("/etc/snapper/configs/mano-root")
 CRITICAL = ("/usr", "/etc", "/var/lib/dpkg", "/var/lib/apt", "/var/cache/apt", "/boot")
 ENV = {"PATH": "/usr/sbin:/usr/bin:/bin", "LANG": "C.UTF-8"}
+_PACKAGE_LOCK_SCOPE = threading.Lock()
 
 
 def command(*args):
@@ -131,6 +133,20 @@ def layout():
 
 @contextlib.contextmanager
 def locked():
+    # POSIX record locks belong to the process: closing a second descriptor can
+    # drop a lock still needed by an outer scope. Reject nesting/parallel scopes
+    # before opening any package-manager descriptor.
+    if not _PACKAGE_LOCK_SCOPE.acquire(blocking=False):
+        raise BlockingIOError("Package-manager lock scope is already active")
+    try:
+        with _locked_descriptors():
+            yield
+    finally:
+        _PACKAGE_LOCK_SCOPE.release()
+
+
+@contextlib.contextmanager
+def _locked_descriptors():
     trusted(STORAGE, directory=True)
     try:
         BASE.mkdir(mode=0o700)
