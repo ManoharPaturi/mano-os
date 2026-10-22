@@ -91,8 +91,8 @@ def run(plan):
             assert "Untrusted package catalog path" in str(error)
     finally:
         symlink.unlink()  # Only this freshly created disposable CI symlink.
-    private = Path("/run/mano-archive-missing-ci")
-    assert not private.exists()
+    private = CACHE / ".mano-archive-missing-ci"
+    assert not private.exists() and not private.is_symlink()
     private.mkdir(mode=0o700)
     held = private / "archive.deb"
     source.rename(held)
