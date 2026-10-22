@@ -28,9 +28,9 @@ def expected(plan):
 
 
 def isolated(args):
-    root = Path(__file__).resolve().parents[1]
+    root = Path("/usr/lib/mano-os")
     package_catalog.trusted(root, directory=True)
-    package_catalog.trusted(Path(__file__))
+    package_catalog.trusted(root / "mano_runtime/package_resolution.py")
     packet = subprocess.run(
         ["/usr/bin/python3", "-P", "-m", "mano_runtime.package_resolution", "--worker"],
         input=canonical(args).encode(),

@@ -108,7 +108,7 @@ class IsolatedRootWorkerTests(unittest.TestCase):
         kwargs = run.call_args.kwargs
         self.assertNotIn("APT_CONFIG", kwargs["env"])
         self.assertNotIn("http_proxy", kwargs["env"])
-        self.assertNotEqual(kwargs["env"]["PYTHONPATH"], "/tmp/hostile")
+        self.assertEqual(kwargs["env"]["PYTHONPATH"], "/usr/lib/mano-os")
         self.assertEqual(json.loads(kwargs["input"]), fixture.args)
         self.assertEqual(run.call_args.args[0][:3], ["/usr/bin/python3", "-P", "-m"])
 
