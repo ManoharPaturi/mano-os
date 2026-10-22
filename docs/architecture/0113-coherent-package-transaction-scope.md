@@ -33,8 +33,9 @@ before the controlled unsigned dpkg/postinst effect. During handoff, another pro
 must acquire the released backend, while direct dpkg must fail on the frontend.
 Checkpoint and intent calls must refuse while the backend is released. The actual
 dpkg child then runs with the supported marker, reaches its controlled postinst,
-and is pinned/frozen/interrupted as before. `/proc/locks` must identify the driver
-as frontend owner and actual dpkg PID as backend owner. After termination, the
+and is pinned/frozen/interrupted as before. A separate fixed-file C observer uses `F_GETLK` to identify the driver
+as frontend owner and actual dpkg PID as backend owner, using the opened lock files
+rather than comparing procfs inode/device text with filesystem stat values. After termination, the
 driver must regain the backend. The attempt stays unknown across real recovery
 boot; recovery still targets the original earlier checkpoint, so the intent's
 checkpoint is explicitly distinct from the selected recovery target. Neither

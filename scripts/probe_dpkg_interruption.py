@@ -1,6 +1,7 @@
 """Real dpkg interruption with unsigned fixture, disposable Root CI only; never shipped."""
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -56,31 +57,6 @@ def wait_stopped(pid):
     raise AssertionError("Actual dpkg/postinst process did not stop")
 
 
-def lock_owner(path, pid):
-    info = Path(path).stat()
-    expected = (os.major(info.st_dev), os.minor(info.st_dev), info.st_ino)
-    matched = []
-    for line in Path("/proc/locks").read_text().splitlines():
-        fields = line.split()
-        if len(fields) != 8 or fields[1:4] != ["POSIX", "ADVISORY", "WRITE"]:
-            continue
-        major, minor, inode = fields[5].split(":")
-        if (int(major, 16), int(minor, 16), int(inode)) == expected:
-            assert fields[4] == str(pid) and fields[6:] == ["0", "EOF"]
-            matched.append(
-                dict(
-                    pid=pid,
-                    inode=info.st_ino,
-                    major=expected[0],
-                    minor=expected[1],
-                    kind="POSIX",
-                    range="0:EOF",
-                )
-            )
-    assert len(matched) == 1
-    return matched[0]
-
-
 def interrupt_install(while_frozen, *, frontend_scope=None):
     guard()
     frontend_env = {}
@@ -105,6 +81,27 @@ def interrupt_install(while_frozen, *, frontend_scope=None):
         timeout=30,
     )
     assert package.stat().st_size < 16384
+    observer = Path("/opt/mano-lab/work/package-lock-owner-ci")
+    if frontend_scope is not None:
+        assert not observer.exists()
+        subprocess.run(
+            [
+                "/usr/bin/cc",
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fstack-protector-strong",
+                "-D_FORTIFY_SOURCE=2",
+                "/opt/mano-lab/tests/fixtures/package-lock-owner.c",
+                "-o",
+                str(observer),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
     status_r, status_w = os.pipe2(os.O_CLOEXEC)
     process = subprocess.Popen(
         ["/usr/bin/dpkg", "--status-fd", str(status_w), "--install", str(package)],
@@ -156,12 +153,18 @@ def interrupt_install(while_frozen, *, frontend_scope=None):
             signal.pidfd_send_signal(handle, signal.SIGSTOP)
             wait_stopped(pid)
         assert not (RUNTIME / "postinst-completed").exists()
-        owners = None
+        owners, observed = None, None
         if frontend_scope is not None:
-            owners = dict(
-                frontend=lock_owner("/var/lib/dpkg/lock-frontend", os.getpid()),
-                backend=lock_owner("/var/lib/dpkg/lock", process.pid),
+            result = subprocess.run(
+                [str(observer)], check=False, capture_output=True, text=True, timeout=5
             )
+            assert result.returncode == 0, (result.stdout, result.stderr)
+            observed = json.loads(result.stdout)
+            assert observed["query"] == "F_GETLK"
+            assert observed["observer_pid"] not in {os.getpid(), process.pid, postinst_pid}
+            owners = observed["owners"]
+            assert owners["frontend"]["pid"] == os.getpid(), observed
+            assert owners["backend"]["pid"] == process.pid, observed
         assert "BlockingIOError" in while_frozen()
         # Intentionally interrupt only this known, pinned, fresh CI process group.
         os.killpg(process.pid, signal.SIGKILL)
@@ -200,6 +203,7 @@ def interrupt_install(while_frozen, *, frontend_scope=None):
             product_stop_invoked=False,
             recovery_while_dpkg_live_denied=True,
             frontend_protocol_lock_owners=owners,
+            frontend_protocol_lock_observation=observed,
             maintainer_script_scope="controlled unsigned CI fixture, not production package",
         )
     finally:
