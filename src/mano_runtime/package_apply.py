@@ -314,9 +314,20 @@ def run_child(plan, archives, body, broker_fd):
                                 'Error', 'SystemError', 'TypeError', 'AttributeError', 'OSError',
                                 'KeyError', 'RuntimeError', 'TimeoutError',
                                 'NativeGuard', 'Unknown'}):
-                        print(canonical(dict(event='package-worker-denied',
-                            stage=detail['stage'], error_type=detail['error_type'])),
-                            file=sys.stderr, flush=True)
+                        diagnostic = dict(event='package-worker-denied',
+                            stage=detail['stage'], error_type=detail['error_type'])
+                        if detail.get('check') in {'identity', 'native-restrictions',
+                                'capabilities', 'network', 'protected-objects', 'secrets',
+                                'mount-ancestry', 'runtime-infrastructure'}:
+                            diagnostic['check'] = detail['check']
+                            state = detail.get('kernel_state')
+                            allowed = {'pid', 'NoNewPrivs', 'Seccomp', 'CapEff', 'CapPrm',
+                                       'CapInh', 'CapBnd', 'CapAmb', 'securebits', 'object_index'}
+                            if (isinstance(state, dict) and set(state) <= allowed and
+                                    all(type(v) is int and 0 <= v < 2**64
+                                        for v in state.values())):
+                                diagnostic['kernel_state'] = state
+                        print(canonical(diagnostic), file=sys.stderr, flush=True)
             raise ValueError('Package worker failed; inspect recovery custody')
         witnesses = [line.split(b'=', 1)[1] for line in protocol.splitlines()
                      if line.startswith(b'MANO_PACKAGE_BOUNDARY=')]

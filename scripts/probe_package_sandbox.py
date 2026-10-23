@@ -56,10 +56,17 @@ def run():
     (ROOT / 'evidence/package-sandbox-setup.json').write_text(json.dumps(value, indent=2) + '\n')
     # Exact stderr is safe here: no plan, approval, credentials or package script is supplied.
     assert value['return_code'] == 2, value
-    assert value['stdout'] == '', value
+    frames = value['stdout'].splitlines()
+    assert len(frames) == 1 and frames[0].startswith('MANO_PACKAGE_BOUNDARY='), value
+    boundary = json.loads(frames[0].split('=', 1)[1])
+    flags = set(boundary) - {'namespaces', 'capabilities', 'securebits'}
+    assert all(boundary[key] is True for key in flags), value
+    assert set(boundary['capabilities']) == {'CapEff', 'CapPrm', 'CapInh', 'CapBnd', 'CapAmb'}
+    assert set(boundary['capabilities'].values()) == {0xdb} and boundary['securebits'] == 43
     lines = value['stderr'].splitlines()
     assert len(lines) == 1 and lines[0].startswith('MANO_PACKAGE_ERROR='), value
     error = json.loads(lines[0].split('=', 1)[1])
     assert error == dict(stage='admission', error_type='ValueError'), value
     return dict(private_setup_reached_fixed_worker=True, invalid_plan_rejected=True,
-                package_execution=False, production_service_properties=properties)
+                package_execution=False, production_service_properties=properties,
+                boundary=boundary)

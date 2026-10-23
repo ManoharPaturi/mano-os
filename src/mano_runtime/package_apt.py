@@ -24,6 +24,8 @@ from mano_runtime.package_resolution import expected
 
 ARCHIVES = Path('/run/mano-package-archives')
 STAGE = 'admission'
+BOUNDARY_CHECK = 'entry'
+BOUNDARY_KERNEL = {}
 
 
 @contextlib.contextmanager
@@ -81,18 +83,26 @@ def locations(plan):
 
 def boundary():
     """Fail before effects if the fixed native/namespace boundary is missing."""
+    global BOUNDARY_CHECK, BOUNDARY_KERNEL
+    BOUNDARY_CHECK = 'identity'
     guard()
     if os.getpid() != 2:
         raise PermissionError('Private package PID namespace required')
     status = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text().splitlines()
                   if ':' in line)
+    BOUNDARY_CHECK = 'native-restrictions'
+    BOUNDARY_KERNEL = dict(pid=os.getpid(), NoNewPrivs=int(status['NoNewPrivs']),
+                           Seccomp=int(status['Seccomp']))
     if status['NoNewPrivs'].strip() != '1' or status['Seccomp'].strip() != '2':
         raise PermissionError('Native package restrictions absent')
     capabilities = {key: int(status[key].strip(), 16) for key in
                     ('CapEff', 'CapPrm', 'CapInh', 'CapBnd', 'CapAmb')}
     securebits = ctypes.CDLL(None, use_errno=True).prctl(27, 0, 0, 0, 0)  # PR_GET_SECUREBITS
+    BOUNDARY_CHECK = 'capabilities'
+    BOUNDARY_KERNEL.update(capabilities, securebits=securebits)
     if any(value != 0xdb for value in capabilities.values()) or securebits != 43:
         raise PermissionError('Package capability state is not exactly bounded and locked')
+    BOUNDARY_CHECK = 'network'
     try:
         connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except OSError as error:
@@ -101,8 +111,10 @@ def boundary():
     else:
         connection.close()
         raise PermissionError('Package network socket was not denied')
-    for path in ('/usr/lib/mano-os/mano_runtime/package_apt.py',
-                 '/sys/fs/cgroup/cgroup.procs', str(STATE_FILE)):
+    BOUNDARY_CHECK = 'protected-objects'
+    for index, path in enumerate(('/usr/lib/mano-os/mano_runtime/package_apt.py',
+                                  '/sys/fs/cgroup/cgroup.procs', str(STATE_FILE))):
+        BOUNDARY_KERNEL['object_index'] = index
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
         except OSError as error:
@@ -111,13 +123,16 @@ def boundary():
         else:
             os.close(fd)
             raise PermissionError('Protected package path opened for writing')
+    BOUNDARY_CHECK = 'secrets'
     if Path('/etc/shadow').read_bytes() or Path('/run/mano-approval/human.sock').exists():
         raise PermissionError('Host credentials or approval IPC visible to package worker')
     mounts = {line.split()[4]: line.split()[5].split(',')
               for line in Path('/proc/self/mountinfo').read_text().splitlines()}
+    BOUNDARY_CHECK = 'mount-ancestry'
     if 'ro' not in mounts.get('/', []) or any(path not in mounts for path in
             ('/usr', '/usr/lib', '/usr/bin', '/etc', '/var', '/var/lib')):
         raise PermissionError('Protected mount ancestry absent')
+    BOUNDARY_CHECK = 'runtime-infrastructure'
     for path in ('/usr/lib/mano-runtime', '/usr/share/mano-runtime'):
         if Path(path).exists() and 'ro' not in mounts.get(path, []):
             raise PermissionError('Installed mano runtime infrastructure is writable')
@@ -182,6 +197,10 @@ def main():
     guard()
     if sys.argv[1:] not in (['--locations'], ['--commit']):
         raise ValueError('Fixed package worker mode required')
+    if sys.argv[1:] == ['--commit']:
+        STAGE = 'boundary'
+        print('MANO_PACKAGE_BOUNDARY=' + canonical(boundary()), flush=True)
+    STAGE = 'admission'
     data = sys.stdin.buffer.read(65537)
     if len(data) > 65536:
         raise ValueError('Package plan exceeds worker budget')
@@ -193,8 +212,6 @@ def main():
             raise ValueError('Archive locations exceed budget')
         sys.stdout.buffer.write(packet)
     else:
-        STAGE = 'boundary'
-        print('MANO_PACKAGE_BOUNDARY=' + canonical(boundary()), flush=True)
         commit(plan)
 
 
@@ -205,6 +222,8 @@ if __name__ == '__main__':
         known = {'PermissionError', 'ValueError', 'Error', 'SystemError', 'TypeError',
                  'AttributeError', 'OSError', 'KeyError', 'RuntimeError', 'TimeoutError'}
         kind = type(error).__name__
-        print('MANO_PACKAGE_ERROR=' + canonical(dict(stage=STAGE,
-            error_type=kind if kind in known else 'Unknown')), file=sys.stderr, flush=True)
+        detail = dict(stage=STAGE, error_type=kind if kind in known else 'Unknown')
+        if STAGE == 'boundary':
+            detail.update(check=BOUNDARY_CHECK, kernel_state=BOUNDARY_KERNEL)
+        print('MANO_PACKAGE_ERROR=' + canonical(detail), file=sys.stderr, flush=True)
         sys.exit(2)
