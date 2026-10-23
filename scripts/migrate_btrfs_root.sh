@@ -7,7 +7,7 @@ cd /opt/mano-lab
 test -f /etc/mano-lab-prepared
 test "$(findmnt -n -o FSTYPE /)" = ext4
 test -b /dev/vdc
-test "$(blockdev --getsize64 /dev/vdc)" = 6442450944
+test "$(blockdev --getsize64 /dev/vdc)" = 8589934592
 # Refuse replay on any formatted/mounted target; no mkfs --force escape hatch.
 if blkid /dev/vdc >/dev/null 2>&1 || findmnt -rn -S /dev/vdc >/dev/null; then
   echo 'Root target already has a filesystem or mount; refusing format.' >&2

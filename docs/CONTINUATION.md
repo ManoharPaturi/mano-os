@@ -1,3 +1,15 @@
+# CI8GiB fixture guard correction
+
+9903ebb run39901316581 failed during migration, before Root/APT execution.
+Initial normal Snapper warning was misleading: artifact snapper.txt/mounts.json/
+memory-before.txt prove exact sentinel restore and guest setup passed. Actual
+failure: migrate_btrfs_root.sh exact blank-device guard still expected6442450944
+bytes after image grew8GiB. Change guard to exact8589934592; keepblank/unmounted/
+disposable checks. Rawlogoutputs/pr134-8g-native-failure.log; smallartifact
+pr134-8g-prepare-failure.zip. No recoveryprobe or productreserve relaxation.
+PR123 MERGED65fdfc0; postmain39902326558 live. Merge origin/main CODEOWNERS into
+134 before nextCI. Fullapplynativevalidation still pending, remainsDRAFT.
+
 # Latest: CI capacity denial identified; approved-apply evidence expanded
 
 PR134 remains DRAFT. bef95ec run39899264546 failed BEFORE acquisition/install:
