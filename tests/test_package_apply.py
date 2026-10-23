@@ -1,5 +1,7 @@
 import contextlib
 import copy
+import json
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -91,6 +93,25 @@ class ApplyAuthorityTests(unittest.TestCase):
 
 
 class RootApplyAdmissionTests(unittest.TestCase):
+    def test_partial_stderr_cannot_hide_a_valid_stdout_control_frame(self):
+        # Ordinary unprivileged Python only: no namespace, native guard or package effect.
+        witness = dict.fromkeys(('network_socket_denied', 'protected_code_readonly',
+            'cgroup_control_readonly', 'host_shadow_hidden', 'approval_ipc_hidden',
+            'protected_ancestors_mounted', 'no_new_privileges', 'seccomp_active',
+            'native_stop_authority_readonly', 'runtime_infrastructure_readonly'), True)
+        witness['namespaces'] = {kind: kind + ':[123]' for kind in
+                                ('mnt', 'net', 'ipc', 'pid', 'cgroup')}
+        program = ('import sys,time;sys.stdin.buffer.read();'
+                   'sys.stderr.write("progress without newline");sys.stderr.flush();'
+                   'time.sleep(.1);print(' + repr('MANO_PACKAGE_BOUNDARY=' +
+                                                 json.dumps(witness)) + ',flush=True)')
+        with patch.object(root, 'sandbox', return_value=[sys.executable, '-c', program]), \
+                patch.object(root, 'observe'), \
+                patch.object(root.os, 'readlink', return_value='host-namespace'):
+            digest, actual = root.run_child({}, [], {}, None)
+        self.assertEqual(actual, witness)
+        self.assertRegex(digest, '^[a-f0-9]{64}$')
+
     def test_launcher_diagnostics_never_echo_paths_or_untrusted_output(self):
         self.assertEqual(root.launcher_failure(
             b'bwrap: mknod /private/secret: Operation not permitted\n'),
