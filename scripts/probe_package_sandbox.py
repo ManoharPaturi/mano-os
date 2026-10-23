@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from probe_package_plans import guard
+from probe_package_runtime_closure import collect
 
 ROOT = Path('/opt/mano-lab')
 PROPERTIES = (
@@ -13,18 +14,23 @@ PROPERTIES = (
     'RestrictRealtime', 'SystemCallArchitectures', 'LockPersonality',
     'MemoryMax', 'TasksMax', 'LimitNOFILE', 'LimitCORE',
 )
-PROGRAM = '''import json,os,subprocess,time
+PROGRAM = '''import importlib.util,json,os,subprocess,time
 from pathlib import Path
 from mano_runtime.package_apply import sandbox,ENV
 from mano_protocol.stop_state import snapshot
 status=dict(line.split(':',1) for line in Path('/proc/self/status').read_text().splitlines())
 controller_caps={key:int(status[key].strip(),16) for key in
  ('CapEff','CapPrm','CapInh','CapBnd','CapAmb')}
+spec=importlib.util.spec_from_file_location('ci_mapped_runtime',
+ '/opt/mano-lab/scripts/probe_package_runtime_closure.py')
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+inventory=module.collect()
 argv=sandbox([],dict(native_generation=snapshot().generation,expires=time.monotonic()+30))
 child=subprocess.run(argv,input=b'{}',capture_output=True,timeout=10,env=ENV,cwd='/')
 # The fixed worker rejects {} before cache/commit; no maintainer script can run.
 assert len(child.stdout)+len(child.stderr)<8192
 print(json.dumps(dict(controller_capabilities=controller_caps,
+ mapped_runtime_inventory=inventory,
  controller_run_device=os.stat('/run').st_dev,
  return_code=child.returncode,stdout=child.stdout.decode(errors='replace'),
  stderr=child.stderr.decode(errors='replace'),input='intentionally-invalid-plan')))
@@ -53,6 +59,9 @@ def run():
     result = subprocess.run(argv, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, (result.stdout[-2048:], result.stderr[-2048:])
     value = json.loads(result.stdout)
+    # PID1 is observed outside the constrained service. Never add ptrace
+    # capabilities to the production controller just to collect CI diagnostics.
+    value['outside_observer_mapped_files'] = collect(include_init=True, observer=True)
     value['production_service_properties'] = properties
     (ROOT / 'evidence/package-sandbox-setup.json').write_text(json.dumps(value, indent=2) + '\n')
     # Exact stderr is safe here: no plan, approval, credentials or package script is supplied.

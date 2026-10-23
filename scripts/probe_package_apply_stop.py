@@ -9,7 +9,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from probe_package_apply import GROUP, terminal
+from probe_package_apply import GROUP, ROOT, terminal
 from probe_package_plans import approve, client, guard, wait_stopped
 
 
@@ -49,7 +49,7 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fau
     from mano_core.packages import apply_proposal, proposal
     from mano_protocol.actions import ActionRequest, canonical
     from mano_protocol.stop_state import snapshot
-    from mano_runtime import package_attempts, recovery
+    from mano_runtime import package_attempts
     from mano_runtime.package_operator import ACK, RETIRE
 
     assert snapshot().latched and empty()
@@ -304,6 +304,32 @@ finally:client.close()
     )
     assert replay["ok"] is False
     assert empty() and unknown_path.read_bytes() == unknown_bytes
+    progress = dict(
+        phase="before-explicit-ci-admin-repair",
+        complete_fixture=False,
+        fault=fault,
+        action_id=action,
+        task_id=task["task_id"],
+        request=request,
+        full_plan=plan,
+        request_sha256=request_sha,
+        actual_dpkg=observed,
+        frozen_package_pids=sorted(package_pids),
+        root_domain_drained=True,
+        package_pidfds_dead=True,
+        launcher_stayed_frozen=True,
+        broker_and_launcher_stayed_frozen=fault == "stop",
+        native_stop_not_used_to_drain=fault == "broker-death",
+        broker_killed_by_observer=fault == "broker-death",
+        restart_unknown_no_replay=True,
+        unknown_record=json.loads(unknown_bytes),
+        unknown_record_sha256=hashlib.sha256(unknown_bytes).hexdigest(),
+        operator_recovery_completed=False,
+        product_automatic_repair=False,
+    )
+    (ROOT / ("evidence/package-apply-" + fault + "-progress.json")).write_text(
+        json.dumps(progress, indent=2) + "\n"
+    )
 
     # Explicit CI administrator recovery, NOT product/model auto-repair. Use only
     # the same complete signed archive set, then purge only its new fixture packages.
@@ -317,7 +343,7 @@ finally:client.close()
     assert before == after
     retired = terminal(("retire-checkpoint", attempt["intent"]["recovery_id"]), RETIRE)
     assert retired["snapshot_deleted"] is False
-    clean = recovery.create()
+    clean = terminal(("create",))
     ack = terminal(("acknowledge-attempt", action, clean["recovery_id"]), ACK)
     assert ack["effects_reversed_verified"] is False
     terminal(("retire-checkpoint", clean["recovery_id"]), RETIRE)

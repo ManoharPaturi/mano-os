@@ -16,9 +16,10 @@ ROOT = Path("/opt/mano-lab")
 GROUP = Path("/sys/fs/cgroup/mano.slice/mano-package.slice")
 
 
-def terminal(arguments, answer):
+def terminal(arguments, answer=None):
     code, output = native_terminal(
-        "mano_runtime.recovery", arguments, answers=((b"Type ", answer),)
+        "mano_runtime.recovery", arguments,
+        answers=() if answer is None else ((b"Type ", answer),)
     )
     assert code == 0, output[-4096:]
     rows = [json.loads(line) for line in output.decode().splitlines() if line.startswith("{")]

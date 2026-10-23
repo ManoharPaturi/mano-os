@@ -1,3 +1,17 @@
+## f4ac43e native result and TTY fixture correction
+
+CI40000069898 FAILED after actualStop/restart/replay-denial/CI-admin database
+repair checks, at directrecovery.create(): trustedRootcontrollingTTYrequired.
+Correction uses terminal(('create',)) withrealRootPTY, no guardweakening.
+Native systemdROpreflight+signedcowpayload independentlyPASSED; partialreceipt
+outputs/pr134-f4ac43e-partial-inspection.json, artifact12522132167 SHA
+ca8b3e49c53ff27ea1a51be97369803021017bc1a826adaa990f6e291aa44ac1.
+CompleteStopwitness/packagedapply NOTaccepted. Newprogressartifactwrittenbefore
+CIadminrepair. NewCI-onlymappedfilecollector: constrainedcontrollerself only;
+outsideRootCIobserverseparatelyreadsPID1/self. No productionptracecapabilityadded,
+no processmemory/credentials; incompleteinventoryNOTfulltrustedclosureproof.
+Sharedruntimeclosurefindingstillunfixed, fullgoalACTIVE/incomplete.
+
 ## Current correction: full signed sl dependency solution
 
 CI39997472282 FAILED before actualStop: fixture incorrectly expected onechange;

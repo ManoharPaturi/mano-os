@@ -1,0 +1,92 @@
+"""CI-only mapped-file inventory; not proof of complete trusted runtime closure."""
+
+import hashlib
+import os
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+MAX_FILE = 64 * 1024**2
+MAX_TOTAL = 256 * 1024**2
+
+
+def identity(info):
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def collect(*, include_init=False, observer=False):
+    assert sys.platform == "linux" and os.geteuid() == 0
+    assert Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
+    assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip() in {
+        "qemu",
+        "kvm",
+    }
+    records = {}
+    total = 0
+    processes = [("observer" if observer else "controller", os.getpid())]
+    if include_init:
+        processes.append(("init", 1))
+    for role, pid in processes:
+        # Never read process memory, environment, command input or credentials.
+        rows = Path("/proc", str(pid), "maps").read_text().splitlines()
+        assert len(rows) <= 4096
+        for line in rows:
+            columns = line.split(maxsplit=5)
+            if len(columns) != 6:
+                continue
+            name = columns[5]
+            if not name.startswith(("/usr/", "/lib/", "/lib64/")):
+                continue
+            assert not name.endswith(" (deleted)")
+            path = Path(name)
+            if name in records:
+                if role not in records[name]["roles"]:
+                    records[name]["roles"].append(role)
+                continue
+            assert len(records) < 256
+            before = path.stat()
+            assert stat.S_ISREG(before.st_mode) and before.st_uid == 0
+            assert not before.st_mode & 0o022 and 0 < before.st_size <= MAX_FILE
+            major, minor = map(lambda v: int(v, 16), columns[3].split(":"))
+            assert before.st_dev == os.makedev(major, minor)
+            assert before.st_ino == int(columns[4])
+            total += before.st_size
+            assert total <= MAX_TOTAL
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                assert identity(os.fstat(stream.fileno())) == identity(before)
+                read = 0
+                while piece := stream.read(65536):
+                    read += len(piece)
+                    assert read <= before.st_size
+                    digest.update(piece)
+                assert read == before.st_size
+                assert identity(os.fstat(stream.fileno())) == identity(before)
+            assert identity(path.stat()) == identity(before)
+            records[name] = dict(
+                path=name,
+                resolved_path=str(path.resolve(strict=True)),
+                roles=[role],
+                sha256=digest.hexdigest(),
+                bytes=before.st_size,
+                uid=before.st_uid,
+                mode=stat.S_IMODE(before.st_mode),
+                device=before.st_dev,
+                inode=before.st_ino,
+            )
+    assert records
+    for role, _pid in processes:
+        assert any(role in row["roles"] for row in records.values())
+    return dict(
+        scope="mapped system files of selected CI processes only",
+        records=[records[name] for name in sorted(records)],
+        total_bytes=total,
+        process_memory_read=False,
+        credentials_read=False,
+        all_future_subprocess_dependencies_verified=False,
+        python_import_closure_verified=False,
+        loader_search_policy_verified=False,
+        write_protection_verified=False,
+        complete_trusted_closure_verified=False,
+    )

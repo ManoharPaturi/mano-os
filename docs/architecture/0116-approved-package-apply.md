@@ -146,3 +146,20 @@ The installed-runtime fixture and independent verifier also inspect the complete
 solution instead of assuming the requested program is its only change. The signed
 cowsay payload comparison from that failed run was independently verified; that
 partial success does not make the failed run or draft merge eligible.
+
+
+CI40000069898 at f4ac43e reached native systemd read-only preflight and the
+approved cowsay install. Its Stop fixture reached explicit repair/database checks,
+then failed when creating the clean recovery checkpoint without a controlling
+terminal. The fixture now uses the same genuine Root-TTY harness as other operator
+commands; the production terminal guard is unchanged. Partial Stop progress is
+exported before administrator repair so later fixture failures retain its earlier
+observations without claiming that recovery finished.
+
+A CI-only diagnostic inventories actual mapped system-file paths, inode/device,
+ownership/mode and SHA256 of the constrained controller. The outside privileged
+CI observer separately inventories itself and PID1; production service capabilities
+are not widened for diagnostics. It reads neither process memory nor credentials.
+This is an incomplete dependency inventory, not proof that all Python imports,
+future subprocess dependencies, loader search paths or trusted files are protected.
+The shared system interpreter/library/helper protection finding remains unresolved.
