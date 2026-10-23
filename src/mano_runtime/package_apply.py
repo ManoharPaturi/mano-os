@@ -99,6 +99,17 @@ def acquire(plan, body, broker_fd):
             ['/usr/bin/python3', '-P', '-m', 'mano_runtime.package_apt', '--locations'],
             input=canonical(plan).encode(), capture_output=True, timeout=30, env=ENV, cwd='/')
         if packet.returncode or packet.stderr or len(packet.stdout) > 32768:
+            # Metadata workers have no script output; emit only fixed stage/type.
+            for line in packet.stderr.splitlines():
+                if line.startswith(b'MANO_PACKAGE_ERROR='):
+                    detail = json.loads(line.split(b'=', 1)[1], object_pairs_hook=unique_object)
+                    if (detail.get('stage') in {'admission', 'cache', 'archives'}
+                            and detail.get('error_type') in {'PermissionError', 'ValueError',
+                                'Error', 'SystemError', 'TypeError', 'AttributeError', 'OSError',
+                                'KeyError', 'RuntimeError', 'TimeoutError', 'Unknown'}):
+                        print(canonical(dict(event='package-metadata-worker-denied',
+                            stage=detail['stage'], error_type=detail['error_type'])),
+                            file=sys.stderr, flush=True)
             raise ValueError('Root archive-source resolution unavailable')
         sources = json.loads(packet.stdout, object_pairs_hook=unique_object)
         rows = {row['archive_sha256']: row for row in plan['changes']

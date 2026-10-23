@@ -48,10 +48,15 @@ def cache_for(plan, *, actual=False):
             'DPkg::Options::': '--force-confold',
         }.items():
             apt_pkg.config.set(key, value)
+        # Match the forecast worker: rootdir also reinitializes libapt's system
+        # object, rather than merely changing configuration strings after init.
+        cache = apt.Cache(progress=apt.progress.base.OpProgress(), rootdir=str(root), memonly=True)
         if actual:
+            cache.close()
             apt_pkg.config.set('Dir::State::status', '/var/lib/dpkg/status')
             apt_pkg.config.set('Dir::State::extended_states', '/var/lib/apt/extended_states')
-        cache = apt.Cache(progress=apt.progress.base.OpProgress(), memonly=True)
+            apt_pkg.init_system()
+            cache = apt.Cache(progress=apt.progress.base.OpProgress(), memonly=True)
         try:
             if cache.broken_count or cache.dpkg_journal_dirty:
                 raise ValueError('Unsettled package state')
@@ -64,6 +69,8 @@ def cache_for(plan, *, actual=False):
 
 
 def locations(plan):
+    global STAGE
+    STAGE = 'cache'
     with cache_for(plan) as (cache, _):
         return {row['archive_sha256']: cache[row['name']].candidate.uri
                 for row in plan['changes'] if row['operation'] != 'remove'}
