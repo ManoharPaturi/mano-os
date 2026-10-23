@@ -16,6 +16,26 @@ SPEC.loader.exec_module(INVENTORY)
 
 
 class MappedObjectIdentityTests(unittest.TestCase):
+    def test_maps_padding_is_removed_for_kernel_map_files_lookup(self):
+        self.assertEqual(INVENTORY.range_name("00400000-00420000"), "400000-420000")
+        self.assertEqual(INVENTORY.range_name("0000000000000000-0000000000001000"), "0-1000")
+        self.assertEqual(INVENTORY.range_name("7fc001000-7fc002000"), "7fc001000-7fc002000")
+
+    def test_invalid_or_path_like_mapping_ranges_are_rejected(self):
+        for value in (
+            None,
+            "",
+            "../40-50",
+            "0x40-0x50",
+            "1-2/extra",
+            "0-0",
+            "10-1",
+            "1-10000000000000000",
+            "1-2-3",
+        ):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                INVENTORY.range_name(value)
+
     def test_actual_descriptor_matches_file_without_assuming_maps_device(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "library"

@@ -1,3 +1,10 @@
+## Canonical mapped-handle names
+CI40004535234 TERMINALFAILURE before packagework: map_files/00400000-00420000
+ENOENT. Kernelprimarysource dname_to_vma_addr explicitlyrejectsleadingzeroes.
+Collector nowvalidatesbounded/increasinghexrange thenformats400000-420000.
+MappedFD/name/inode/hashchecksunchanged; nofallback/privilegeincrease. Two new
+regressions exactfailedrange andmalformed/path-likeinput; nativeCIstillrequired.
+
 ## Inventory Btrfs identity correction
 CI40002396890 TERMINALFAILURE at before.st_dev==maps device in newcollector,
 before native packagework. Kernelprimarysource confirms maps uses s_dev but

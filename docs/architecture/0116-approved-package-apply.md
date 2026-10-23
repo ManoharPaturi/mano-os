@@ -181,3 +181,12 @@ Primary sources:
 - https://code.googlesource.com/linux/torvalds/linux/+/8abc1c8badc11c859bb4ba43211611347e59c55c/fs/proc/task_mmu.c
 - https://code.googlesource.com/linux/torvalds/linux/+/acda701bf1e8233f982164c8ddbedc055427212d/fs/btrfs/inode.c
 - https://man7.org/linux/man-pages/man5/proc_pid_map_files.5.html
+
+
+CI40004535234 next exposed a naming difference before package work: /proc/maps
+prints padded addresses such as 00400000-00420000, but kernel map_files lookup
+rejects leading zeroes. The collector now parses bounded, increasing 64-bit hex
+ranges and formats canonical unpadded names before opening the mapped handle.
+The exact failing range and malformed/path-like inputs are regression-tested;
+missing mappings or identity mismatches still fail rather than falling back.
+Kernel lookup source: https://github.com/torvalds/linux/blob/master/fs/proc/base.c

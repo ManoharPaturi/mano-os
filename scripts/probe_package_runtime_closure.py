@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -21,6 +22,16 @@ def verify_mapping(named, descriptor, mapping_inode):
     # its fstat to the named file, not the two different device-number interfaces.
     if identity(named) != identity(descriptor) or descriptor.st_ino != mapping_inode:
         raise ValueError("Mapped object and named runtime file differ")
+
+
+def range_name(value):
+    if not isinstance(value, str) or not re.fullmatch("[0-9a-f]{1,16}-[0-9a-f]{1,16}", value):
+        raise ValueError("Bounded kernel mapping range required")
+    start, end = (int(part, 16) for part in value.split("-"))
+    if start >= end:
+        raise ValueError("Increasing kernel mapping range required")
+    # maps pads addresses, but map_files rejects leading zeroes in its names.
+    return f"{start:x}-{end:x}"
 
 
 def collect(*, include_init=False, observer=False):
@@ -54,7 +65,7 @@ def collect(*, include_init=False, observer=False):
             assert not before.st_mode & 0o022 and 0 < before.st_size <= MAX_FILE
             major, minor = map(lambda v: int(v, 16), columns[3].split(":"))
             digest = hashlib.sha256()
-            mapped_file = Path("/proc", str(pid), "map_files", columns[0])
+            mapped_file = Path("/proc", str(pid), "map_files", range_name(columns[0]))
             with mapped_file.open("rb") as stream:
                 verify_mapping(before, os.fstat(stream.fileno()), int(columns[4]))
                 if name in records:
