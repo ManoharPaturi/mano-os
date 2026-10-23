@@ -13,7 +13,10 @@ The asynchronous Broker worker sends one typed packet to a Root-owned private
 SOCK_SEQPACKET listener. The per-connection service authenticates both connection
 and message credentials as the separate Broker identity, pins its PID, validates
 boot/deadline/native Stop generation and request/plan digests, and starts inside
-mano-package.slice before any effect. The Broker remains the trusted grant
+mano-package.slice before any effect. The trusted controller has SYS_ADMIN for
+namespace/snapshot setup and NET_ADMIN for loopback configuration in the new
+private network namespace. Neither capability reaches the package worker; the
+fixed six-capability set and native guard still exclude them. The Broker remains the trusted grant
 issuer; the Root helper does not invent a parallel approval policy or PAM issuer.
 
 Acquisition re-resolves the current complete plan under package locks, derives
