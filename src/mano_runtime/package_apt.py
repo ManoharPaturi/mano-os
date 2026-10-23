@@ -127,13 +127,23 @@ def boundary():
     BOUNDARY_CHECK = 'secrets'
     rows = [line.split() for line in Path('/proc/self/mountinfo').read_text().splitlines()]
     mounts = {row[4]: row[5].split(',') for row in rows}
-    for path in ('/etc/shadow', '/etc/gshadow'):
+    BOUNDARY_CHECK = 'credential-mask'
+    expected_mask = Path('/usr/lib/mano-os/empty-credential').stat()
+    for index, path in enumerate(('/etc/shadow', '/etc/gshadow')):
         info = Path(path).stat()
+        BOUNDARY_KERNEL.update(credential_index=index, credential_size=info.st_size,
+            credential_regular=int(stat.S_ISREG(info.st_mode)),
+            credential_readonly=int('ro' in mounts.get(path, [])),
+            credential_matches_asset=int((info.st_dev, info.st_ino) ==
+                                        (expected_mask.st_dev, expected_mask.st_ino)))
         if not stat.S_ISREG(info.st_mode) or info.st_size or 'ro' not in mounts.get(path, []):
             raise PermissionError('Credential mask must be an empty read-only regular file')
     run_rows = [row for row in rows if row[4] == '/run']
+    BOUNDARY_CHECK = 'runtime-tmpfs'
+    BOUNDARY_KERNEL.update(runtime_mounts=len(run_rows))
     if len(run_rows) != 1 or run_rows[0][run_rows[0].index('-') + 1] != 'tmpfs':
         raise PermissionError('Private runtime tmpfs required')
+    BOUNDARY_CHECK = 'approval-ipc'
     with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as connection:
         connection.settimeout(.2)
         try:
@@ -241,6 +251,13 @@ if __name__ == '__main__':
         detail = dict(stage=STAGE, error_type=kind if kind in known else 'Unknown')
         if isinstance(error, OSError) and type(error.errno) is int:
             detail['errno'] = error.errno
+        messages = {
+            'Credential mask must be an empty read-only regular file': 'credential-mask-invalid',
+            'Private runtime tmpfs required': 'runtime-tmpfs-required',
+            'Host approval IPC reachable from package worker': 'approval-ipc-reachable',
+        }
+        if str(error) in messages:
+            detail['reason'] = messages[str(error)]
         if STAGE == 'boundary':
             detail.update(check=BOUNDARY_CHECK, kernel_state=BOUNDARY_KERNEL)
         print('MANO_PACKAGE_ERROR=' + canonical(detail), file=sys.stderr, flush=True)

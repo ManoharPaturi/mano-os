@@ -323,14 +323,21 @@ def run_child(plan, archives, body, broker_fd):
                             stage=detail['stage'], error_type=detail['error_type'])
                         if type(detail.get('errno')) is int and 0 <= detail['errno'] <= 4095:
                             diagnostic['errno'] = detail['errno']
+                        if detail.get('reason') in {'credential-mask-invalid',
+                                'runtime-tmpfs-required', 'approval-ipc-reachable'}:
+                            diagnostic['reason'] = detail['reason']
                         if detail.get('check') in {'identity', 'native-restrictions',
                                 'capabilities', 'network', 'protected-objects', 'secrets',
-                                'mount-ancestry', 'runtime-infrastructure'}:
+                                'mount-ancestry', 'runtime-infrastructure', 'credential-mask',
+                                'runtime-tmpfs', 'approval-ipc'}:
                             diagnostic['check'] = detail['check']
                             state = detail.get('kernel_state')
                             allowed = {'pid', 'NoNewPrivs', 'Seccomp', 'CapEff', 'CapPrm',
                                        'CapInh', 'CapBnd', 'CapAmb', 'securebits', 'object_index',
-                                       'shadow_empty', 'approval_ipc_present'}
+                                       'shadow_empty', 'approval_ipc_present', 'credential_index',
+                                       'credential_size', 'credential_regular',
+                                       'credential_readonly', 'credential_matches_asset',
+                                       'runtime_mounts'}
                             if (isinstance(state, dict) and set(state) <= allowed and
                                     all(type(v) is int and 0 <= v < 2**64
                                         for v in state.values())):
