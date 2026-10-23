@@ -24,8 +24,9 @@ Restart=no
 NoNewPrivileges=yes
 # Only the trusted controller constructs namespaces/snapshots. NET_ADMIN lets
 # bubblewrap configure loopback in its new private network namespace. The package
-# child drops both setup capabilities and receives only the fixed six dpkg caps.
-CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID
+# native guard uses SETPCAP to lock securebits/bounding, drops every setup
+# capability, and gives the worker only the fixed six dpkg capabilities.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_SETPCAP CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID
 AmbientCapabilities=
 ProtectHome=yes
 PrivateTmp=yes

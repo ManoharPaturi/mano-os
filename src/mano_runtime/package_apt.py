@@ -5,6 +5,7 @@ The apply worker must run inside the restricted private package namespace.
 """
 
 import contextlib
+import ctypes
 import errno
 import json
 import os
@@ -87,6 +88,11 @@ def boundary():
                   if ':' in line)
     if status['NoNewPrivs'].strip() != '1' or status['Seccomp'].strip() != '2':
         raise PermissionError('Native package restrictions absent')
+    capabilities = {key: int(status[key].strip(), 16) for key in
+                    ('CapEff', 'CapPrm', 'CapInh', 'CapBnd', 'CapAmb')}
+    securebits = ctypes.CDLL(None, use_errno=True).prctl(27, 0, 0, 0, 0)  # PR_GET_SECUREBITS
+    if any(value != 0xdb for value in capabilities.values()) or securebits != 43:
+        raise PermissionError('Package capability state is not exactly bounded and locked')
     try:
         connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except OSError as error:
@@ -120,6 +126,7 @@ def boundary():
                 protected_ancestors_mounted=True, no_new_privileges=True, seccomp_active=True,
                 native_stop_authority_readonly=True,
                 runtime_infrastructure_readonly=True,
+                capabilities=capabilities, securebits=securebits,
                 namespaces={kind: os.readlink('/proc/self/ns/' + kind)
                             for kind in ('mnt', 'net', 'ipc', 'pid', 'cgroup')})
 

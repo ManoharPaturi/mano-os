@@ -15,8 +15,14 @@ and message credentials as the separate Broker identity, pins its PID, validates
 boot/deadline/native Stop generation and request/plan digests, and starts inside
 mano-package.slice before any effect. The trusted controller has SYS_ADMIN for
 namespace/snapshot setup and NET_ADMIN for loopback configuration in the new
-private network namespace. Neither capability reaches the package worker; the
-fixed six-capability set and native guard still exclude them. The Broker remains the trusted grant
+private network namespace. SETPCAP is available only for the fixed native guard
+to remove bounding capabilities and lock securebits. The guard accepts only the
+bounded controller set, disables and locks UID-0 privilege restoration, drops all
+setup capabilities from the bounding set, and explicitly sets permitted, effective,
+inheritable and ambient sets to the six dpkg capabilities before fixed Python.
+The Python boundary witness independently reads all five kernel capability sets
+and securebits after exec. Each set must equal 0xdb and securebits must equal43.
+Unexpected initial privileges or failed transitions refuse execution. The Broker remains the trusted grant
 issuer; the Root helper does not invent a parallel approval policy or PAM issuer.
 
 Acquisition re-resolves the current complete plan under package locks, derives

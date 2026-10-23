@@ -101,6 +101,9 @@ class RootApplyAdmissionTests(unittest.TestCase):
             'native_stop_authority_readonly', 'runtime_infrastructure_readonly'), True)
         witness['namespaces'] = {kind: kind + ':[123]' for kind in
                                 ('mnt', 'net', 'ipc', 'pid', 'cgroup')}
+        witness['capabilities'] = dict.fromkeys(('CapEff', 'CapPrm', 'CapInh',
+                                               'CapBnd', 'CapAmb'), 0xdb)
+        witness['securebits'] = 43
         program = ('import sys,time;sys.stdin.buffer.read();'
                    'sys.stderr.write("progress without newline");sys.stderr.flush();'
                    'time.sleep(.1);print(' + repr('MANO_PACKAGE_BOUNDARY=' +

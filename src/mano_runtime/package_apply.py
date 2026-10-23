@@ -181,10 +181,9 @@ def sandbox(archives, body):
             '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
             '--unshare-cgroup', '--ro-bind', '/', '/', '--proc', '/proc', '--dev', '/dev',
             '--ro-bind', '/sys', '/sys', '--tmpfs', '/run', '--tmpfs', '/tmp',
-            '--clearenv', '--cap-drop', 'ALL']
-    for capability in ('CAP_CHOWN', 'CAP_DAC_OVERRIDE', 'CAP_FOWNER', 'CAP_FSETID',
-                       'CAP_SETUID', 'CAP_SETGID'):
-        argv += ['--cap-add', capability]
+            '--clearenv']
+    # The fixed native guard constructs and locks the complete capability state
+    # before Python runs; do not rely on UID-0 exec behavior in bwrap cap options.
     # Mount writable ancestors themselves so a child cannot rename an ancestor
     # and shadow a protected descendant through the shared backing filesystem.
     for path in ('/usr', '/usr/bin', '/usr/sbin', '/usr/lib', '/usr/libexec', '/usr/share',
@@ -330,8 +329,12 @@ def run_child(plan, archives, body, broker_fd):
                   'host_shadow_hidden', 'approval_ipc_hidden', 'protected_ancestors_mounted',
                   'no_new_privileges', 'seccomp_active', 'native_stop_authority_readonly',
                   'runtime_infrastructure_readonly'}
-        if (set(witness) != fields | {'namespaces'}
+        caps = {'CapEff', 'CapPrm', 'CapInh', 'CapBnd', 'CapAmb'}
+        if (set(witness) != fields | {'namespaces', 'capabilities', 'securebits'}
                 or any(witness[key] is not True for key in fields)
+                or set(witness['capabilities']) != caps
+                or any(value != 0xdb for value in witness['capabilities'].values())
+                or witness['securebits'] != 43
                 or set(witness['namespaces']) != {'mnt', 'net', 'ipc', 'pid', 'cgroup'}
                 or any(value == os.readlink('/proc/self/ns/' + kind)
                        for kind, value in witness['namespaces'].items())):

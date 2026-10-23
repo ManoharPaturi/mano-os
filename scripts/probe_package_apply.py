@@ -202,8 +202,11 @@ finally:with_client.close()
     assert receipt["acquisition"]["network_used"] is True
     assert selected["archive_sha256"] in receipt["acquisition"]["downloaded_sha256"]
     assert all(
-        receipt["boundary"][key] is True for key in receipt["boundary"] if key != "namespaces"
+        receipt["boundary"][key] is True for key in receipt["boundary"]
+        if key not in {"namespaces", "capabilities", "securebits"}
     )
+    assert set(receipt["boundary"]["capabilities"].values()) == {0xdb}
+    assert receipt["boundary"]["securebits"] == 43
     installed = subprocess.check_output(
         ["/usr/bin/dpkg-query", "-W", "-f=${db:Status-Status}:${Version}", "cowsay"], text=True
     )

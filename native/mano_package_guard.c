@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <linux/capability.h>
+#include <linux/securebits.h>
 #include <sched.h>
 #include <seccomp.h>
 #include <stdint.h>
@@ -42,7 +43,49 @@ int main(int argc, char **argv) {
     if (syscall(SYS_capget, &header, caps) != 0) fail("package capabilities");
     uint64_t effective = (uint64_t)caps[0].effective | ((uint64_t)caps[1].effective << 32);
     uint64_t permitted = (uint64_t)caps[0].permitted | ((uint64_t)caps[1].permitted << 32);
-    if ((effective | permitted) & ~allowed) { errno = EPERM; fail("excess package capability"); }
+    uint64_t setup = allowed | (1ULL << CAP_SYS_ADMIN) | (1ULL << CAP_NET_ADMIN) |
+        (1ULL << CAP_SETPCAP);
+    if (((effective | permitted) & ~setup) || (permitted & allowed) != allowed ||
+        !(effective & (1ULL << CAP_SETPCAP))) {
+        errno = EPERM; fail("unexpected controller capabilities");
+    }
+    /* UID 0 must not regain setup privileges on a later exec. Keep normal
+       setuid fixups (locked off for NO_SETUID_FIXUP), and preserve only the
+       explicit six capabilities through ambient inheritance into fixed Python. */
+    unsigned int secure = SECBIT_NOROOT | SECBIT_NOROOT_LOCKED |
+        SECBIT_KEEP_CAPS_LOCKED | SECBIT_NO_SETUID_FIXUP_LOCKED;
+    if (prctl(PR_SET_SECUREBITS, secure, 0, 0, 0)) fail("package securebits lock");
+    uint64_t bounding = 0;
+    for (unsigned int cap = 0; cap < 64; ++cap) {
+        errno = 0;
+        int present = prctl(PR_CAPBSET_READ, cap, 0, 0, 0);
+        if (present < 0 && errno == EINVAL) break;
+        if (present < 0) fail("package bounding observation");
+        if (!(allowed & (1ULL << cap)) &&
+            prctl(PR_CAPBSET_DROP, cap, 0, 0, 0)) fail("package bounding drop");
+        if (allowed & (1ULL << cap)) {
+            if (!present) { errno = EPERM; fail("package bounding capability absent"); }
+            bounding |= 1ULL << cap;
+        }
+    }
+    if (bounding != allowed) { errno = EPERM; fail("package bounding mismatch"); }
+    if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0))
+        fail("package ambient clear");
+    struct __user_cap_data_struct reduced[2] = {{0}, {0}};
+    reduced[0].effective = reduced[0].permitted = reduced[0].inheritable = (uint32_t)allowed;
+    reduced[1].effective = reduced[1].permitted = reduced[1].inheritable = (uint32_t)(allowed >> 32);
+    if (syscall(SYS_capset, &header, reduced)) fail("package exact capability drop");
+    for (unsigned int cap = 0; cap < 64; ++cap)
+        if ((allowed & (1ULL << cap)) &&
+            prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, cap, 0, 0))
+            fail("package ambient inheritance");
+    if (syscall(SYS_capget, &header, caps)) fail("package capability recheck");
+    effective = (uint64_t)caps[0].effective | ((uint64_t)caps[1].effective << 32);
+    permitted = (uint64_t)caps[0].permitted | ((uint64_t)caps[1].permitted << 32);
+    if (effective != allowed || permitted != allowed ||
+        prctl(PR_GET_SECUREBITS, 0, 0, 0, 0) != (int)secure) {
+        errno = EPERM; fail("package capability lock verification");
+    }
     if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) fail("package no_new_privs");
     scmp_filter_ctx filter = seccomp_init(SCMP_ACT_ALLOW);
     if (!filter) fail("package seccomp init");
