@@ -57,6 +57,9 @@ def run(rpc, human, identity, password, task):
     forecast = client(identity, planned, forecast_grant)
     assert forecast["state"] == "done"
     plan = forecast["result"]["plan"]
+    before_status = Path("/var/lib/dpkg/status").read_bytes()
+    assert hashlib.sha256(before_status).hexdigest() == plan["status_sha256"]
+    (ROOT / "evidence/package-apply-before-status").write_bytes(before_status)
     selected = next(row for row in plan["changes"] if row["name"] == "cowsay")
     assert selected["operation"] == "install"
     # Preserve the fixture-owned signed cache object outside the visible archive
@@ -167,6 +170,11 @@ finally:with_client.close()
         raise AssertionError((completed.stderr[-4096:], logs.stdout[-8192:]))
     value = json.loads(completed.stdout)
     receipt = value["receipt"]
+    after_status = Path("/var/lib/dpkg/status").read_bytes()
+    (ROOT / "evidence/package-apply-after-status").write_bytes(after_status)
+    postconditions = receipt["outcome"]["postconditions"]
+    assert hashlib.sha256(before_status).hexdigest() == postconditions["before_status_sha256"]
+    assert hashlib.sha256(after_status).hexdigest() == postconditions["after_status_sha256"]
     assert (
         receipt["outcome"]["request_sha256"]
         == ActionRequest.parse(
@@ -213,6 +221,7 @@ finally:with_client.close()
         wrong_password_denied=True,
         actual_signed_cowsay_installed=True,
         full_plan=plan,
+        approved_request=proposed | dict(grant_id=granted["grant_id"]),
         apply=value,
         operator_acknowledgement=acknowledgement,
         metadata_retirement=retired,
