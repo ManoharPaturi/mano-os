@@ -101,7 +101,13 @@ drainage, and checks unknown persistence after Broker restart and replay denial.
 It includes explicit CI-administrator dpkg install/purge of only the same signed
 sl fixture, then typed Root-terminal acknowledgement preserving unknown history.
 This repair is not a product automatic repair or evidence that all effects were
-reversed. Losing the controller reply during Stop is covered by that scenario;
+reversed. A second fixture runs after installation of the built runtime package,
+using only installed SDK modules, normal human terminal/PAM approval (including
+cancellation before password), and the packaged Root apply service on btrfs. It
+installs the signed sl plan, preserves raw before/after database evidence, and
+retires checkpoint metadata explicitly without deleting snapshots. This exercises
+installed apply before the existing runtime reinstall/removal lifecycle checks;
+it does not prove a fresh-image btrfs installation or physical input provenance. Losing the controller reply during Stop is covered by that scenario;
 independent reply loss without Stop remains a separate requirement. New fixtures
 require their own successful native CI and artifact inspection before acceptance.
 

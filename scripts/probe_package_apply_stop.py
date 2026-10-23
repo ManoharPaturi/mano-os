@@ -163,11 +163,15 @@ finally:client.close()
                 try:
                     if proc.joinpath("exe").resolve(strict=True) != Path("/usr/bin/dpkg"):
                         continue
+                    argv = proc.joinpath("cmdline").read_bytes().rstrip(b"\0").split(b"\0")
+                    if b"--unpack" not in argv:
+                        continue  # A read-only dpkg architecture query is insufficient.
                     fd = os.pidfd_open(pid)
                     descriptors[pid] = fd
                     signal.pidfd_send_signal(fd, signal.SIGSTOP)
                     wait_stopped(proc)
                     assert proc.joinpath("exe").resolve(strict=True) == Path("/usr/bin/dpkg")
+                    assert proc.joinpath("cmdline").read_bytes().rstrip(b"\0").split(b"\0") == argv
                     fields = dict(
                         line.split(":", 1)
                         for line in proc.joinpath("status").read_text().splitlines()
@@ -185,13 +189,7 @@ finally:client.close()
                         executable="/usr/bin/dpkg",
                         uid=0,
                         cgroup=group,
-                        argv=[
-                            v.decode()
-                            for v in proc.joinpath("cmdline")
-                            .read_bytes()
-                            .rstrip(b"\0")
-                            .split(b"\0")
-                        ],
+                        argv=[v.decode() for v in argv],
                         capabilities=capabilities,
                         kernel_frozen=True,
                     )
@@ -207,12 +205,19 @@ finally:client.close()
         # independent Root observer and stopd deliberately remain runnable.
         for _unused in range(4):
             for pid in members() | set(authorities):
-                if pid not in descriptors:
-                    descriptors[pid] = os.pidfd_open(pid)
-                signal.pidfd_send_signal(descriptors[pid], signal.SIGSTOP)
-                wait_stopped(Path("/proc") / str(pid))
+                try:
+                    if pid not in descriptors:
+                        descriptors[pid] = os.pidfd_open(pid)
+                    signal.pidfd_send_signal(descriptors[pid], signal.SIGSTOP)
+                    wait_stopped(Path("/proc") / str(pid))
+                except (FileNotFoundError, ProcessLookupError):
+                    # A short-lived helper can exit before its stop signal. It
+                    # must be absent from the final membership, never assumed T.
+                    assert pid not in authorities and pid not in members()
         package_pids = members()
         assert observed["pid"] in package_pids and os.getpid() not in package_pids
+        for pid in package_pids | set(authorities):
+            wait_stopped(Path("/proc") / str(pid))
         result = command("/usr/sbin/runuser", "-u", "mano-human", "--", str(stop_client))
         assert "Emergency Stop acknowledged" in result.stdout
         wait(empty)
@@ -305,11 +310,15 @@ finally:client.close()
         restart_unknown_no_replay=True,
         unknown_record_sha256=hashlib.sha256(unknown_bytes).hexdigest(),
         unknown_record_preserved=True,
+        unknown_record=json.loads(unknown_bytes),
+        intent=attempt["intent"],
         operator_acknowledgement=ack,
         manual_ci_admin_repair=True,
         product_automatic_repair=False,
         repair_stdout_sha256=hashlib.sha256((repair.stdout + purge.stdout).encode()).hexdigest(),
         package_database_versions_restored=True,
+        package_database_before=before,
+        package_database_after=after,
         all_payload_effects_reversed_verified=False,
         physical_input_provenance=None,
         final_generation=snapshot().generation,

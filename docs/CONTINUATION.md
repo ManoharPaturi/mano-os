@@ -1,3 +1,14 @@
+## Additional packaged apply fixture (native acceptance pending)
+
+Current local follow-up requires actual --unpack argv (not any dpkg query),
+exports unknown/intent and full database comparison for independent acceptance,
+and tolerates only helpers that exit and leave final cgroup membership before
+freeze. New probe_packaged_apply.py uses installed SDK/native human TTY/PAM
+(including cancellation), signed sl apply on btrfs after real .deb install, before
+existing reinstall/removal checks. Retires only checkpoint metadata explicitly;
+never deletes snapshots or claims automatic repair/all-effects rollback.
+New native CI is mandatory; local checks do not establish these runtime claims.
+
 ## PR134 payload and actual-dpkg interruption fixtures (2026-10-23)
 
 Base implementation bd7aa20 CI39991219242 completed all three jobs SUCCESS;
