@@ -314,8 +314,12 @@ def execute(body, *, broker_fd=None):
     observe(body, broker_fd)
     STAGE = 'layout'
     layout = recovery.layout()
+    STAGE = 'space-reserve'
     reserve = 2 * 1024**3 + max(plan['net_installed_bytes'], 0) + plan['download_bytes']
     if layout['free_bytes'] < reserve:
+        print(canonical(dict(event='package-space-reserve-denied',
+                             available_bytes=layout['free_bytes'], required_bytes=reserve)),
+              file=sys.stderr, flush=True)
         raise ValueError('Insufficient free space for package reserve; peak remains unmeasured')
     STAGE = 'acquisition'
     acquisition = acquire(plan, body, broker_fd)
