@@ -1,4 +1,4 @@
-# Approved package apply integration (draft; native validation pending)
+# Approved package apply integration (draft; interruption validation pending)
 
 packages.apply_install is distinct from the read-only packages.plan_install
 capability. Its only arguments are an owned forecast action ID and exact plan
@@ -86,11 +86,28 @@ Operator recovery is an explicit foreground Root-terminal operation:
 These operations grant no model or Broker recovery override. Partial/corrupt
 history still fails closed; every attempt ID remains reserved.
 
-Validation at this draft: local protocol/authorization/failure/operator tests and
-static checks pass. Native C compilation, actual APT API behavior, successful
-Broker/native-PAM-to-Root execution on btrfs, package namespace probes, Stop during
-actual work, restart/lost-ack behavior, packaged lifecycle, and independent fresh
-artifact/UI acceptance are required before merge. This draft is not product or
+Validation at head bd7aa20: exact-head CI39991219242 passed quality, security-lab
+and merge-gate. The disposable Debian VM completed a public-SDK/native-PAM-to-Root
+cowsay install on btrfs. Independent archive inspection checked the full package
+database transition, request/plan/acquisition binding, native boundary, 54 artifact
+hashes and 45 regression flags. Six fresh GUI originals were viewed; one pending
+numeric field clips its final digit. These are headless CI observations.
+
+The next fixture compares installed cowsay bytes/mode/ownership against the exact
+signed archive and exports both for independent inspection. A separate guarded
+CI-only fixture observes and freezes actual UID0 dpkg plus the package controller,
+Broker and launcher, invokes native Stop, verifies package pidfd death/domain
+drainage, and checks unknown persistence after Broker restart and replay denial.
+It includes explicit CI-administrator dpkg install/purge of only the same signed
+sl fixture, then typed Root-terminal acknowledgement preserving unknown history.
+This repair is not a product automatic repair or evidence that all effects were
+reversed. Losing the controller reply during Stop is covered by that scenario;
+independent reply loss without Stop remains a separate requirement. New fixtures
+require their own successful native CI and artifact inspection before acceptance.
+
+Stop during actual work, restart/lost-ack behavior, packaged apply lifecycle,
+broader compatibility/adversarial cases, and final independent fresh artifact/UI
+acceptance remain required before merge. This draft is not product or
 release completion. The original v2.1 phases and deferred physical gates remain.
 
 Primary API references:

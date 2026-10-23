@@ -1,3 +1,18 @@
+## PR134 payload and actual-dpkg interruption fixtures (2026-10-23)
+
+Base implementation bd7aa20 CI39991219242 completed all three jobs SUCCESS;
+independent full acceptance54hashes/45flags+approved apply passed. Six fresh GUI
+originals and four numeric crops viewed; after-stock pending clips final digit.
+Receipts in workspace outputs/pr134-full-acceptance.json and acceptance-pr134/.
+New fixture adds signed archive vs installed cowsay bytes/mode/UID comparison.
+New scripts/probe_package_apply_stop.py (CI-only, not shipped) observes real dpkg,
+freezes Root package controller/all members+Broker/launcher, invokes native Stop,
+requires drained domain/dead pidfds, restart unknown/no replay, explicit narrow
+CI-admin signed sl repair/purge, and Root-TTY acknowledge/metadata retirement.
+No product automatic repair or all-effects-reversed claim. Controller reply lost
+with Stop is distinct from independent lost reply. Native validation pending for
+these new changes; PR remains draft. Full v2.1 phases0-7 remain active/incomplete.
+
 # CI8GiB fixture guard correction
 
 9903ebb run39901316581 failed during migration, before Root/APT execution.

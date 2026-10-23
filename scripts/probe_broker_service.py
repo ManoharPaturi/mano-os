@@ -2624,6 +2624,15 @@ s.close()
     except PermissionError as error:
         assert 'Native Stop is latched' in str(error)
     terminal_report['root_package_resolution_native_stop_latched_denied'] = True
+    from probe_package_apply_stop import run as stop_actual_package_apply
+
+    apply_stop = stop_actual_package_apply(rpc, human, identity, password, ready,
+                                          replacement_launcher, STOP_CLIENT)
+    terminal_report['package_apply_actual_dpkg_native_stop_restart_no_replay'] = True
+    terminal_report['package_apply_stop_witness'] = apply_stop
+    terminal_report['native_stop_generation'] = apply_stop['final_generation']
+    (ROOT / 'evidence/package-apply-stop.json').write_text(
+        json.dumps(apply_stop, indent=2) + '\n')
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,

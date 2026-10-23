@@ -1,8 +1,11 @@
 """Real public-SDK/native-PAM/Root apply; disposable recovered btrfs guest only."""
 
 import hashlib
+import io
 import json
+import stat
 import subprocess
+import tarfile
 import time
 from pathlib import Path
 
@@ -233,6 +236,36 @@ finally:with_client.close()
     )
     assert installed == "installed:" + selected["candidate"]
     assert Path("/usr/games/cowsay").is_file() and summary()["catalog_id"] != catalog["catalog_id"]
+    # Compare actual installed bytes with the exact signed archive, independently
+    # of package database success. Never extract an archive onto the filesystem.
+    archive_bytes = held.read_bytes()
+    assert len(archive_bytes) == selected['download_bytes']
+    assert hashlib.sha256(archive_bytes).hexdigest() == selected['archive_sha256']
+    payload_tar = subprocess.check_output(
+        ['/usr/bin/dpkg-deb', '--fsys-tarfile', str(held)], timeout=10)
+    assert len(payload_tar) <= 4 * 1024 * 1024
+    with tarfile.open(fileobj=io.BytesIO(payload_tar), mode='r:') as archive:
+        candidates = [m for m in archive.getmembers() if m.name == './usr/games/cowsay']
+        assert len(candidates) == 1 and candidates[0].isfile()
+        member = candidates[0]
+        assert 0 < member.size <= 256 * 1024
+        stream = archive.extractfile(member)
+        assert stream is not None
+        expected_bytes = stream.read(256 * 1024 + 1)
+    executable = Path('/usr/games/cowsay')
+    installed_bytes = executable.read_bytes()
+    assert installed_bytes == expected_bytes
+    installed_mode = stat.S_IMODE(executable.stat().st_mode)
+    assert installed_mode == member.mode and installed_mode & 0o111
+    assert executable.stat().st_uid == member.uid == 0
+    for name, data in [('package-apply-signed.deb', archive_bytes),
+                       ('package-apply-installed-cowsay', installed_bytes)]:
+        (ROOT / 'evidence' / name).write_bytes(data)
+    payload = dict(path='/usr/games/cowsay', bytes=len(installed_bytes),
+                   sha256=hashlib.sha256(installed_bytes).hexdigest(),
+                   mode=installed_mode, uid=0, archive_sha256=selected['archive_sha256'],
+                   archive_bytes=len(archive_bytes), exact_archive_payload_match=True,
+                   all_package_payloads_verified=False, maintainer_effects_verified=False)
     deadline = time.monotonic() + 5
     while "populated 0" not in (GROUP / "cgroup.events").read_text():
         assert time.monotonic() < deadline
@@ -262,6 +295,7 @@ finally:with_client.close()
         forecast_grant_denied=True,
         wrong_password_denied=True,
         actual_signed_cowsay_installed=True,
+        installed_payload=payload,
         full_plan=plan,
         approved_request=proposed | dict(grant_id=granted["grant_id"]),
         apply=value,
