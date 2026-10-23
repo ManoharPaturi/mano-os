@@ -1,0 +1,60 @@
+"""Disposable Root setup diagnostic: invalid input, never an APT/package effect."""
+
+import json
+import subprocess
+from pathlib import Path
+
+from probe_package_plans import guard
+
+ROOT = Path('/opt/mano-lab')
+PROPERTIES = (
+    'NoNewPrivileges', 'CapabilityBoundingSet', 'ProtectHome', 'PrivateTmp',
+    'ProtectKernelTunables', 'ProtectKernelLogs', 'ProtectControlGroups', 'ProtectClock',
+    'RestrictRealtime', 'SystemCallArchitectures', 'LockPersonality',
+    'MemoryMax', 'TasksMax', 'LimitNOFILE', 'LimitCORE',
+)
+PROGRAM = '''import json,subprocess,time
+from mano_runtime.package_apply import sandbox,ENV
+from mano_protocol.stop_state import snapshot
+argv=sandbox([],dict(native_generation=snapshot().generation,expires=time.monotonic()+30))
+child=subprocess.run(argv,input=b'{}',capture_output=True,timeout=10,env=ENV,cwd='/')
+# The fixed worker rejects {} before cache/commit; no maintainer script can run.
+assert len(child.stdout)+len(child.stderr)<8192
+print(json.dumps(dict(return_code=child.returncode,stdout=child.stdout.decode(errors='replace'),
+ stderr=child.stderr.decode(errors='replace'),input='intentionally-invalid-plan')))
+'''
+
+
+def run():
+    guard()
+    source = subprocess.run(
+        ['systemctl', 'show', 'mano-package-apply@setup-ci.service',
+         '--property=' + ','.join(PROPERTIES)],
+        check=True, capture_output=True, text=True, timeout=5,
+    )
+    properties = dict(line.split('=', 1) for line in source.stdout.splitlines())
+    assert set(properties) == set(PROPERTIES)
+    assert properties['NoNewPrivileges'] == 'yes'
+    assert 'cap_sys_admin' in properties['CapabilityBoundingSet'].split()
+    argv = ['systemd-run', '--quiet', '--pipe', '--wait', '--collect',
+            '--unit=mano-package-setup-ci.service', '--slice=mano-package.slice',
+            '--property=User=root', '--property=Restart=no',
+            '--property=RuntimeMaxSec=15', '--property=KillMode=control-group',
+            '--setenv=PYTHONPATH=/usr/lib/mano-os', '--setenv=PYTHONDONTWRITEBYTECODE=1']
+    for name, value in properties.items():
+        argv.append('--property=' + name + '=' + value)
+    argv += ['/usr/bin/python3', '-P', '-c', PROGRAM]
+    result = subprocess.run(argv, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, (result.stdout[-2048:], result.stderr[-2048:])
+    value = json.loads(result.stdout)
+    value['production_service_properties'] = properties
+    (ROOT / 'evidence/package-sandbox-setup.json').write_text(json.dumps(value, indent=2) + '\n')
+    # Exact stderr is safe here: no plan, approval, credentials or package script is supplied.
+    assert value['return_code'] == 2, value
+    assert value['stdout'] == '', value
+    lines = value['stderr'].splitlines()
+    assert len(lines) == 1 and lines[0].startswith('MANO_PACKAGE_ERROR='), value
+    error = json.loads(lines[0].split('=', 1)[1])
+    assert error == dict(stage='admission', error_type='ValueError'), value
+    return dict(private_setup_reached_fixed_worker=True, invalid_plan_rejected=True,
+                package_execution=False, production_service_properties=properties)

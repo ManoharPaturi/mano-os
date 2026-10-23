@@ -25,6 +25,9 @@ def terminal(arguments, answer):
 
 def run(rpc, human, identity, password, task):
     guard()
+    from probe_package_sandbox import run as probe_sandbox
+
+    setup = probe_sandbox()
     from mano_broker.package_catalog import summary
     from mano_core.packages import apply_proposal, proposal
     from mano_protocol.actions import ActionRequest, canonical
@@ -227,6 +230,7 @@ finally:with_client.close()
     assert package_attempts.reconcile() == history
     assert old_unknown.read_bytes() == original_unknown and held.is_file()
     return dict(
+        setup=setup,
         public_sdk=True,
         native_os_pam=True,
         synthetic_os_pam=True,
