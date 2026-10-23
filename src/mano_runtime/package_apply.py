@@ -164,7 +164,7 @@ def acquire(plan, body, broker_fd):
                     download_bytes=sum(rows[sha]['download_bytes'] for sha in downloaded))
 
 
-def sandbox(archives):
+def sandbox(archives, body):
     """Fixed namespace construction; no model path, environment or command input."""
     argv = ['/usr/bin/bwrap', '--die-with-parent', '--new-session',
             '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
@@ -189,6 +189,7 @@ def sandbox(archives):
         if Path(path).exists():
             argv += ['--tmpfs', path]
     for path in ('/usr/lib/mano-os', '/usr/lib/mano-broker', '/var/lib/mano-packages',
+                 '/var/lib/mano-stopd',
                  '/boot', '/etc/pam.d', '/etc/snapper',
                  '/etc/passwd', '/etc/group', '/etc/sudoers', '/etc/sudoers.d'):
         if Path(path).exists():
@@ -207,13 +208,15 @@ def sandbox(archives):
                     '_' + archive['architecture'] + '.deb')
         argv += ['--ro-bind-data', str(archive['fd']), '/run/mano-package-archives/' + filename]
     for key, value in (ENV | {'DPKG_FRONTEND_LOCKED': '1', 'MANO_PACKAGE_NAMESPACE': '1',
-                             'DEBIAN_FRONTEND': 'noninteractive'}).items():
+                             'DEBIAN_FRONTEND': 'noninteractive',
+                             'MANO_PACKAGE_GENERATION': str(body['native_generation']),
+                             'MANO_PACKAGE_EXPIRES': repr(body['expires'])}).items():
         argv += ['--setenv', key, value]
     return argv + ['--chdir', '/', '/usr/libexec/mano-package-guard']
 
 
 def run_child(plan, archives, body, broker_fd):
-    child = subprocess.Popen(sandbox(archives), stdin=subprocess.PIPE,
+    child = subprocess.Popen(sandbox(archives, body), stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=ENV, cwd='/',
         pass_fds=tuple(row['fd'] for row in archives), start_new_session=True)
     output = bytearray()
@@ -257,7 +260,7 @@ def run_child(plan, archives, body, broker_fd):
         witness = json.loads(witnesses[0], object_pairs_hook=unique_object)
         fields = {'network_socket_denied', 'protected_code_readonly', 'cgroup_control_readonly',
                   'host_shadow_hidden', 'approval_ipc_hidden', 'protected_ancestors_mounted',
-                  'no_new_privileges', 'seccomp_active'}
+                  'no_new_privileges', 'seccomp_active', 'native_stop_authority_readonly'}
         if (set(witness) != fields | {'namespaces'}
                 or any(witness[key] is not True for key in fields)
                 or set(witness['namespaces']) != {'mnt', 'net', 'ipc', 'pid', 'cgroup'}
@@ -314,6 +317,7 @@ def execute(body, *, broker_fd=None):
         checkpoint = recovery.create_locked()
         package_attempts.begin_locked(body['action_id'], request.digest, checkpoint['recovery_id'])
         STAGE = 'child'
+        observe(body, broker_fd)
         with scope.dpkg_backend():
             log_sha, boundary = run_child(plan, staged['archives'], body, broker_fd)
         drained(body, broker_fd)

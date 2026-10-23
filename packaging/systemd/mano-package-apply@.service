@@ -1,7 +1,8 @@
 [Unit]
 Description=mano approved system package transaction
 Requires=mano-package.slice mano-stopd.service
-After=mano-package.slice mano-stopd.service
+BindsTo=mano-broker.service
+After=mano-package.slice mano-stopd.service mano-broker.service
 
 [Service]
 Type=exec

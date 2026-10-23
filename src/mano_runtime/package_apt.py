@@ -11,11 +11,13 @@ import os
 import socket
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from mano_broker.package_catalog import load
 from mano_broker.package_solver import canonical, forecast, prepare_apt_root
 from mano_protocol.actions import unique_object
+from mano_protocol.stop_state import STATE_FILE, snapshot
 from mano_runtime.package_attempts import guard
 from mano_runtime.package_resolution import expected
 
@@ -85,7 +87,7 @@ def boundary():
         connection.close()
         raise PermissionError('Package network socket was not denied')
     for path in ('/usr/lib/mano-os/mano_runtime/package_apt.py',
-                 '/sys/fs/cgroup/cgroup.procs'):
+                 '/sys/fs/cgroup/cgroup.procs', str(STATE_FILE)):
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
         except OSError as error:
@@ -104,8 +106,22 @@ def boundary():
     return dict(network_socket_denied=True, protected_code_readonly=True,
                 cgroup_control_readonly=True, host_shadow_hidden=True, approval_ipc_hidden=True,
                 protected_ancestors_mounted=True, no_new_privileges=True, seccomp_active=True,
+                native_stop_authority_readonly=True,
                 namespaces={kind: os.readlink('/proc/self/ns/' + kind)
                             for kind in ('mnt', 'net', 'ipc', 'pid', 'cgroup')})
+
+
+def authority():
+    guard()
+    try:
+        generation = int(os.environ['MANO_PACKAGE_GENERATION'])
+        deadline = float(os.environ['MANO_PACKAGE_EXPIRES'])
+    except (KeyError, ValueError):
+        raise PermissionError('Fixed package authority tags required') from None
+    state = snapshot()
+    now = time.monotonic()
+    if state.latched or state.generation != generation or not now < deadline <= now + 60:
+        raise PermissionError('Package authority expired or native Stop changed')
 
 
 def commit(plan):
@@ -129,6 +145,7 @@ def commit(plan):
                 not item.complete for item in fetcher.items):
             raise ValueError('Sealed package archives unavailable')
         STAGE = 'commit'
+        authority()
         status = os.open('/dev/null', os.O_WRONLY | os.O_CLOEXEC)
         try:
             code = manager.do_install(status)

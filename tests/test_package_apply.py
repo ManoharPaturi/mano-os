@@ -143,3 +143,34 @@ class RootApplyAdmissionTests(unittest.TestCase):
             begin.assert_called_once()
             complete.assert_not_called()
             refresh.assert_not_called()
+
+
+class PackageNativeAuthorityTests(unittest.TestCase):
+    def test_child_must_recheck_current_generation_and_bounded_deadline(self):
+        from mano_protocol.stop_state import Snapshot
+        from mano_runtime import package_apt
+
+        with patch.object(package_apt, 'guard'), patch.object(package_apt.time, 'monotonic',
+                return_value=100), patch.dict(package_apt.os.environ,
+                dict(MANO_PACKAGE_GENERATION='3', MANO_PACKAGE_EXPIRES='130'), clear=True):
+            with patch.object(package_apt, 'snapshot', return_value=Snapshot(3, False)):
+                package_apt.authority()
+            for state in (Snapshot(3, True), Snapshot(4, False)):
+                with patch.object(package_apt, 'snapshot', return_value=state):
+                    with self.assertRaises(PermissionError):
+                        package_apt.authority()
+            for expiry in ('nan', 'inf', '99', '161'):
+                with patch.dict(package_apt.os.environ, dict(MANO_PACKAGE_EXPIRES=expiry)), \
+                        patch.object(package_apt, 'snapshot', return_value=Snapshot(3, False)):
+                    with self.assertRaises(PermissionError):
+                        package_apt.authority()
+
+    def test_stop_authority_is_mounted_readonly_not_writable_with_var_lib(self):
+        with patch.object(root.Path, 'exists', return_value=True), \
+                patch.object(root.Path, 'glob', return_value=[]):
+            argv = root.sandbox([], dict(native_generation=3, expires=130))
+        index = argv.index('/var/lib/mano-stopd')
+        self.assertEqual(argv[index-1:index+2],
+                         ['--ro-bind', '/var/lib/mano-stopd', '/var/lib/mano-stopd'])
+        self.assertIn('MANO_PACKAGE_GENERATION', argv)
+        self.assertIn('MANO_PACKAGE_EXPIRES', argv)
