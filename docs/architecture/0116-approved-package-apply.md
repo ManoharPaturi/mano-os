@@ -22,7 +22,10 @@ setup capabilities from the bounding set, and explicitly sets permitted, effecti
 inheritable and ambient sets to the six dpkg capabilities before fixed Python.
 The Python boundary witness independently reads all five kernel capability sets
 and securebits after exec. Each set must equal 0xdb and securebits must equal43.
-Unexpected initial privileges or failed transitions refuse execution. The Broker remains the trusted grant
+Unexpected initial privileges or failed transitions refuse execution. The
+controller explicitly preserves SETUID through ambient inheritance so its fixed
+exec chain retains the required identity capability; the native guard clears
+that ambient state before constructing the worker policy. The Broker remains the trusted grant
 issuer; the Root helper does not invent a parallel approval policy or PAM issuer.
 
 Acquisition re-resolves the current complete plan under package locks, derives

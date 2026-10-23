@@ -27,7 +27,9 @@ NoNewPrivileges=yes
 # native guard uses SETPCAP to lock securebits/bounding, drops every setup
 # capability, and gives the worker only the fixed six dpkg capabilities.
 CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_SETPCAP CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID
-AmbientCapabilities=
+# Preserve the required identity capability through the controller's fixed exec
+# chain. The native guard clears ambient state and rebuilds the six-worker set.
+AmbientCapabilities=CAP_SETUID
 ProtectHome=yes
 PrivateTmp=yes
 ProtectKernelTunables=yes

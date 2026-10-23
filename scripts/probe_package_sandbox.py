@@ -8,19 +8,24 @@ from probe_package_plans import guard
 
 ROOT = Path('/opt/mano-lab')
 PROPERTIES = (
-    'NoNewPrivileges', 'CapabilityBoundingSet', 'ProtectHome', 'PrivateTmp',
+    'NoNewPrivileges', 'CapabilityBoundingSet', 'AmbientCapabilities', 'ProtectHome', 'PrivateTmp',
     'ProtectKernelTunables', 'ProtectKernelLogs', 'ProtectControlGroups', 'ProtectClock',
     'RestrictRealtime', 'SystemCallArchitectures', 'LockPersonality',
     'MemoryMax', 'TasksMax', 'LimitNOFILE', 'LimitCORE',
 )
 PROGRAM = '''import json,subprocess,time
+from pathlib import Path
 from mano_runtime.package_apply import sandbox,ENV
 from mano_protocol.stop_state import snapshot
+status=dict(line.split(':',1) for line in Path('/proc/self/status').read_text().splitlines())
+controller_caps={key:int(status[key].strip(),16) for key in
+ ('CapEff','CapPrm','CapInh','CapBnd','CapAmb')}
 argv=sandbox([],dict(native_generation=snapshot().generation,expires=time.monotonic()+30))
 child=subprocess.run(argv,input=b'{}',capture_output=True,timeout=10,env=ENV,cwd='/')
 # The fixed worker rejects {} before cache/commit; no maintainer script can run.
 assert len(child.stdout)+len(child.stderr)<8192
-print(json.dumps(dict(return_code=child.returncode,stdout=child.stdout.decode(errors='replace'),
+print(json.dumps(dict(controller_capabilities=controller_caps,
+ return_code=child.returncode,stdout=child.stdout.decode(errors='replace'),
  stderr=child.stderr.decode(errors='replace'),input='intentionally-invalid-plan')))
 '''
 
