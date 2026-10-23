@@ -1,100 +1,131 @@
 # mano-OS
 
-AI-native, prompt-first Linux with a trusted broker and isolated agent desktop.
+**Describe the outcome. Let your computer work toward it.**
 
-**Status: Phase 0 feasibility gates passed in CI; Phase 1 implementation is in progress.
-The unsigned Debian13/amd64 prototype runtime package has a separate CI install/reinstall/remove witness.
-The complete agent workflow, physical acceptance and ISO remain pending.**
+mano-OS is an AI-native Linux operating environment built around a simple idea:
+you should be able to tell your computer what you want to accomplish, and have an
+agent plan the steps, use the right tools, and show you the results.
 
-The complete original [v2.1 specification](docs/spec-v2.1.md) is preserved verbatim.
-Its architecture and acceptance gates remain the product contract.
+The main interface is a keyboard-first prompt. Underneath it is Debian Linux,
+with familiar command-line tools, development environments, browsers, and graphical
+applications. A minimal Wayland environment keeps those applications available
+without making a traditional desktop shell the center of the experience.
 
-## Implemented and verified in CI
+**Current status:** mano-OS is a working security and runtime prototype under active
+development. It has an unsigned Debian runtime package and automated tests in
+real Debian virtual machines. The complete everyday assistant experience and a
+bootable mano-OS image are still being built.
 
-- Dependency-free Python evidence and disk tools, with explicit incomplete gates.
-- Patched bubblewrap lab profile: synthetic home, no host IPC or network.
-- Disposable Debian 13 QEMU CI guest with 4 GiB RAM, separate identities,
-  headless Sway output/capture and filesystem/IPC/device/network denial probes.
-- btrfs data-volume/Snapper restore and independent systemd cgroup-stop probes.
-- Hashed evidence artifacts, protected main and an all-success merge helper.
-- Real btrfs-root and Snapper recovery boots with original disk hash preserved.
-- Restricted Wayland globals and authenticated private XWayland namespace.
-- Headed system Chromium locator and real Writer accessible Save/ODT/PDF contracts.
+## What you could ask mano to do
 
-Writer hidden-menu coordinates remain unavailable. A visible-control scale probe
-checks actual coordinate saves at scales 1 and 2; CI artifacts determine acceptance.
-Native GTK4 prompt input is tested in the separate CI human session. Real serial
-rescue authentication is verified on the VM serial console with a stopped mock core.
-Concurrent human/agent focus and input isolation is verified in the CI VM. A fixed
-request-bound OS-auth/PAM approval spike is verified in both CI boot stages. The trusted
-stop/grant-revocation route passed the CI fixture on normal and recovered roots:
-native watchdog and human TTY stop kill all fixture tasks, invalidate live grants,
-disable input and preserve recovery while core and approval authority are frozen.
-The original-spec audit maps every Phase 0 requirement to real evidence and runs
-after recovered-root tests. Its passing report means GO for Phase 1 development
-only; final-head CI determines acceptance. Production execution is not authorized.
-See docs/architecture/0008-phase0-original-spec-audit.md for the complete decision.
+These examples describe the experience we are building; they are not a list of
+completed end-to-end features.
 
-## Development
+- **Build software:** “Create a web app, run its tests, and show me the result.”
+- **Work with documents:** “Turn these CSV files into a report and export a PDF.”
+- **Understand your system:** “Find out why my laptop is slow and suggest a fix.”
+- **Use connected devices:** “Read data from my Arduino and plot the measurements.”
 
-```sh
-python3 -m venv .venv
-.venv/bin/pip install ruff==0.14.0
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/ruff check .
-PYTHONPATH=src .venv/bin/python -m mano_lab.cli disk .
+A task should move from a request to a plan, through authorized actions, to a result
+you can inspect. When something fails, mano should preserve enough history to
+explain what happened and recover where possible.
+
+## What makes mano-OS different
+
+### One prompt, normal Linux tools
+
+mano-OS brings an agent workflow into the operating environment. It aims to combine
+coding tools, shell commands, browser automation, document applications, and device
+adapters behind one interface. Structured application APIs and command-line tools
+are preferred when available; graphical interaction fills the gaps.
+
+### Background work without taking over your desktop
+
+The agent has a separate graphical workspace for supported GUI tasks. Its windows
+and automated input are isolated from the human session, so background work can
+happen without borrowing your keyboard and mouse.
+
+### An assistant with boundaries
+
+The model proposes actions. A separate trusted service, **mano-broker**, checks
+permissions and authorizes specific operations. Restricted executors carry them out,
+and the broker records what happened. The model cannot approve its own requests.
+
+The design includes native OS-authenticated approvals, limited task resources,
+an independent emergency Stop, and a durable action history. Planned permission
+modes—Supervised, Auto, and Full Access—change how much work can proceed without
+another prompt; Full Access does not give the model unrestricted Root authority.
+
+### Recovery and visible results
+
+Durable workflow state, action records, and filesystem snapshots support diagnosing
+interrupted work and recovering from supported system changes. A command reporting
+success is only one piece of evidence: verifying the intended result is a separate
+step. Snapshots also cannot undo every external effect.
+
+### A lightweight foundation
+
+The target is an 8 GB RAM machine using a cloud model, without requiring a large
+local model. That is a design target; physical-machine performance acceptance is
+still pending. Model providers and coding agents are intended to be replaceable
+through adapters.
+
+## How it fits together
+
+```text
+Your request
+    ↓
+Prompt interface → Agent core: plan, request tools, observe results
+                              ↓
+                    Trusted broker: permissions,
+                    approvals, grants, action history
+                              ↓
+                    Restricted task executors
+                              ↓
+             Linux tools · Browsers · GUI applications
+                              ↓
+                    Results and verification
 ```
 
-Local tests validate the tooling. Real namespace, Sway, cgroup and btrfs probes
-run in the Debian CI VM. The guest script installs packages and formats its second
-disk; run it only through the disposable VM lab.
+| Component | Role |
+| --- | --- |
+| Debian 13, x86_64 | Linux packages, kernel, drivers, and system services |
+| Sway / Wayland + XWayland | Minimal graphics and a separate agent desktop |
+| Native GTK4 interface | Human prompt and task interaction |
+| Agent core with LangGraph | Task orchestration and persistent workflow state |
+| mano-broker | Permission checks, scoped grants, approvals, and authoritative history |
+| Linux isolation and resource controls | Boundaries around task processes and their access |
+| btrfs + Snapper | Snapshots and supported system recovery |
 
-See [phase status](docs/phase-0-report.md), [operations](docs/operations.md),
-[architecture ADR](docs/architecture/0001-phase0-gate.md) and
-[continuation](docs/CONTINUATION.md).
+## Where the project stands
 
-## CI and merge rule
+The prototype has CI evidence for:
 
-All implementation uses PRs. Required checks: `quality`, `security-lab`,
-`merge-gate`. Every other reported check must also succeed. Run
-`python3 scripts/merge_checked.py PR_URL` to validate checks and merge against the
-current PR head. Branch protection is the final server authority.
+- Isolated task execution, resource limits, broker permissions, and durable action records.
+- Native PAM approvals and an independent Stop path, including frozen-service tests.
+- Separate human and agent graphical sessions, with selected Chromium and LibreOffice workflows.
+- Persistent workflow state and deterministic mock-agent task flows.
+- Package planning and review, archive verification, interrupted package-operation handling,
+  and btrfs-root recovery boots.
+- Installation, reinstallation, and removal of the prototype Debian runtime package,
+  including data-preservation checks.
 
-Passing Phase 0 audit means the feasibility boundaries passed, using the specified
-OS-authenticated fallback. Model-facing execution still requires Phase 1 broker
-and runtime gates; physical 8 GB and installer/firmware requirements remain later.
+These tests run in disposable Debian VMs. They establish specific prototype
+behaviors, not general compatibility with every Linux app or finished-product readiness.
+Native approvals currently use synthetic CI input; physical input acceptance is pending.
 
-## Phase 1 work in progress
+Work still ahead includes the complete prompt-to-agent experience, accepted live-model
+and authenticated coding-agent workflows, broader real-world tasks, physical hardware
+and 8 GB performance testing, and release-quality installation and bootable images.
+The runtime package is unsigned and remains a development prototype.
 
-`mano_broker` provides typed proposals, exact grants, durable action state and a
-kernel-authenticated request channel under a hardened non-root service. A pending
-approval queue supports public request/status without exposing nonce or confirmation.
-Trusted confirmation consumes one challenge and issues one exact grant atomically.
-Protected control and native PAM authentication are verified with synthetic CI input;
-physical input and manual acceptance remain pending. Actual allocated task identities,
-descriptor custody, journal scheduling and restricted terminal execution passed in
-the Debian VM. Independent native Stop drains task cgroups while Python services
-are frozen; authenticated rearm preserves grant revocation across generations.
+## Explore the project
 
-Sealed artifact capture, private journal persistence and bounded public retrieval
-passed the installed broker VM probes, including source mutation, caller/range
-denials and process restart. Capturing bytes keeps effect_verified=false.
-Independent outcome verification remains a separate requirement.
+- [Product specification](docs/spec-v2.1.md) — the full v2.1 vision, architecture, and delivery phases.
+- [Runtime operations](docs/operations.md) — prototype package setup and operation.
+- [Architecture decisions](docs/architecture/) — how the system is designed and why.
+- [Development status and handoff](docs/CONTINUATION.md) — detailed implementation progress.
+- [Engineering guide](AGENTS.md) — contribution and development workflow.
 
-The pinned LangGraph runtime and deterministic mock project flow have installed CI
-witnesses, including native PAM and restart/Stop behavior. No paid model execution
-has been accepted.
-Prompt-to-agent integration, durable graph recovery, broader golden tasks and the
-original later version gates remain required. See the architecture documents and
-accepted CI artifacts for the precise scope of each implementation.
-
-## Prototype runtime package
-
-The Linux-only builder packages the broker, native adapters, human prompt and fixed
-service policies, with hash-locked private core dependencies. Installation starts
-no services and ships no key. Explicit Root-terminal enrollment binds an existing
-human; the optional runtime target and Wayland session do not replace the existing
-desktop. CI must prove actual package-owned GUI/PAM and mock-core behavior plus
-reinstall/removal data preservation. See [package operations](docs/operations.md)
-and [scope](docs/architecture/0087-prototype-runtime-package.md). The package is
-unsigned and does not satisfy the full original release/workflow gates.
+mano-OS starts as a Debian runtime and grows toward a dedicated operating environment:
+a computer organized around the work you want done.
