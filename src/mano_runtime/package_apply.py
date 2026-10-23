@@ -316,13 +316,16 @@ def run_child(plan, archives, body, broker_fd):
                                 'NativeGuard', 'Unknown'}):
                         diagnostic = dict(event='package-worker-denied',
                             stage=detail['stage'], error_type=detail['error_type'])
+                        if type(detail.get('errno')) is int and 0 <= detail['errno'] <= 4095:
+                            diagnostic['errno'] = detail['errno']
                         if detail.get('check') in {'identity', 'native-restrictions',
                                 'capabilities', 'network', 'protected-objects', 'secrets',
                                 'mount-ancestry', 'runtime-infrastructure'}:
                             diagnostic['check'] = detail['check']
                             state = detail.get('kernel_state')
                             allowed = {'pid', 'NoNewPrivs', 'Seccomp', 'CapEff', 'CapPrm',
-                                       'CapInh', 'CapBnd', 'CapAmb', 'securebits', 'object_index'}
+                                       'CapInh', 'CapBnd', 'CapAmb', 'securebits', 'object_index',
+                                       'shadow_empty', 'approval_ipc_present'}
                             if (isinstance(state, dict) and set(state) <= allowed and
                                     all(type(v) is int and 0 <= v < 2**64
                                         for v in state.values())):

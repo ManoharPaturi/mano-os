@@ -124,7 +124,11 @@ def boundary():
             os.close(fd)
             raise PermissionError('Protected package path opened for writing')
     BOUNDARY_CHECK = 'secrets'
-    if Path('/etc/shadow').read_bytes() or Path('/run/mano-approval/human.sock').exists():
+    shadow_empty = not Path('/etc/shadow').read_bytes()
+    approval_present = Path('/run/mano-approval/human.sock').exists()
+    BOUNDARY_KERNEL.update(shadow_empty=int(shadow_empty),
+                           approval_ipc_present=int(approval_present))
+    if not shadow_empty or approval_present:
         raise PermissionError('Host credentials or approval IPC visible to package worker')
     mounts = {line.split()[4]: line.split()[5].split(',')
               for line in Path('/proc/self/mountinfo').read_text().splitlines()}
@@ -223,6 +227,8 @@ if __name__ == '__main__':
                  'AttributeError', 'OSError', 'KeyError', 'RuntimeError', 'TimeoutError'}
         kind = type(error).__name__
         detail = dict(stage=STAGE, error_type=kind if kind in known else 'Unknown')
+        if isinstance(error, OSError) and type(error.errno) is int:
+            detail['errno'] = error.errno
         if STAGE == 'boundary':
             detail.update(check=BOUNDARY_CHECK, kernel_state=BOUNDARY_KERNEL)
         print('MANO_PACKAGE_ERROR=' + canonical(detail), file=sys.stderr, flush=True)
