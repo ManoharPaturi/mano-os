@@ -118,6 +118,11 @@ class RootApplyAdmissionTests(unittest.TestCase):
             dict(operation='device-node', error='permission'))
         self.assertEqual(root.launcher_failure(b'script output contains a secret\n'),
                          dict(operation='unreported', error='other'))
+        self.assertEqual(root.launcher_failure(b'bwrap: Invalid fd: private-value\n'),
+                         dict(operation='descriptor', error='other'))
+        self.assertEqual(root.launcher_failure(
+            b'bwrap: Destination is not a directory /private/value\n'),
+            dict(operation='destination-directory', error='other'))
 
     def test_mac_guard_precedes_filesystem_or_network_observation(self):
         with patch.object(root.recovery.sys, 'platform', 'darwin'):

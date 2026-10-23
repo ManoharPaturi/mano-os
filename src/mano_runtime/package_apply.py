@@ -235,7 +235,27 @@ def launcher_failure(output):
         operation = 'other'
         for token, category in ((b'mknod', 'device-node'), (b'namespace', 'namespace'),
                                 (b'mount', 'mount'), (b'execvp', 'exec'),
-                                (b'mkdir', 'directory'), (b'read data', 'archive-data')):
+                                (b'mkdir', 'directory'), (b'read data', 'archive-data'),
+                                (b'unknown cap:', 'capability-name'),
+                                (b'Invalid fd:', 'descriptor'),
+                                (b'Destination is not a directory', 'destination-directory'),
+                                (b'Destination is not a file', 'destination-file'),
+                                (b'capset', 'capset'), (b'capget', 'capget'),
+                                (b'capability', 'capability'),
+                                (b'Unknown option', 'option'),
+                                (b'takes an argument', 'argument-count'),
+                                (b'takes two arguments', 'argument-count'),
+                                (b'fd', 'descriptor'),
+                                (b'create symlink', 'symlink'),
+                                (b'make symlink', 'symlink'),
+                                (b'create file', 'create-file'),
+                                (b'write data', 'write-file'),
+                                (b'create tmpfile', 'temporary-file'),
+                                (b'open source', 'open-source'),
+                                (b'type of source', 'source-type'),
+                                (b'type of dest', 'destination-type'),
+                                (b'chdir', 'working-directory'),
+                                (b'setsid', 'session'), (b'fork', 'fork')):
             if token in line:
                 operation = category
                 break
@@ -244,7 +264,12 @@ def launcher_failure(output):
                                 (b'Permission denied', 'permission'),
                                 (b'Read-only file system', 'readonly'),
                                 (b'No such file or directory', 'missing'),
-                                (b'Cannot allocate memory', 'memory')):
+                                (b'Cannot allocate memory', 'memory'),
+                                (b'Invalid argument', 'invalid-argument'),
+                                (b'Bad file descriptor', 'bad-descriptor'),
+                                (b'Not a directory', 'not-directory'),
+                                (b'Is a directory', 'is-directory'),
+                                (b'No space left on device', 'space')):
             if token in line:
                 error = category
                 break
