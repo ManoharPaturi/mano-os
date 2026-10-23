@@ -104,12 +104,14 @@ class RootApplyAdmissionTests(unittest.TestCase):
         witness['capabilities'] = dict.fromkeys(('CapEff', 'CapPrm', 'CapInh',
                                                'CapBnd', 'CapAmb'), 0xdb)
         witness['securebits'] = 43
+        witness['run_device'] = 1
         program = ('import sys,time;sys.stdin.buffer.read();'
                    'sys.stderr.write("progress without newline");sys.stderr.flush();'
                    'time.sleep(.1);print(' + repr('MANO_PACKAGE_BOUNDARY=' +
                                                  json.dumps(witness)) + ',flush=True)')
         with patch.object(root, 'sandbox', return_value=[sys.executable, '-c', program]), \
                 patch.object(root, 'observe'), \
+                patch.object(root, 'runtime_device', return_value=0), \
                 patch.object(root.os, 'readlink', return_value='host-namespace'):
             digest, actual = root.run_child({}, [], {}, None)
         self.assertEqual(actual, witness)

@@ -205,9 +205,10 @@ def sandbox(archives, body):
                  '/etc/passwd', '/etc/group', '/etc/sudoers', '/etc/sudoers.d'):
         if Path(path).exists():
             argv += ['--ro-bind', path, path]
-    for path in ('/etc/shadow', '/etc/gshadow', '/etc/ld.so.preload'):
+    for path in ('/etc/shadow', '/etc/gshadow', '/etc/shadow-', '/etc/gshadow-',
+                 '/etc/ld.so.preload'):
         if Path(path).exists():
-            argv += ['--ro-bind', '/dev/null', path]
+            argv += ['--ro-bind', '/usr/lib/mano-os/empty-credential', path]
     for directory in ('/usr/bin', '/usr/libexec', '/usr/lib/systemd/system', '/etc/systemd/system'):
         for path in Path(directory).glob('mano-*'):
             argv += ['--ro-bind', str(path), str(path)]
@@ -274,6 +275,10 @@ def launcher_failure(output):
                 break
         return dict(operation=operation, error=error)
     return dict(operation='unreported', error='other')
+
+
+def runtime_device():
+    return os.stat('/run').st_dev
 
 
 def run_child(plan, archives, body, broker_fd):
@@ -344,11 +349,14 @@ def run_child(plan, archives, body, broker_fd):
                   'no_new_privileges', 'seccomp_active', 'native_stop_authority_readonly',
                   'runtime_infrastructure_readonly'}
         caps = {'CapEff', 'CapPrm', 'CapInh', 'CapBnd', 'CapAmb'}
-        if (set(witness) != fields | {'namespaces', 'capabilities', 'securebits'}
+        if (set(witness) != fields | {'namespaces', 'capabilities', 'securebits', 'run_device'}
                 or any(witness[key] is not True for key in fields)
                 or set(witness['capabilities']) != caps
                 or any(value != 0xdb for value in witness['capabilities'].values())
                 or witness['securebits'] != 43
+                or type(witness['run_device']) is not int
+                or not 0 <= witness['run_device'] < 2**64
+                or witness['run_device'] == runtime_device()
                 or set(witness['namespaces']) != {'mnt', 'net', 'ipc', 'pid', 'cgroup'}
                 or any(value == os.readlink('/proc/self/ns/' + kind)
                        for kind, value in witness['namespaces'].items())):

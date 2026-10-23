@@ -59,6 +59,7 @@ def build(wheelhouse, output, *, revision=None, epoch=None):
         for package in (ROOT / "src").glob("mano_*"):
             for source in package.rglob("*.py"):
                 copy(source, "/usr/lib/mano-os/" + str(source.relative_to(ROOT / "src")))
+        copy(ROOT / 'packaging/runtime/empty-credential', '/usr/lib/mano-os/empty-credential')
         binaries = {
             "mano_approve.c": ("/usr/libexec/mano-approve", ["json-c", "libsystemd"], ["-lpam"]),
             "mano_package_guard.c": ("/usr/libexec/mano-package-guard", ["libseccomp"], []),

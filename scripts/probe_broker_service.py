@@ -278,6 +278,8 @@ try:
     subprocess.run(["usermod", "-a", "-G", "mano-request", "mano-worker"], check=True)
     joined = True
     CODE.mkdir(mode=0o755)
+    shutil.copyfile(ROOT / 'packaging/runtime/empty-credential', CODE / 'empty-credential')
+    (CODE / 'empty-credential').chmod(0o444)
     for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core", "mano_protocol",
                     "mano_provider", "mano_egress", "mano_runtime"):
         shutil.copytree(

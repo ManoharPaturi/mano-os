@@ -13,7 +13,7 @@ PROPERTIES = (
     'RestrictRealtime', 'SystemCallArchitectures', 'LockPersonality',
     'MemoryMax', 'TasksMax', 'LimitNOFILE', 'LimitCORE',
 )
-PROGRAM = '''import json,subprocess,time
+PROGRAM = '''import json,os,subprocess,time
 from pathlib import Path
 from mano_runtime.package_apply import sandbox,ENV
 from mano_protocol.stop_state import snapshot
@@ -25,6 +25,7 @@ child=subprocess.run(argv,input=b'{}',capture_output=True,timeout=10,env=ENV,cwd
 # The fixed worker rejects {} before cache/commit; no maintainer script can run.
 assert len(child.stdout)+len(child.stderr)<8192
 print(json.dumps(dict(controller_capabilities=controller_caps,
+ controller_run_device=os.stat('/run').st_dev,
  return_code=child.returncode,stdout=child.stdout.decode(errors='replace'),
  stderr=child.stderr.decode(errors='replace'),input='intentionally-invalid-plan')))
 '''
@@ -59,10 +60,11 @@ def run():
     frames = value['stdout'].splitlines()
     assert len(frames) == 1 and frames[0].startswith('MANO_PACKAGE_BOUNDARY='), value
     boundary = json.loads(frames[0].split('=', 1)[1])
-    flags = set(boundary) - {'namespaces', 'capabilities', 'securebits'}
+    flags = set(boundary) - {'namespaces', 'capabilities', 'securebits', 'run_device'}
     assert all(boundary[key] is True for key in flags), value
     assert set(boundary['capabilities']) == {'CapEff', 'CapPrm', 'CapInh', 'CapBnd', 'CapAmb'}
     assert set(boundary['capabilities'].values()) == {0xdb} and boundary['securebits'] == 43
+    assert boundary['run_device'] != value['controller_run_device'], value
     lines = value['stderr'].splitlines()
     assert len(lines) == 1 and lines[0].startswith('MANO_PACKAGE_ERROR='), value
     error = json.loads(lines[0].split('=', 1)[1])

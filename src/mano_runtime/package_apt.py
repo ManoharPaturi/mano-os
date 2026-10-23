@@ -10,6 +10,7 @@ import errno
 import json
 import os
 import socket
+import stat
 import sys
 import tempfile
 import time
@@ -124,14 +125,24 @@ def boundary():
             os.close(fd)
             raise PermissionError('Protected package path opened for writing')
     BOUNDARY_CHECK = 'secrets'
-    shadow_empty = not Path('/etc/shadow').read_bytes()
-    approval_present = Path('/run/mano-approval/human.sock').exists()
-    BOUNDARY_KERNEL.update(shadow_empty=int(shadow_empty),
-                           approval_ipc_present=int(approval_present))
-    if not shadow_empty or approval_present:
-        raise PermissionError('Host credentials or approval IPC visible to package worker')
-    mounts = {line.split()[4]: line.split()[5].split(',')
-              for line in Path('/proc/self/mountinfo').read_text().splitlines()}
+    rows = [line.split() for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+    mounts = {row[4]: row[5].split(',') for row in rows}
+    for path in ('/etc/shadow', '/etc/gshadow'):
+        info = Path(path).stat()
+        if not stat.S_ISREG(info.st_mode) or info.st_size or 'ro' not in mounts.get(path, []):
+            raise PermissionError('Credential mask must be an empty read-only regular file')
+    run_rows = [row for row in rows if row[4] == '/run']
+    if len(run_rows) != 1 or run_rows[0][run_rows[0].index('-') + 1] != 'tmpfs':
+        raise PermissionError('Private runtime tmpfs required')
+    with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as connection:
+        connection.settimeout(.2)
+        try:
+            connection.connect('/run/mano-approval/human.sock')
+        except OSError as error:
+            if error.errno not in {errno.ENOENT, errno.ENOTDIR, errno.EACCES, errno.EPERM}:
+                raise
+        else:
+            raise PermissionError('Host approval IPC reachable from package worker')
     BOUNDARY_CHECK = 'mount-ancestry'
     if 'ro' not in mounts.get('/', []) or any(path not in mounts for path in
             ('/usr', '/usr/lib', '/usr/bin', '/etc', '/var', '/var/lib')):
@@ -146,6 +157,7 @@ def boundary():
                 native_stop_authority_readonly=True,
                 runtime_infrastructure_readonly=True,
                 capabilities=capabilities, securebits=securebits,
+                run_device=os.stat('/run').st_dev,
                 namespaces={kind: os.readlink('/proc/self/ns/' + kind)
                             for kind in ('mnt', 'net', 'ipc', 'pid', 'cgroup')})
 
