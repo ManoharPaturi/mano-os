@@ -28,6 +28,7 @@ DOMAIN = '/mano.slice/mano-package.slice/'
 ENV = {'PATH': '/usr/sbin:/usr/bin:/bin', 'LANG': 'C.UTF-8',
        'PYTHONPATH': '/usr/lib/mano-os', 'PYTHONDONTWRITEBYTECODE': '1'}
 MAX_LOG = 1024 * 1024
+STAGE = 'activation'
 
 
 def domain():
@@ -234,6 +235,20 @@ def run_child(plan, archives, body, broker_fd):
                         if len(output) > MAX_LOG:
                             raise ValueError('Package child exceeded bounded output')
         if child.wait(timeout=1) != 0:
+            # Only fixed stage/type diagnostics reach the Root journal, never
+            # raw maintainer output, URLs, request data, paths or credentials.
+            for line in output.splitlines():
+                if line.startswith(b'MANO_PACKAGE_ERROR='):
+                    detail = json.loads(line.split(b'=', 1)[1], object_pairs_hook=unique_object)
+                    if (detail.get('stage') in {'admission', 'boundary', 'cache', 'archives',
+                                               'commit', 'native-guard'}
+                            and detail.get('error_type') in {'PermissionError', 'ValueError',
+                                'Error', 'SystemError', 'TypeError', 'AttributeError', 'OSError',
+                                'KeyError', 'RuntimeError', 'TimeoutError',
+                                'NativeGuard', 'Unknown'}):
+                        print(canonical(dict(event='package-worker-denied',
+                            stage=detail['stage'], error_type=detail['error_type'])),
+                            file=sys.stderr, flush=True)
             raise ValueError('Package worker failed; inspect recovery custody')
         witnesses = [line.split(b'=', 1)[1] for line in output.splitlines()
                      if line.startswith(b'MANO_PACKAGE_BOUNDARY=')]
@@ -277,24 +292,34 @@ def drained(body, broker_fd):
 
 
 def execute(body, *, broker_fd=None):
+    global STAGE
+    STAGE = 'domain'
     domain()
+    STAGE = 'decode'
     request, plan = decode(body)
     observe(body, broker_fd)
+    STAGE = 'layout'
     layout = recovery.layout()
     reserve = 2 * 1024**3 + max(plan['net_installed_bytes'], 0) + plan['download_bytes']
     if layout['free_bytes'] < reserve:
         raise ValueError('Insufficient free space for package reserve; peak remains unmeasured')
+    STAGE = 'acquisition'
     acquisition = acquire(plan, body, broker_fd)
+    STAGE = 'sealed-custody'
     with package_archives.verified_archives(plan) as staged:
         scope = recovery.require_locked()
         observe(body, broker_fd)
         package_attempts.ensure_available_locked(body['action_id'])
+        STAGE = 'checkpoint'
         checkpoint = recovery.create_locked()
         package_attempts.begin_locked(body['action_id'], request.digest, checkpoint['recovery_id'])
+        STAGE = 'child'
         with scope.dpkg_backend():
             log_sha, boundary = run_child(plan, staged['archives'], body, broker_fd)
         drained(body, broker_fd)
+        STAGE = 'postconditions'
         outcome = package_attempts.complete_locked(body['action_id'], request.digest, plan)
+        STAGE = 'catalog-refresh'
         catalog = package_catalog.build()
         drained(body, broker_fd)
         return dict(schema_version='1.0', ok=True, action_id=body['action_id'],
@@ -321,7 +346,9 @@ def main():
         fd = os.pidfd_open(peer.pid)
         try:
             value = execute(body, broker_fd=(fd, connection))
-        except Exception:
+        except Exception as error:
+            print(canonical(dict(event='package-transaction-denied', stage=STAGE,
+                                 error_type=type(error).__name__)), file=sys.stderr, flush=True)
             # No retry, raw package output or misleading success after uncertainty.
             value = dict(schema_version='1.0', ok=False, error='package-outcome-unknown')
         finally:

@@ -20,6 +20,7 @@ from mano_runtime.package_attempts import guard
 from mano_runtime.package_resolution import expected
 
 ARCHIVES = Path('/run/mano-package-archives')
+STAGE = 'admission'
 
 
 @contextlib.contextmanager
@@ -41,7 +42,7 @@ def cache_for(plan, *, actual=False):
         for key, value in {
             'APT::Architecture': 'amd64', 'APT::Architectures::': 'amd64',
             'APT::Install-Recommends': 'false', 'APT::Install-Suggests': 'false',
-            'DPkg::Path': '/usr/bin/dpkg', 'DPkg::Use-Pty': 'false',
+            'Dir::Bin::dpkg': '/usr/bin/dpkg', 'DPkg::Use-Pty': 'false',
             'DPkg::Options::': '--force-confold',
         }.items():
             apt_pkg.config.set(key, value)
@@ -108,11 +109,14 @@ def boundary():
 
 
 def commit(plan):
+    global STAGE
     if (os.environ.get('DPKG_FRONTEND_LOCKED') != '1'
             or os.environ.get('MANO_PACKAGE_NAMESPACE') != '1'
             or not ARCHIVES.is_dir()):
         raise PermissionError('Private package namespace and frontend protocol required')
+    STAGE = 'cache'
     with cache_for(plan, actual=True) as (cache, apt_pkg):
+        STAGE = 'archives'
         apt_pkg.config.set('Dir::Cache::archives', str(ARCHIVES) + '/')
         manager = apt_pkg.PackageManager(cache._depcache)
         fetcher = apt_pkg.Acquire()
@@ -124,6 +128,7 @@ def commit(plan):
         if fetcher.run() != apt_pkg.Acquire.RESULT_CONTINUE or any(
                 not item.complete for item in fetcher.items):
             raise ValueError('Sealed package archives unavailable')
+        STAGE = 'commit'
         status = os.open('/dev/null', os.O_WRONLY | os.O_CLOEXEC)
         try:
             code = manager.do_install(status)
@@ -131,10 +136,12 @@ def commit(plan):
             os.close(status)
         if code != apt_pkg.PackageManager.RESULT_COMPLETED:
             raise ValueError('Package commit did not complete')
-        cache._depcache.write_state_file()
+        # APT's dpkg package manager writes the depcache auto-bits as part
+        # of Go(). Python's DepCache does not expose a write_state_file API.
 
 
 def main():
+    global STAGE
     guard()
     if sys.argv[1:] not in (['--locations'], ['--commit']):
         raise ValueError('Fixed package worker mode required')
@@ -149,6 +156,7 @@ def main():
             raise ValueError('Archive locations exceed budget')
         sys.stdout.buffer.write(packet)
     else:
+        STAGE = 'boundary'
         print('MANO_PACKAGE_BOUNDARY=' + canonical(boundary()), flush=True)
         commit(plan)
 
@@ -156,5 +164,10 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except Exception:
+    except Exception as error:
+        known = {'PermissionError', 'ValueError', 'Error', 'SystemError', 'TypeError',
+                 'AttributeError', 'OSError', 'KeyError', 'RuntimeError', 'TimeoutError'}
+        kind = type(error).__name__
+        print('MANO_PACKAGE_ERROR=' + canonical(dict(stage=STAGE,
+            error_type=kind if kind in known else 'Unknown')), file=sys.stderr, flush=True)
         sys.exit(2)

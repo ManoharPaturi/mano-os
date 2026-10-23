@@ -11,7 +11,12 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-static void fail(const char *what) { perror(what); exit(125); }
+static void fail(const char *what) {
+    (void)what;
+    fprintf(stderr, "MANO_PACKAGE_ERROR={\"stage\":\"native-guard\","
+        "\"error_type\":\"NativeGuard\",\"errno\":%d}\n", errno);
+    exit(125);
+}
 
 int main(int argc, char **argv) {
     (void)argv;
