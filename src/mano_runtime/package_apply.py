@@ -127,6 +127,7 @@ def acquire(plan, body, broker_fd):
                 raise ValueError('Archive acquisition inventory exceeds scan budget')
             present.add(hashlib.sha256(read(path, package_archives.MAX_ARCHIVE)).hexdigest())
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        downloaded = []
         for sha, row in rows.items():
             observe(body, broker_fd)
             destination = package_archives.CACHE / (sha + '.deb')
@@ -156,7 +157,10 @@ def acquire(plan, body, broker_fd):
             os.link(stage, destination, follow_symlinks=False)  # Never replace an existing object.
             stage.unlink()  # Only this attempt's fresh staging name, after verified publication.
             package_attempts.sync(destination.parent)
+            downloaded.append(sha)
         observe(body, broker_fd)
+        return dict(network_used=bool(downloaded), downloaded_sha256=sorted(downloaded),
+                    download_bytes=sum(rows[sha]['download_bytes'] for sha in downloaded))
 
 
 def sandbox(archives):
@@ -179,6 +183,7 @@ def sandbox(archives):
     # Protect authority, credentials, recovery history and human data from scripts.
     for path in ('/home', '/root', '/mnt', '/media', '/srv', '/opt', '/.snapshots',
                  '/etc/mano', '/etc/ssh', '/etc/ssl/private', '/var/lib/mano-broker',
+                 '/var/lib/mano-workspaces',
                  '/var/lib/private', '/var/lib/mano-provider'):
         if Path(path).exists():
             argv += ['--tmpfs', path]
@@ -196,6 +201,7 @@ def sandbox(archives):
     argv += ['--tmpfs', '/etc/dpkg', '--dir', '/etc/dpkg/dpkg.cfg.d',
              '--dir', '/run/mano-package-archives']
     for archive in archives:
+        os.lseek(archive['fd'], 0, os.SEEK_SET)
         filename = (archive['name'] + '_' + archive['version'].replace(':', '%3a') +
                     '_' + archive['architecture'] + '.deb')
         argv += ['--ro-bind-data', str(archive['fd']), '/run/mano-package-archives/' + filename]
@@ -278,7 +284,7 @@ def execute(body, *, broker_fd=None):
     reserve = 2 * 1024**3 + max(plan['net_installed_bytes'], 0) + plan['download_bytes']
     if layout['free_bytes'] < reserve:
         raise ValueError('Insufficient free space for package reserve; peak remains unmeasured')
-    acquire(plan, body, broker_fd)
+    acquisition = acquire(plan, body, broker_fd)
     with package_archives.verified_archives(plan) as staged:
         scope = recovery.require_locked()
         observe(body, broker_fd)
@@ -294,7 +300,8 @@ def execute(body, *, broker_fd=None):
         return dict(schema_version='1.0', ok=True, action_id=body['action_id'],
                     request_sha256=request.digest, outcome=outcome,
                     checkpoint=checkpoint['recovery_id'], catalog_id=catalog['catalog_id'],
-                    log_sha256=log_sha, boundary=boundary, package_children_drained=True,
+                    log_sha256=log_sha, boundary=boundary, acquisition=acquisition,
+                    package_children_drained=True,
                     peak_space_bytes=None)
 
 

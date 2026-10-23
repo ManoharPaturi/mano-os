@@ -1,3 +1,25 @@
+# Native apply fixture now wired; draft remains unvalidated
+
+Local534tests48Linuxskips +staticchecks pass after wiring the actual btrfs
+publicSDK/nativePAM/Root service fixture. Prior draft head78ad23b CI39891652319
+qualitySUCCESS (including new native C guard compilation); security-lab live.
+New fixture goes immediately after the existing readonly package plan witness.
+It shares that existing task/resource to avoid increasing live-resource quotas.
+Operator Root controlling-PTY acknowledges fixtureunknown14 against originalA,
+archives coherentB metadata without snapshot deletion, then forecasts cowsay,
+preserves one fixture cache archive in a holdingdir to force bounded real HTTPS,
+rejects private-socket untrustedUID +forecastgrant +wrongPAMpassword, obtainsfresh
+nativePAM apply approval, runspublicSDK, requiresactualinstallation/newcatalog/
+namespaceboundary/emptyRootStopdomain/scopedreceipt/replay-noeffect/unknownkept.
+
+Source fixture now compiles/installs guard+new private socket/unit and cleansonly
+those fixture-owned resources. Parent unit cannot add a mount within /usr because
+recovery.layout rejects split critical trees; module capability remains absent,
+and child native guard denies module syscalls. Archive offsets reset beforebwrap.
+Acquisition receipt nowrecords actual network-used/downloadedSHA/bytes. Rootworker
+host workspaces masked. This native proof has NOT run on the new head yet.
+DO NOT merge or claim validated privileged execution before it and allgatespass.
+
 # Current: approved package apply integration DRAFT
 
 Base/main800b72a1f29340495d5c0add3aeda2fd9ff25d89 PR133; exact post-main

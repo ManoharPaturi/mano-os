@@ -28,7 +28,8 @@ AmbientCapabilities=
 ProtectHome=yes
 PrivateTmp=yes
 ProtectKernelTunables=yes
-ProtectKernelModules=yes
+# No additional mount under /usr: recovery validates one coherent root tree.
+# Module capability is absent and the package child separately denies module syscalls.
 ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectClock=yes

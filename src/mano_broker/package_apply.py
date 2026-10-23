@@ -139,7 +139,7 @@ class ApplyWorker:
             state.event(action_id, 'package-postconditions-verified', dict(
                 outcome=value['outcome'], checkpoint=value['checkpoint'],
                 catalog_id=value['catalog_id'], log_sha256=value['log_sha256'],
-                boundary=value['boundary']))
+                boundary=value['boundary'], acquisition=value['acquisition']))
             state.transition(action_id, 'done', exit_code=0)
         except BaseException:
             row = state.db.execute('SELECT state FROM actions WHERE id=?', (action_id,)).fetchone()
