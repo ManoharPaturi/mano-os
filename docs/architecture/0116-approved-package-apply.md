@@ -34,7 +34,9 @@ removes/configures it and writes package marks. The child rechecks that its full
 solution equals the approved forecast before effects. It has only sealed archives,
 private PID/network/IPC/mount/cgroup namespaces, a read-only root with fixed writable
 mount ancestors, masked human data/credentials/approval IPC, protected mano code
-and policy, and only the fixed dpkg ownership/identity capability subset. A native
+and policy, including bundled runtime dependencies and shared session files, and
+only the fixed dpkg ownership/identity capability subset. The child checks kernel
+read-only mount flags for installed runtime infrastructure before APT runs. A native
 fixed-command seccomp guard denies namespace escape, mount, ptrace, keyring,
 network, kernel/device administration and related operations. Package scripts
 cannot supply a different guard command or public argv. Namespace preflight must

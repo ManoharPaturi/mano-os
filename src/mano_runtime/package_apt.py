@@ -112,10 +112,14 @@ def boundary():
     if 'ro' not in mounts.get('/', []) or any(path not in mounts for path in
             ('/usr', '/usr/lib', '/usr/bin', '/etc', '/var', '/var/lib')):
         raise PermissionError('Protected mount ancestry absent')
+    for path in ('/usr/lib/mano-runtime', '/usr/share/mano-runtime'):
+        if Path(path).exists() and 'ro' not in mounts.get(path, []):
+            raise PermissionError('Installed mano runtime infrastructure is writable')
     return dict(network_socket_denied=True, protected_code_readonly=True,
                 cgroup_control_readonly=True, host_shadow_hidden=True, approval_ipc_hidden=True,
                 protected_ancestors_mounted=True, no_new_privileges=True, seccomp_active=True,
                 native_stop_authority_readonly=True,
+                runtime_infrastructure_readonly=True,
                 namespaces={kind: os.readlink('/proc/self/ns/' + kind)
                             for kind in ('mnt', 'net', 'ipc', 'pid', 'cgroup')})
 

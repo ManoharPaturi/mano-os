@@ -199,7 +199,8 @@ def sandbox(archives, body):
                  '/var/lib/private', '/var/lib/mano-provider'):
         if Path(path).exists():
             argv += ['--tmpfs', path]
-    for path in ('/usr/lib/mano-os', '/usr/lib/mano-broker', '/var/lib/mano-packages',
+    for path in ('/usr/lib/mano-os', '/usr/lib/mano-broker', '/usr/lib/mano-runtime',
+                 '/usr/share/mano-runtime', '/var/lib/mano-packages',
                  '/var/lib/mano-stopd',
                  '/boot', '/etc/pam.d', '/etc/snapper',
                  '/etc/passwd', '/etc/group', '/etc/sudoers', '/etc/sudoers.d'):
@@ -271,7 +272,8 @@ def run_child(plan, archives, body, broker_fd):
         witness = json.loads(witnesses[0], object_pairs_hook=unique_object)
         fields = {'network_socket_denied', 'protected_code_readonly', 'cgroup_control_readonly',
                   'host_shadow_hidden', 'approval_ipc_hidden', 'protected_ancestors_mounted',
-                  'no_new_privileges', 'seccomp_active', 'native_stop_authority_readonly'}
+                  'no_new_privileges', 'seccomp_active', 'native_stop_authority_readonly',
+                  'runtime_infrastructure_readonly'}
         if (set(witness) != fields | {'namespaces'}
                 or any(witness[key] is not True for key in fields)
                 or set(witness['namespaces']) != {'mnt', 'net', 'ipc', 'pid', 'cgroup'}
