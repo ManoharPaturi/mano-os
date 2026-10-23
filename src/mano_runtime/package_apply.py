@@ -257,6 +257,7 @@ def run_child(plan, archives, body, broker_fd):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=ENV, cwd='/',
         pass_fds=tuple(row['fd'] for row in archives), start_new_session=True)
     output = bytearray()
+    protocol, errors = bytearray(), bytearray()
     try:
         child.stdin.write(canonical(plan).encode())
         child.stdin.close()
@@ -272,14 +273,15 @@ def run_child(plan, archives, body, broker_fd):
                         selector.unregister(key.fileobj)
                     else:
                         output.extend(data)
+                        (protocol if key.fileobj is child.stdout else errors).extend(data)
                         if len(output) > MAX_LOG:
                             raise ValueError('Package child exceeded bounded output')
         if child.wait(timeout=1) != 0:
             print(canonical(dict(event='package-child-exit', exit_code=child.returncode,
-                                 launcher=launcher_failure(output))), file=sys.stderr, flush=True)
+                                 launcher=launcher_failure(errors))), file=sys.stderr, flush=True)
             # Only fixed stage/type diagnostics reach the Root journal, never
             # raw maintainer output, URLs, request data, paths or credentials.
-            for line in output.splitlines():
+            for line in errors.splitlines():
                 if line.startswith(b'MANO_PACKAGE_ERROR='):
                     detail = json.loads(line.split(b'=', 1)[1], object_pairs_hook=unique_object)
                     if (detail.get('stage') in {'admission', 'boundary', 'cache', 'archives',
@@ -292,9 +294,11 @@ def run_child(plan, archives, body, broker_fd):
                             stage=detail['stage'], error_type=detail['error_type'])),
                             file=sys.stderr, flush=True)
             raise ValueError('Package worker failed; inspect recovery custody')
-        witnesses = [line.split(b'=', 1)[1] for line in output.splitlines()
+        witnesses = [line.split(b'=', 1)[1] for line in protocol.splitlines()
                      if line.startswith(b'MANO_PACKAGE_BOUNDARY=')]
         if len(witnesses) != 1:
+            print(canonical(dict(event='package-boundary-frame-denied',
+                                 witness_count=len(witnesses))), file=sys.stderr, flush=True)
             raise ValueError('One native package boundary witness required')
         witness = json.loads(witnesses[0], object_pairs_hook=unique_object)
         fields = {'network_socket_denied', 'protected_code_readonly', 'cgroup_control_readonly',
