@@ -98,7 +98,8 @@ class RootApplyAdmissionTests(unittest.TestCase):
         witness = dict.fromkeys(('network_socket_denied', 'protected_code_readonly',
             'cgroup_control_readonly', 'host_shadow_hidden', 'approval_ipc_hidden',
             'protected_ancestors_mounted', 'no_new_privileges', 'seccomp_active',
-            'native_stop_authority_readonly', 'runtime_infrastructure_readonly'), True)
+            'native_stop_authority_readonly', 'runtime_infrastructure_readonly',
+            'ordinary_thread_creation'), True)
         witness['namespaces'] = {kind: kind + ':[123]' for kind in
                                 ('mnt', 'net', 'ipc', 'pid', 'cgroup')}
         witness['capabilities'] = dict.fromkeys(('CapEff', 'CapPrm', 'CapInh',

@@ -13,6 +13,7 @@ import socket
 import stat
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -103,6 +104,13 @@ def boundary():
     BOUNDARY_KERNEL.update(capabilities, securebits=securebits)
     if any(value != 0xdb for value in capabilities.values()) or securebits != 43:
         raise PermissionError('Package capability state is not exactly bounded and locked')
+    BOUNDARY_CHECK = 'thread-creation'
+    ready = threading.Event()
+    thread = threading.Thread(target=ready.set, name='mano-package-boundary')
+    thread.start()
+    thread.join(timeout=2)
+    if thread.is_alive() or not ready.is_set():
+        raise PermissionError('Ordinary bounded thread creation failed')
     BOUNDARY_CHECK = 'network'
     try:
         connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -170,6 +178,7 @@ def boundary():
                 protected_ancestors_mounted=True, no_new_privileges=True, seccomp_active=True,
                 native_stop_authority_readonly=True,
                 runtime_infrastructure_readonly=True,
+                ordinary_thread_creation=True,
                 capabilities=capabilities, securebits=securebits,
                 run_device=run_device,
                 namespaces={kind: os.readlink('/proc/self/ns/' + kind)

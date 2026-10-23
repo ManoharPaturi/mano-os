@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
     scmp_filter_ctx filter = seccomp_init(SCMP_ACT_ALLOW);
     if (!filter) fail("package seccomp init");
     const char *denied[] = {
-        "mount", "umount2", "pivot_root", "chroot", "unshare", "setns", "clone3",
+        "mount", "umount2", "pivot_root", "chroot", "unshare", "setns",
         "fsopen", "fsconfig", "fsmount", "move_mount", "open_tree", "fspick",
         "ptrace", "process_vm_readv", "process_vm_writev", "pidfd_getfd",
         "bpf", "perf_event_open", "io_uring_setup", "keyctl", "add_key", "request_key",
@@ -102,6 +102,11 @@ int main(int argc, char **argv) {
         if (nr < 0 || seccomp_rule_add(filter, SCMP_ACT_ERRNO(EPERM), nr, 0) < 0)
             fail("package forbidden syscall rule");
     }
+    /* clone3's pointer flags cannot be inspected by seccomp. Deny it as
+       unavailable so glibc can use legacy clone, whose namespace flags below
+       remain filtered. EPERM would also break ordinary pthread creation. */
+    if (seccomp_rule_add(filter, SCMP_ACT_ERRNO(ENOSYS), SCMP_SYS(clone3), 0) < 0)
+        fail("package clone3 fallback rule");
     unsigned long flags[] = { CLONE_NEWUSER, CLONE_NEWNS, CLONE_NEWPID,
         CLONE_NEWNET, CLONE_NEWIPC, CLONE_NEWUTS, CLONE_NEWCGROUP };
     for (size_t i = 0; i < sizeof(flags)/sizeof(flags[0]); ++i)
@@ -115,6 +120,9 @@ int main(int argc, char **argv) {
     seccomp_release(filter);
     errno = 0;
     if (unshare(0) != -1 || errno != EPERM) fail("package namespace denial self-check");
+    errno = 0;
+    if (syscall(SYS_clone3, NULL, 0) != -1 || errno != ENOSYS)
+        fail("package clone3 denial self-check");
     char *const command[] = {"/usr/bin/python3", "-P", "-m",
         "mano_runtime.package_apt", "--commit", NULL};
     execv(command[0], command);

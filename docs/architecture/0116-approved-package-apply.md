@@ -50,7 +50,10 @@ and policy, including bundled runtime dependencies and shared session files, and
 only the fixed dpkg ownership/identity capability subset. The child checks kernel
 read-only mount flags for installed runtime infrastructure before APT runs. A native
 fixed-command seccomp guard denies namespace escape, mount, ptrace, keyring,
-network, kernel/device administration and related operations. Package scripts
+network, kernel/device administration and related operations. clone3 is denied
+with ENOSYS so libc can fall back to legacy clone; all legacy namespace-creation
+flags remain denied. A real bounded thread must start and join in the boundary
+preflight before APT executes. Memory and PID limits remain unchanged. Package scripts
 cannot supply a different guard command or public argv. Namespace preflight must
 prove the expected restrictions before APT commits; the Root parent validates
 that witness and requires all package descendants to drain before completion.
