@@ -161,6 +161,21 @@ finally:with_client.close()
         timeout=75,
     )
     if completed.returncode:
+        # Preserve typed Root custody, not raw script/client output or PAM input.
+        failure = dict(
+            client_return_code=completed.returncode,
+            plan=plan,
+            request_sha256=ActionRequest.parse(
+                canonical(proposed | dict(grant_id=granted["grant_id"])).encode()
+            ).digest,
+            attempts=package_attempts.reconcile(),
+            current_status_sha256=hashlib.sha256(
+                Path("/var/lib/dpkg/status").read_bytes()
+            ).hexdigest(),
+        )
+        (ROOT / "evidence/package-apply-failure.json").write_text(
+            json.dumps(failure, indent=2) + "\n"
+        )
         logs = subprocess.run(
             ["journalctl", "-u", "mano-package-apply@*.service", "--no-pager", "-n", "50"],
             capture_output=True,

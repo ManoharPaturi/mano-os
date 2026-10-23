@@ -202,9 +202,18 @@ if [ "$result" = 0 ]; then
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_ipc.py' \
     > "$repo_root/evidence/broker-ipc.json"
+  set +e
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_service.py' \
     > "$repo_root/evidence/broker-service.json"
+  broker_result=$?
+  set -e
+  if [ "$broker_result" != 0 ]; then
+    # Keep failure custody before exiting with the actual broker probe failure.
+    ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+      'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+    exit "$broker_result"
+  fi
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo tar -cf - -C /opt/mano-lab/evidence live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt mcp-discovery.json package-plans.json package-apply.json package-apply-before-status package-apply-after-status git-workspace-checkpoint.json git-workspace-checkpoint.tar' | tar -xf - -C "$repo_root/evidence"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
