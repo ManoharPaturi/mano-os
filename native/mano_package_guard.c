@@ -12,9 +12,20 @@
 #include <unistd.h>
 
 static void fail(const char *what) {
-    (void)what;
+    int saved_errno = errno;
+    struct __user_cap_header_struct header = { .version = _LINUX_CAPABILITY_VERSION_3 };
+    struct __user_cap_data_struct caps[2] = {{0}, {0}};
+    int observed = syscall(SYS_capget, &header, caps) == 0;
+    uint64_t effective = (uint64_t)caps[0].effective | ((uint64_t)caps[1].effective << 32);
+    uint64_t permitted = (uint64_t)caps[0].permitted | ((uint64_t)caps[1].permitted << 32);
+    /* what is always a fixed literal below, never package data or a path. */
     fprintf(stderr, "MANO_PACKAGE_ERROR={\"stage\":\"native-guard\","
-        "\"error_type\":\"NativeGuard\",\"errno\":%d}\n", errno);
+        "\"error_type\":\"NativeGuard\",\"check\":\"%s\",\"errno\":%d,"
+        "\"pid\":%ld,\"uid\":%lu,\"euid\":%lu,\"capget_ok\":%s,"
+        "\"effective\":%llu,\"permitted\":%llu}\n", what, saved_errno,
+        (long)getpid(), (unsigned long)getuid(), (unsigned long)geteuid(),
+        observed ? "true" : "false", (unsigned long long)effective,
+        (unsigned long long)permitted);
     exit(125);
 }
 
