@@ -15,6 +15,7 @@ import re
 import stat
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -28,6 +29,8 @@ TOP = Path("/run/mano-package-recovery-top")
 CONFIG = Path("/etc/snapper/configs/mano-root")
 CRITICAL = ("/usr", "/etc", "/var/lib/dpkg", "/var/lib/apt", "/var/cache/apt", "/boot")
 ENV = {"PATH": "/usr/sbin:/usr/bin:/bin", "LANG": "C.UTF-8"}
+_PACKAGE_LOCK_SCOPE = threading.Lock()
+_ACTIVE_PACKAGE_SCOPE = None
 
 
 def command(*args):
@@ -45,13 +48,17 @@ def command(*args):
     return result.stdout.strip()
 
 
-def guard():
+def root_guard():
     if sys.platform != "linux" or os.getuid() != 0 or os.geteuid() != 0:
         raise PermissionError("Explicit Debian Root-terminal administration required")
     if platform.freedesktop_os_release().get("ID") != "debian":
         raise ValueError("Debian recovery policy required")
     if platform.freedesktop_os_release().get("VERSION_ID") != "13":
         raise ValueError("Debian13 recovery policy required")
+
+
+def guard():
+    root_guard()
     if any(not os.isatty(fd) for fd in (0, 1, 2)) or os.fstat(0).st_uid != 0:
         raise PermissionError("Trusted Root controlling terminal required")
     if os.tcgetpgrp(0) != os.getpgrp():
@@ -60,6 +67,52 @@ def guard():
 
 def overlaps(left, right):
     return left == right or left.startswith(right + "/") or right.startswith(left + "/")
+
+
+class PackageLocks:
+    """One process/thread's lock ownership; not a capability or approval token."""
+
+    def __init__(self, backend_fd):
+        self.backend_fd = backend_fd
+        self.owner = (os.getpid(), threading.get_ident())
+        self.active = True
+        self.backend_held = True
+
+    def check(self, *, backend=True):
+        root_guard()
+        if (
+            not self.active
+            or _ACTIVE_PACKAGE_SCOPE is not self
+            or self.owner != (os.getpid(), threading.get_ident())
+            or (backend and not self.backend_held)
+        ):
+            raise PermissionError("Current owned package-manager lock scope required")
+
+    @contextlib.contextmanager
+    def dpkg_backend(self):
+        """Keep frontend/APT locks, release only backend for a dpkg child.
+
+        Debian's frontend protocol requires the fixed environment marker yielded
+        here. Callers must wait for the child before exiting; failure to reacquire
+        the backend is an error, never permission to continue mutation.
+        """
+        self.check()
+        fcntl.lockf(self.backend_fd, fcntl.LOCK_UN)
+        self.backend_held = False
+        try:
+            yield {"DPKG_FRONTEND_LOCKED": "1"}
+        finally:
+            self.check(backend=False)
+            fcntl.lockf(self.backend_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.backend_held = True
+
+
+def require_locked():
+    root_guard()
+    if _ACTIVE_PACKAGE_SCOPE is None:
+        raise PermissionError("Current owned package-manager lock scope required")
+    _ACTIVE_PACKAGE_SCOPE.check()
+    return _ACTIVE_PACKAGE_SCOPE
 
 
 def layout():
@@ -131,6 +184,25 @@ def layout():
 
 @contextlib.contextmanager
 def locked():
+    global _ACTIVE_PACKAGE_SCOPE
+    # POSIX record locks belong to the process: closing a second descriptor can
+    # drop a lock still needed by an outer scope. Reject nesting/parallel scopes
+    # before opening any package-manager descriptor.
+    if not _PACKAGE_LOCK_SCOPE.acquire(blocking=False):
+        raise BlockingIOError("Package-manager lock scope is already active")
+    try:
+        with _locked_descriptors() as scope:
+            _ACTIVE_PACKAGE_SCOPE = scope
+            try:
+                yield scope
+            finally:
+                _ACTIVE_PACKAGE_SCOPE = None
+    finally:
+        _PACKAGE_LOCK_SCOPE.release()
+
+
+@contextlib.contextmanager
+def _locked_descriptors():
     trusted(STORAGE, directory=True)
     try:
         BASE.mkdir(mode=0o700)
@@ -160,7 +232,11 @@ def locked():
             ):
                 raise ValueError("Untrusted recovery/package-manager lock")
             fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        yield
+        scope = PackageLocks(descriptors[2])
+        try:
+            yield scope
+        finally:
+            scope.active = False
     finally:
         for fd in reversed(descriptors):
             os.close(fd)
@@ -198,59 +274,65 @@ def save(path, value):
 
 def create():
     guard()
-    before = layout()
+    layout()  # Unsupported filesystems must fail before touching recovery locks.
     with locked():
-        if (
-            len(list(BASE.glob("*.json"))) >= 4
-            or sum(path.name.isdecimal() for path in STORAGE.iterdir()) >= 16
-        ):
-            raise ValueError("Recovery retention exhausted; explicit operator review required")
-        status = current_status()
-        source_info = subvolume(Path("/"))
-        number = command(
-            "/usr/bin/snapper",
-            "--no-dbus",
-            "-c",
-            "mano-root",
-            "create",
-            "--type",
-            "single",
-            "--read-only",
-            "--print-number",
-            "--description",
-            "mano before package change",
-        )
-        if not re.fullmatch("[1-9][0-9]{0,9}", number):
-            raise ValueError("Unexpected Snapper snapshot identity; inspect operator state")
-        snapshot = STORAGE / number / "snapshot"
-        info = subvolume(snapshot)
-        if (
-            info["parent_uuid"] != source_info["uuid"]
-            or command("/usr/bin/btrfs", "property", "get", str(snapshot), "ro") != "ro=true"
-            or hashlib.sha256(read(snapshot / "var/lib/dpkg/status", MAX_STATUS)).hexdigest()
-            != status
-            or current_status() != status
-        ):
-            raise ValueError("Snapshot package state differs; preserve snapshot for inspection")
-        after = layout()
-        if any(before[key] != after[key] for key in before if key != "free_bytes"):
-            raise ValueError("Root layout changed; preserve snapshot for inspection")
-        value = dict(
-            schema_version="1.0",
-            recovery_id=uuid.uuid4().hex,
-            snapshot_number=int(number),
-            snapshot=info,
-            layout=before,
-            status_sha256=status,
-            created_at=int(time.time()),
-            boot_id=Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
-            snapshot_read_only=True,
-            package_install_authorized=False,
-            external_effects_reversible=False,
-            peak_change_space_bytes=None,
-        )
-        save(BASE / (value["recovery_id"] + ".json"), value)
-        return value
+        return create_locked()
+
+
+def create_locked():
+    """Checkpoint inside an already-owned coherent scope; never new authority."""
+    require_locked()
+    before = layout()
+    if (
+        len(list(BASE.glob("*.json"))) >= 4
+        or sum(path.name.isdecimal() for path in STORAGE.iterdir()) >= 16
+    ):
+        raise ValueError("Recovery retention exhausted; explicit operator review required")
+    status = current_status()
+    source_info = subvolume(Path("/"))
+    number = command(
+        "/usr/bin/snapper",
+        "--no-dbus",
+        "-c",
+        "mano-root",
+        "create",
+        "--type",
+        "single",
+        "--read-only",
+        "--print-number",
+        "--description",
+        "mano before package change",
+    )
+    if not re.fullmatch("[1-9][0-9]{0,9}", number):
+        raise ValueError("Unexpected Snapper snapshot identity; inspect operator state")
+    snapshot = STORAGE / number / "snapshot"
+    info = subvolume(snapshot)
+    if (
+        info["parent_uuid"] != source_info["uuid"]
+        or command("/usr/bin/btrfs", "property", "get", str(snapshot), "ro") != "ro=true"
+        or hashlib.sha256(read(snapshot / "var/lib/dpkg/status", MAX_STATUS)).hexdigest() != status
+        or current_status() != status
+    ):
+        raise ValueError("Snapshot package state differs; preserve snapshot for inspection")
+    after = layout()
+    if any(before[key] != after[key] for key in before if key != "free_bytes"):
+        raise ValueError("Root layout changed; preserve snapshot for inspection")
+    value = dict(
+        schema_version="1.0",
+        recovery_id=uuid.uuid4().hex,
+        snapshot_number=int(number),
+        snapshot=info,
+        layout=before,
+        status_sha256=status,
+        created_at=int(time.time()),
+        boot_id=Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+        snapshot_read_only=True,
+        package_install_authorized=False,
+        external_effects_reversible=False,
+        peak_change_space_bytes=None,
+    )
+    save(BASE / (value["recovery_id"] + ".json"), value)
+    return value
 
 
 def recovery_record(identifier):

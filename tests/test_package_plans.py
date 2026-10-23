@@ -492,12 +492,15 @@ class CatalogStalenessTests(unittest.TestCase):
             self.root / "keys",
             self.root / "updates",
         )
+        self.extended = self.root / "extended_states"
+        self.extended.write_bytes(b"Package: sl\nAuto-Installed: 1\n")
         self.status.write_bytes(b"installed state")
         self.keys.write_bytes(b"keyring")
         self.updates.mkdir()
         self.patches = [
             patch.object(package_catalog, "BASE", self.base),
             patch.object(package_catalog, "STATUS", self.status),
+            patch.object(package_catalog, "EXTENDED", self.extended),
             patch.object(package_catalog, "KEYRING", self.keys),
             patch.object(package_catalog, "LISTS", self.lists),
             patch.object(package_catalog, "UPDATES", self.updates),
@@ -515,7 +518,11 @@ class CatalogStalenessTests(unittest.TestCase):
             solver="fixture",
             status_sha256=hashlib.sha256(self.status.read_bytes()).hexdigest(),
             source_inputs={self.source.name: package_catalog.source_identity(self.source)},
+            extended_states_source=package_catalog.extended_identity(self.extended.read_bytes()),
             files={
+                "inputs/extended_states": dict(
+                    bytes=self.extended.stat().st_size,
+                    sha256=hashlib.sha256(self.extended.read_bytes()).hexdigest()),
                 "inputs/debian-archive-keyring.gpg": dict(
                     sha256=hashlib.sha256(self.keys.read_bytes()).hexdigest(), bytes=7
                 )
@@ -536,7 +543,7 @@ class CatalogStalenessTests(unittest.TestCase):
 
     def test_status_index_keyring_expiry_and_supersession_refuse_stale_approval(self):
         self.assertEqual(package_catalog.load(self.identifier)[1]["catalog_id"], self.identifier)
-        for path in (self.status, self.keys, self.source):
+        for path in (self.status, self.keys, self.source, self.extended):
             data = path.read_bytes()
             path.write_bytes(b"changed")
             with self.subTest(path=path.name), self.assertRaises(ValueError):
@@ -554,3 +561,16 @@ class CatalogStalenessTests(unittest.TestCase):
         (self.updates / "0000").write_bytes(b"pending")
         with self.assertRaises(ValueError):
             package_catalog.current_status()
+
+
+    def test_missing_and_dangling_marks_refuse_current_catalog(self):
+        self.extended.unlink()
+        with self.assertRaisesRegex(ValueError, "package marks changed"):
+            package_catalog.load(self.identifier)
+        self.extended.symlink_to(self.root / "missing-target")
+        with self.assertRaises((ValueError, OSError)):
+            package_catalog.load(self.identifier)
+
+    def test_absent_and_empty_marks_have_distinct_identity(self):
+        self.assertNotEqual(package_catalog.extended_identity(None),
+                            package_catalog.extended_identity(b""))

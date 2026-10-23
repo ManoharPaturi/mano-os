@@ -311,6 +311,65 @@ def audit(root: Path, spec: Path, adr: Path):
         'Package-state recovery and admission evidence incomplete',
     )
     resources = load("resources.json")
+    attempts = package_recovery.get("package_attempts", [])
+    attempt_checkpoint = package_recovery.get('coherent_checkpoint', captured)
+    require(isinstance(attempts, list) and len(attempts) == 2,
+            "Package attempt custody evidence missing")
+    intent, outcome = attempts[0].get("intent", {}), attempts[0].get("outcome", {})
+    require(
+        intent.get("state") == "intent"
+        and intent.get("recovery_id") == attempt_checkpoint.get("recovery_id")
+        and intent.get("status_sha256") == attempt_checkpoint.get("status_sha256")
+        and intent.get("boot_id") == attempt_checkpoint.get("boot_id")
+        and intent.get("installation_authorized") is False
+        and intent.get("automatic_replay_allowed") is False
+        and outcome.get("attempt_id") == intent.get("attempt_id")
+        and outcome.get("state") == "unknown"
+        and outcome.get("automatic_replay_allowed") is False
+        and package_recovery.get("duplicate_attempt_denied") is True
+        and package_recovery.get("nested_scope_denied_outer_posix_lock_preserved") is True
+        and package_recovery.get("repeated_reconciliation_unchanged") is True
+        and package_recovery.get("attempt_request_is_ci_context_not_approval") is True
+        and restored.get("package_attempt_custody_survived_recovery_boot") is True
+        and restored.get("package_attempt_unknown_without_replay") is True,
+        "Package attempt lost-acknowledgement/recovery-boot evidence incomplete",
+    )
+    successful = package_recovery.get('successful_package_postconditions', {})
+    completed = successful.get('outcome', {})
+    proof = completed.get('postconditions', {})
+    require(
+        attempts[1] == dict(intent=successful.get('intent'), outcome=completed)
+        and successful.get('native_dpkg_returncode') == 0
+        and successful.get('premature_completion_denied') is True
+        and successful.get('backend_handoff_completion_denied') is True
+        and successful.get('historical_receipt_survived_recovery_boot') is True
+        and successful.get('historical_receipt_does_not_prove_restored_state') is True
+        and successful.get('privileged_apply_verified') is False
+        and successful.get('broker_approval_verified') is False
+        and completed.get('state') == 'postconditions-verified'
+        and completed.get('automatic_replay_allowed') is False
+        and proof.get('before_status_sha256') == captured.get('status_sha256')
+        and proof.get('after_status_sha256') != restored.get('restored_status_sha256')
+        and proof.get('changes_verified') == len(successful.get('plan', {}).get('changes', []))
+        and 1 <= proof.get('changes_verified', 0) <= 64
+        and proof.get('all_package_versions_checked') is True
+        and proof.get('execution_authority_verified') is False,
+        'Successful package state/version observation or historical recovery scope missing')
+    coherent = package_recovery.get('coherent_package_locks', {})
+    require(all(coherent.get(key) is True for key in (
+        'checkpoint_and_intent_same_scope',
+        'frontend_retained_backend_temporarily_released',
+        'other_process_backend_lock_succeeded_before_child',
+        'direct_dpkg_frontend_conflict_denied',
+        'checkpoint_and_intent_denied_during_handoff',
+        'backend_reacquired_after_child')) and coherent.get('native_dpkg_returncode') == -9,
+        'Coherent checkpoint/intent/dpkg frontend protocol evidence incomplete')
+    owners = package_recovery['interrupted_package'].get('frontend_protocol_lock_owners', {})
+    require(owners.get('backend', {}).get('pid') ==
+            package_recovery['interrupted_package']['dpkg_pid']
+            and owners.get('frontend', {}).get('pid', 0) > 0
+            and owners['frontend']['pid'] != owners['backend']['pid'],
+            'Actual dpkg and coordinator kernel lock owners missing')
     require(
         resources.get("app_startup_observations")
         == {

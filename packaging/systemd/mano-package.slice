@@ -1,0 +1,8 @@
+[Unit]
+Description=mano privileged package operation Stop domain
+Before=mano-stopd.service
+
+[Slice]
+MemoryMax=512M
+TasksMax=64
+CPUQuota=50%

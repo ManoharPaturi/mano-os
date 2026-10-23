@@ -89,6 +89,22 @@ def main():
         )
         assert not PAYLOAD.exists()
         assert (Path("/mnt/mano-root/@") / PAYLOAD.relative_to("/")).read_bytes() == PAYLOAD_BYTES
+        from mano_runtime import package_attempts
+
+        attempts = package_attempts.reconcile()
+        assert attempts == package_source["package_attempts"]
+        assert attempts[0]["intent"]["boot_id"] != boot_id
+        assert attempts[0]["outcome"]["state"] == "unknown"
+        assert attempts[0]["outcome"]["automatic_replay_allowed"] is False
+        if 'successful_package_postconditions' in package_source:
+            successful = package_source['successful_package_postconditions']
+            assert len(attempts) == 2 and attempts[1] == dict(
+                intent=successful['intent'], outcome=successful['outcome'])
+            assert successful['outcome']['state'] == 'postconditions-verified'
+            assert restored_status != successful['outcome']['postconditions']['after_status_sha256']
+            successful['historical_receipt_survived_recovery_boot'] = True
+            successful['historical_receipt_does_not_prove_restored_state'] = True
+
 
         package_source["actual_recovery_boot"] = dict(
             boot_id=boot_id,
@@ -102,6 +118,8 @@ def main():
             source_dirty_journal_preserved=True,
             interrupted_package_payload_absent=True,
             changed_source_interrupted_payload_preserved=True,
+            package_attempt_custody_survived_recovery_boot=True,
+            package_attempt_unknown_without_replay=True,
         )
         Path("evidence/package-root-recovery.json").write_text(
             json.dumps(package_source, indent=2) + "\n"

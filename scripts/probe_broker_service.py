@@ -58,6 +58,7 @@ UNITS = (
     "mano-stopd.socket",
     "mano-stopd-control.socket",
     "mano-core.slice",
+    "mano-package.slice",
     "mano-provider.socket",
     "mano-provider@.service",
     "mano-controller.service",
@@ -1875,6 +1876,8 @@ finally:client.close()
     terminal_report['package_plan_signed_catalog_native_pam_public_sdk'] = True
     terminal_report['package_plan_no_install_workspace_config_or_replay_effect'] = True
     terminal_report['package_install_review_owned_digest_and_stale_denials'] = True
+    terminal_report['root_package_resolution_locked_exact_plan_and_stale_denials'] = True
+    terminal_report['root_package_archives_signed_hash_identity_and_kernel_seals'] = True
     terminal_report['package_plan_witness'] = package_records
     (ROOT/'evidence/package-plans.json').write_text(json.dumps(package_records,indent=2)+'\n')
     from probe_checkpoints import run as probe_checkpoints
@@ -2583,6 +2586,20 @@ s.close()
     terminal_report['package_plan_frozen_native_stop_and_restart_no_effect'] = True
     terminal_report['package_plan_stop_witness'] = package_stop
     terminal_report['native_stop_generation'] = package_stop['stop_generation']
+    from probe_root_package_stop import run as stop_root_package
+
+    root_stop = stop_root_package(human,password,ready(),replacement_launcher,STOP_CLIENT)
+    terminal_report['root_package_uid_zero_frozen_native_stop_domain'] = True
+    terminal_report['root_package_stop_witness'] = root_stop
+    terminal_report['native_stop_generation'] = root_stop['final_generation']
+    from mano_runtime.package_resolution import current_plan
+
+    try:
+        with current_plan(package_records['records']['dependency-plan']['result']['plan']):
+            raise AssertionError('Root package resolution admitted latched native Stop')
+    except PermissionError as error:
+        assert 'Native Stop is latched' in str(error)
+    terminal_report['root_package_resolution_native_stop_latched_denied'] = True
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,

@@ -1,3 +1,182 @@
+# PR133 native dependency-set correction
+
+Initial b911bf3 CI39825969416 failed before effects: fixture assumed exactly one
+sl change, but real APT solution contains dependencies. Raw log preserved in
+outputs/pr133-first-ci-failure.log. Fixture now requires the full bounded signed
+install solution, finds each exact archive by SHA256 and length, and installs all
+approved archives. No omitted dependencies or postcondition relaxation. Audit and
+independent acceptance compare every approved transition and all unrelated states.
+CI rerun on new head pending. No merge on failed initial head.
+
+# Current: durable package database postconditions
+
+Main23c41d9e1129e896c564a667fbb5b626b0f743af includes PR132. Exact post-main
+run39821675553 VERIFIED all3SUCCESS; save authoritative receipt in outputs.
+Branch feat/package-postconditions adds private Root complete_locked over the
+owned backend-held scope, original request/current boot/RO checkpoint, clean dpkg
+journal and exact before/after database transitions. Verified history allows a
+new separately approved attempt ID; unknown/partial/corrupt outcomes stay blocked.
+Historical receipts never authorize execution or prove state after rollback.
+
+Native guarded CI now uses a real signed sl forecast/intent/controlled dpkg commit,
+rejects completion before effect/during handoff, verifies postconditions, then
+runs existing interrupted-dpkg fixture. Real recovery must preserve both receipts
+while restoring pre-sl status. Existing unknown attempt remains first (id14),
+verified id16 second. Native CI pending. ADR0115; full apply integration still
+unfinished, not redefined around these prerequisites. Keep all prior gates.
+No Root/VM experiments on Mac, no paid-provider/key operations or deletions.
+Three unrelated duplicate-suffix files remain untracked; selective stage only.
+
+## Historical notes (superseded where above differs)
+
+# Current work: live APT package marks
+
+Main PR131 merged at febab37bd4ac6811f3d8055b8cbd84790bb32bc4 after all three
+exact-head CI jobs and full artifact/GUI acceptance. Post-main run 39816404372
+is live; poll that same run to terminal. Review override was user-authorized;
+branch protection and CI remain required. Three unrelated duplicate-suffix
+untracked files are preserved; stage only named intended paths.
+
+Branch fix/package-mark-freshness closes a live-input freshness gap before apply:
+APT automatic/manual package marks now bind catalog identity by presence, size,
+and SHA256. Creation rechecks them; existing catalog admission compares the live
+input, so approval/review/Root resolution/archive custody reject stale marks.
+Disposable CI changes marks without changing dpkg status, rejects the old plan,
+restores exact bytes and verifies admission again. ADR0114. Native CI pending.
+
+Full privileged apply, fresh native approval, isolated executor, acquisition,
+space admission, postconditions and durable recovery remain unfinished. Broker
+is the trusted grant authority; no parallel Root policy issuer. All Root and VM
+experiments remain CI-only. No provider/key experiments or local VM downloads.
+Disk last checked 29 GiB free / 86%; no cleanup. Goal remains active.
+
+## Historical notes (superseded where above differs)
+
+# Current work: coherent package transaction scope
+
+Main2e1eb27a3bfe0bcc65758d8d363f903bf4f565c8 includesmergedPR130 sealedarchives
+(accepted621c6a7CI39707159259/all45flags/54hashes/6freshGUI). Postmain130
+CI39804921537 verifiedSUCCESS exact2e1eb27 (APIrun_attempt1); savefinalreceipt.
+Branchfeat/coherent-package-transaction addsprocess/thread-ownedPackageLocks:
+frontend/APTlocksretained, backendtemporarilyreleasedfordpkgwithdocumented
+DPKG_FRONTEND_LOCKED=1, reacquirebeforeproceeding, failclosedifbusy. create_locked
+andbegin_locked requireactiveownedbackend-heldscope; CLIforegroundRootguards
+preserved. Publicwrappersretainownscopes. No nestedlocking/reopeningbackendfds.
+NativeCIcreatescoherentcheckpoint+intent afterseparatesignedslfixture, immediately
+beforecontrolledunsigneddpkg/postinst underonescope. OtherPIDbackendacquiremust
+workbeforechild, directdpkgdeniedfrontend, operationsdeniedduringhandoff, /proc/locks
+pinsfrontenddriver/backendactualdpkgPID, backendreacquiredafterSIGKILL. Original
+RootTTYcheckpointremainsrecoverytarget; unknownintentrefersadditionalcheckpoint,
+preservedacrossrealboot. Architectureauditrequiresnewproof. ADR0113.
+Local505tests/48Linuxskips+Ruff/compile/shell/diffpass; nativeCI/acceptancepending.
+Spec'strustedbrokerispolicyauthority: distinctfreshnativePAMapplycapability
+throughprotectedexistingchannel, notanewparallelRootpolicy/grantissuer. Roothelper
+willauthenticateBrokerpeerandtypedrequest; existingforecast/profilecannotapply.
+Fullprivilegedexecutor/isolation/acquisition/space/postconditions/Stop/boot still
+unfinished. Broaderliveprovider/authenticatedcoding/apps/hardware/physical8GB/
+input/signedOSreleasealsoopen. GoalACTIVE/incomplete. No RootMac/localVM/paid/
+secrets/agentmessages/deletions. Preserve3untracked' 2'files, selectivestageonly.
+
+Historicalnotesbelow; outputs/CONTINUATION.md currentruntimehandoff.
+
+# Current work: verified package archive custody
+
+Mainb755d910b670e256d27f4e9506020adcb417a55d containsmergedPR129 Rootresolution
+(accepted456b1f1CI39701965902/all44flags/54hashes/6freshGUI). Postmain129
+CI39704065843 currentlyrunning; pollSAMErununtilterminal.
+Branchfeat/verified-package-archives addsRoot-only verified_archives context over
+freshcurrent_plan/locks: fixedRootAPTcache, boundedscan, exactsignedcatalogSHA/size,
+sealedmemfdcopies, dpkg-deb name/version/archmatch, sourceidentityrecheck, nativeStop
+checks, closeFDsonexit. No download/install/grant/servicelistener. Admission64MiB/
+archive128MiBtotal256MiBscan256entries; missingarchivesfailclosed. Peakinstallspace
+unknown. Finalproductauthorizedacquisition/spacepolicy stillrequired (notanoffline
+onlyscope). Rootchildren remaintrusted/unconfined, notbrokerexposed. ADR0112.
+NativeCI fixtureexplicitlyprefetchesfixedversionsoutsideproductcode, thenchecks
+realSHA/metadata/seals/Rootwrite+truncatedenial/cachemutationunchangedsealedbytes,
+corrupt/symlink/missingdenials/FDclosure/noFDleak/dpkgstatusunchanged. New45thflag.
+Local500tests/48Linuxskips + Ruff/compile/shell/diffpassed; twoactualmemfdtestsrun
+LinuxCIwithoutRoot. Native/artifact/6freshGUI stillpending beforeanymerge.
+Preserve3untracked ' 2'files; selectivecommitonly. Disk25GiBfree88%.
+Fulloriginalv2.1ACTIVE/incomplete: exactnativePAMapply, verifiedauthorizedacquisition,
+space/checkpoint/commit, constrainedRootStopdomainexecutor, verifiedoutcomes/
+registryrefresh/recovery, liveprovider/authenticatedcoding/apps/hardware,
+physical8GB/input,signedOSrelease. No RootMac/paid/secrets/localVM/deletions.
+
+Historical notesbelow; outputs/CONTINUATION.md iscurrentruntimehandoff.
+
+# Current work: locked Root package re-resolution
+
+Main4a85548a19c7aa72fc62105db271fdfb7ef953ff includes merged PR128 attemptcustody
+(accepted488tests/46skips, exact7d50452CI39697785239/all43flags/54hashes/
+all6freshGUI accepted). Postmain128CI39699941820 currentlyrunning; pollSAMErun.
+Branchfeat/root-package-resolution adds LinuxRoot-only current_plan context:
+fulltypedforecast, supportedbtrfs, nativeStop, coherentpackage locks, currentRoot
+catalog/status/index/keyring checks, freshfixedPythonAPT calculation with explicit
+Rootownedsourcepath/clearedambientconfig, fullresult equality, finalcustody/Stop
+recheck, lockscopeheldthroughyield. SharedreadonlyAPTalgorithm; normalTaskCLI
+stillrefusesRoot/fixedmount/sandbox. No publicendpoint/service/grant/apply added.
+Rootchild currentlytrusted/unconfined; no cancellation/frozenStopdomain claim.
+Must enforceprocess/capability/IPC/resource/Stop isolation beforebrokerexposure.
+ADR0111. CI addsactualRootdependency/noopresolution, deltadenial, actualotherPID
+lockdenial, hostileambientAPT_CONFIG, stale/corruptinputs andlatchedStop. Stock
+installedmodule before/afterboot mustdenyext4 andunprivilegedcaller. New44thflag.
+Local495tests/46Linuxskips + Ruff/compile/shell/diff pass. Native/artifact/6freshGUI
+pending. Preserve3untracked ' 2'files, selectivecommitonly. Disk25GiBfree88%.
+Fullv2.1active/incomplete: exactnativePAMapply, verifiedarchives/download+space,
+same-scopecheckpoint/commit, realRootStopexecutor/postconditions/reconciliation,
+liveprovider/authenticatedcoding, apps/hardware, physical8GB/input,signedrelease.
+
+Historical notes below; outputs/CONTINUATION.md is currentruntimehandoff.
+
+# Current work: package-attempt custody
+
+Main 65e9661c425c5a5179e58dccb91ebb02a6dae64e includes merged PR127 with
+accepted native/installed Root Stop evidence. Its post-main CI39696070999 is
+still running; poll the same run to terminal, do not restart on observer timeout.
+Branch feat/package-attempt-journal adds Root-private immutable write-ahead
+intent under the persistent snapshot subvolume, bound to a fresh current-boot
+checkpoint/current layout/status. Exclusive ID reservation and fsync precede
+return. Unknown outcomes block new IDs; no retry, clear, success, CLI, service,
+public endpoint or apply authority is added. Partial/corrupt custody fails closed.
+Nonreentrant package-manager lock scope prevents POSIX-lock release by nesting.
+CI records intent before controlled package changes, requires duplicate denial
+and outer-lock preservation, reconciles after actual interrupted dpkg, then
+requires identical custody after real clean recovery-clone boot. ADR0110.
+Local 488 tests/46 Linux skips plus Ruff/compile/shell/diff passed. New native
+CI and complete artifact/six-original-GUI acceptance still required before merge.
+Disk 25GiB free/88%. Three unrelated untracked files with suffix ' 2' appeared;
+preserve them and commit only this change's explicit paths. No local VM/model
+assets, Root experiments on Mac, reviewer requests or silent deletion.
+Full original v2.1 goal remains ACTIVE/incomplete: fresh native-PAM apply consent,
+current independent Root resolution, archives/space, same-scope checkpoint and
+commit, actual execution inside Stop domain, postconditions/service reconciliation,
+live provider/authenticated coding, apps/hardware, physical8GB/input, signed release.
+
+Historical notes below; outputs/CONTINUATION.md is the current runtime handoff.
+
+# Current work: privileged package Stop domain
+
+Main3a860c5e87bea2ca60e36284edd0913755c0047b includes package-install-review
+(PR126; GitHub also auto-marked original125 merged). Postmain126 CI39630028188
+nowverifiedSUCCESS onexactmain (outputs/pr126-postmerge-ci.json).
+Currentbranchfeat/privileged-package-stop-domain adds emptyreserved
+mano-package.slice and extends nativeCStop/rearm to wholefixedRootdomain. Stopd
+requiresnewSlice, Rootcapabilitysetunchangedempty. Runtime disable/removal stops
+newSlice. No packageexecutor/socket/grant/permission/installer added. ADR0109.
+NativeCIprobe verifies RootUID0parent+detachedsessionchild, CapEff0/NNP1/cgroupRO
+writeEROFS, pidfd/kernelT forRootpair+broker+launcher, populateddomainnativePAM
+rearmrefusal, nativehumanStopdrain/Rootpidfdexit/stablecanary/controllersstillT,
+staleviewrefusal/freshPAMrearm/noRootrestart/survivingnativeStopdaemon+Rootobserver.
+Repeat sameprobe against installed runtime afterstockactualreboot, allowedCI
+driveronly copied. RuntimeMax60/read-onlysystem/privateIPC/network forfixture.
+No productionmaintainerscripts/fullyprivilegedhostileRoot/kernelDstate proof;
+fullRootapply/freshconsent/Rootreresolve/archives/space/snapshot/crashremaining.
+Local478tests/46Linuxskips+Ruff/compile/shell/diff pass. NewnativeCcompile/probe/
+43rdflag/artifacts/sixfreshGUI acceptance stillpending. Disk17GiBfree92% warning,
+no silentdeletion/localVM/modeldownloads. Fullv2.1 goalACTIVE/incomplete.
+
+Older historical notes below; outputs/CONTINUATION.md is currentruntimehandoff.
+
 # Current work: exact package installation review
 
 PR122 and124 merged with explicit user-authorized admin review bypass only; all

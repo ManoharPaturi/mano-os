@@ -71,9 +71,80 @@ def main():
     created = terminal("create")
     assert created["status_sha256"] == status and created["snapshot_read_only"] is True
     assert created["package_install_authorized"] is False
-    # Only this explicitly guarded CI driver installs the fixed signed Debian test package.
-    installed = command("/usr/bin/apt-get", "--no-install-recommends", "-y", "install", "sl")
-    assert installed.returncode == 0
+    from mano_runtime import package_attempts
+    from mano_runtime import recovery as recovery_runtime
+
+    with recovery_runtime.locked():
+        try:
+            with recovery_runtime.locked():
+                raise AssertionError("Nested package-manager lock scope admitted")
+        except BlockingIOError:
+            pass
+        # Prove the refused nested scope did not release the outer POSIX locks.
+        assert "BlockingIOError" in terminal("create", success=False)
+
+    attempt_id = "14" * 16
+    # CI context only: this digest is not a broker grant or a human approval.
+    request_sha256 = hashlib.sha256(b"controlled CI sl + interrupted dpkg fixture").hexdigest()
+    # Explicit CI fixture acquisition, not product download or approval authority.
+    command("/usr/bin/apt-get", "--download-only", "--no-install-recommends", "-y", "install", "sl")
+    from mano_broker import package_catalog as custody
+    from mano_broker.package_solver import _resolve_catalog
+    from mano_runtime import package_catalog as catalog_admin
+
+    catalog_admin.build()
+    catalog_root, catalog_manifest = custody.load()
+    successful_plan = _resolve_catalog(['sl'], catalog_manifest['catalog_id'], catalog=catalog_root)
+    # The actual signed solution includes dependencies (e.g. libncurses6).
+    # Verify every archive and pass the whole bounded solution to dpkg.
+    changes = successful_plan['changes']
+    assert 1 <= len(changes) <= 64 and any(row['name'] == 'sl' for row in changes)
+    assert all(row['operation'] == 'install' for row in changes), changes
+    cached = list(Path('/var/cache/apt/archives').glob('*.deb'))
+    assert len(cached) <= 256
+    archive_hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in cached}
+    archives = []
+    for row in changes:
+        matches = [path for path, sha in archive_hashes.items() if sha == row['archive_sha256']]
+        assert len(matches) == 1, row['name']
+        assert Path(matches[0]).stat().st_size == row['download_bytes']
+        archives.append(matches[0])
+    successful_id = '16' * 16  # Sort after the existing interrupted-attempt identity.
+    successful_request = hashlib.sha256(b'controlled CI successful sl journal').hexdigest()
+    before_bytes = Path('/var/lib/dpkg/status').read_bytes()
+    assert hashlib.sha256(before_bytes).hexdigest() == status
+    with recovery_runtime.locked() as successful_scope:
+        successful_intent = package_attempts.begin_locked(
+            successful_id, successful_request, created['recovery_id'])
+        try:
+            package_attempts.complete_locked(successful_id, successful_request, successful_plan)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('Unperformed package transition marked verified')
+        with successful_scope.dpkg_backend() as frontend_env:
+            try:
+                package_attempts.complete_locked(successful_id, successful_request, successful_plan)
+            except PermissionError:
+                pass
+            else:
+                raise AssertionError('Postconditions checked without backend ownership')
+            installed = subprocess.run(
+                ['/usr/bin/dpkg', '--install', *archives],
+                env=recovery_runtime.ENV | frontend_env, capture_output=True,
+                text=True, timeout=120)
+            assert installed.returncode == 0, installed.stderr
+        successful_outcome = package_attempts.complete_locked(
+            successful_id, successful_request, successful_plan)
+        assert successful_outcome['state'] == 'postconditions-verified'
+    after_bytes = Path('/var/lib/dpkg/status').read_bytes()
+    evidence = Path('/opt/mano-lab/evidence')
+    (evidence / 'successful-package-before-status').write_bytes(before_bytes)
+    (evidence / 'successful-package-after-status').write_bytes(after_bytes)
+    successful = dict(intent=successful_intent, outcome=successful_outcome,
+        plan=successful_plan, native_dpkg_returncode=installed.returncode,
+        premature_completion_denied=True, backend_handoff_completion_denied=True,
+        broker_approval_verified=False, privileged_apply_verified=False)
     package = command("/usr/bin/dpkg-query", "-W", "-f=${db:Status-Status}:${Version}", "sl").stdout
     assert package.startswith("installed:") and Path("/usr/games/sl").is_file()
     changed_status = hashlib.sha256(Path("/var/lib/dpkg/status").read_bytes()).hexdigest()
@@ -82,10 +153,67 @@ def main():
     Path("/etc/mano/recovery-sentinel").write_text("after\n")
     from probe_dpkg_interruption import interrupt_install, journal_inventory
 
-    interrupted = interrupt_install(
-        lambda: terminal("prepare-boot", created["recovery_id"], success=False)
-    )
+    with recovery_runtime.locked() as scope:
+        coherent = recovery_runtime.create_locked()
+        intent = package_attempts.begin_locked(attempt_id, request_sha256, coherent["recovery_id"])
+        assert intent["state"] == "intent" and intent["installation_authorized"] is False
+        try:
+            package_attempts.begin_locked(attempt_id, request_sha256, coherent["recovery_id"])
+        except FileExistsError:
+            pass
+        else:
+            raise AssertionError("Lost-acknowledgement attempt identity was reused")
+        with scope.dpkg_backend() as frontend_env:
+            assert frontend_env == {"DPKG_FRONTEND_LOCKED": "1"}
+            backend = command(
+                "/usr/bin/python3",
+                "-I",
+                "-c",
+                "import fcntl;f=open('/var/lib/dpkg/lock','r+');"
+                "fcntl.lockf(f,fcntl.LOCK_EX|fcntl.LOCK_NB)",
+            )
+            assert backend.returncode == 0
+            competitor = subprocess.run(
+                ["/usr/bin/dpkg", "--configure", "--pending"],
+                env=recovery_runtime.ENV,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            assert competitor.returncode != 0 and "frontend lock" in competitor.stderr
+            for operation in (
+                recovery_runtime.create_locked,
+                lambda: package_attempts.begin_locked(
+                    "15" * 16, request_sha256, coherent["recovery_id"]
+                ),
+            ):
+                try:
+                    operation()
+                except PermissionError:
+                    pass
+                else:
+                    raise AssertionError("Checkpoint/intent admitted without backend lock")
+            interrupted = interrupt_install(
+                lambda: terminal("prepare-boot", created["recovery_id"], success=False),
+                frontend_scope=scope,
+            )
+        assert recovery_runtime.require_locked() is scope and scope.backend_held
+        coherent_locks = dict(
+            checkpoint_and_intent_same_scope=True,
+            frontend_retained_backend_temporarily_released=True,
+            other_process_backend_lock_succeeded_before_child=True,
+            direct_dpkg_frontend_conflict_denied=True,
+            checkpoint_and_intent_denied_during_handoff=True,
+            backend_reacquired_after_child=True,
+            native_dpkg_returncode=interrupted["return_code"],
+        )
     journal_entries = interrupted["journal_entries"]
+    attempts = package_attempts.reconcile()
+    assert len(attempts) == 2 and attempts[0]["intent"] == intent
+    assert attempts[1] == dict(intent=successful_intent, outcome=successful_outcome)
+    assert attempts[0]["outcome"]["state"] == "unknown"
+    assert attempts[0]["outcome"]["automatic_replay_allowed"] is False
+    assert package_attempts.reconcile() == attempts
     assert "Unsettled dpkg journal" in terminal("create", success=False)
     changed_status = hashlib.sha256(Path("/var/lib/dpkg/status").read_bytes()).hexdigest()
     prepared = terminal("prepare-boot", created["recovery_id"])
@@ -123,6 +251,14 @@ def main():
         dirty_journal_snapshot_creation_denied=True,
         source_journal_preserved=True,
         interrupted_package=interrupted,
+        package_attempts=attempts,
+        successful_package_postconditions=successful,
+        coherent_checkpoint=coherent,
+        coherent_package_locks=coherent_locks,
+        duplicate_attempt_denied=True,
+        nested_scope_denied_outer_posix_lock_preserved=True,
+        repeated_reconciliation_unchanged=True,
+        attempt_request_is_ci_context_not_approval=True,
         live_model_connected=False,
         agent_package_install_authorized=False,
     )
