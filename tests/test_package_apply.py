@@ -179,7 +179,9 @@ class RootApplyAdmissionTests(unittest.TestCase):
             stack.enter_context(patch.object(root.package_attempts, 'ensure_available_locked'))
             begin = stack.enter_context(patch.object(root.package_attempts, 'begin_locked'))
             complete = stack.enter_context(patch.object(root.package_attempts, 'complete_locked'))
-            refresh = stack.enter_context(patch.object(root.package_catalog, 'build'))
+            stack.enter_context(patch.object(root.package_catalog, 'retention_slot',
+                                            side_effect=contextlib.nullcontext))
+            refresh = stack.enter_context(patch.object(root.package_catalog, 'build_locked'))
             with self.assertRaisesRegex(ValueError, 'worker interrupted'):
                 root.execute(dict(action_id='c'*32))
             begin.assert_called_once()

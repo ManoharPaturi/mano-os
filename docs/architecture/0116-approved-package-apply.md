@@ -190,3 +190,26 @@ ranges and formats canonical unpadded names before opening the mapped handle.
 The exact failing range and malformed/path-like inputs are regression-tested;
 missing mappings or identity mismatches still fail rather than falling back.
 Kernel lookup source: https://github.com/torvalds/linux/blob/master/fs/proc/base.c
+
+
+The first completed Stop and independent Broker-death witnesses were retained by
+CI40010080992 and independently inspected. Both observed real dpkg, drained the
+package domain, preserved unknown/replay denial after restart, and completed
+explicit operator acknowledgement. The overall run later failed when packaged
+apply tried to refresh into an already full four-catalog store.
+
+The test administrator now restores the original APT marks under coherent locks,
+using an exclusive staged file, fsync and atomic publication, in addition to
+restoring the fixture package versions/states. The fixture reuses a current
+catalog only after its full existing validation succeeds; stale status/marks
+still require explicit refresh. It deletes no catalog or journal history and
+changes no retention limit. This remains explicit CI repair, not product repair.
+
+The Root transaction now owns the existing refresh lock and reserves a free slot
+before acquisition/checkpoint/package effects. It retains that lock through
+postcondition catalog publication. Full retention, concurrent refresh, nested
+reservations and publication without a reservation fail; Stop/death releases the
+kernel-owned lock. The four-catalog ceiling remains unchanged. This prevents a
+known-full store from allowing installation then failing only at final refresh.
+Temporary-file tests verify actual lock exclusion/CLOEXEC/exception release and
+refusal before acquisition; native lifecycle acceptance is still required.

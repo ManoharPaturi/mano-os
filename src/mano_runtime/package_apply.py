@@ -426,32 +426,35 @@ def execute(body, *, broker_fd=None):
                              available_bytes=layout['free_bytes'], required_bytes=reserve)),
               file=sys.stderr, flush=True)
         raise ValueError('Insufficient free space for package reserve; peak remains unmeasured')
-    STAGE = 'acquisition'
-    acquisition = acquire(plan, body, broker_fd)
-    STAGE = 'sealed-custody'
-    with package_archives.verified_archives(plan) as staged:
-        scope = recovery.require_locked()
-        observe(body, broker_fd)
-        package_attempts.ensure_available_locked(body['action_id'])
-        STAGE = 'checkpoint'
-        checkpoint = recovery.create_locked()
-        package_attempts.begin_locked(body['action_id'], request.digest, checkpoint['recovery_id'])
-        STAGE = 'child'
-        observe(body, broker_fd)
-        with scope.dpkg_backend():
-            log_sha, boundary = run_child(plan, staged['archives'], body, broker_fd)
-        drained(body, broker_fd)
-        STAGE = 'postconditions'
-        outcome = package_attempts.complete_locked(body['action_id'], request.digest, plan)
-        STAGE = 'catalog-refresh'
-        catalog = package_catalog.build()
-        drained(body, broker_fd)
-        return dict(schema_version='1.0', ok=True, action_id=body['action_id'],
-                    request_sha256=request.digest, outcome=outcome,
-                    checkpoint=checkpoint['recovery_id'], catalog_id=catalog['catalog_id'],
-                    log_sha256=log_sha, boundary=boundary, acquisition=acquisition,
-                    package_children_drained=True,
-                    peak_space_bytes=None)
+    STAGE = 'catalog-retention'
+    with package_catalog.retention_slot():
+        STAGE = 'acquisition'
+        acquisition = acquire(plan, body, broker_fd)
+        STAGE = 'sealed-custody'
+        with package_archives.verified_archives(plan) as staged:
+            scope = recovery.require_locked()
+            observe(body, broker_fd)
+            package_attempts.ensure_available_locked(body['action_id'])
+            STAGE = 'checkpoint'
+            checkpoint = recovery.create_locked()
+            package_attempts.begin_locked(body['action_id'], request.digest,
+                                          checkpoint['recovery_id'])
+            STAGE = 'child'
+            observe(body, broker_fd)
+            with scope.dpkg_backend():
+                log_sha, boundary = run_child(plan, staged['archives'], body, broker_fd)
+            drained(body, broker_fd)
+            STAGE = 'postconditions'
+            outcome = package_attempts.complete_locked(body['action_id'], request.digest, plan)
+            STAGE = 'catalog-refresh'
+            catalog = package_catalog.build_locked()
+            drained(body, broker_fd)
+            return dict(schema_version='1.0', ok=True, action_id=body['action_id'],
+                        request_sha256=request.digest, outcome=outcome,
+                        checkpoint=checkpoint['recovery_id'], catalog_id=catalog['catalog_id'],
+                        log_sha256=log_sha, boundary=boundary, acquisition=acquisition,
+                        package_children_drained=True,
+                        peak_space_bytes=None)
 
 
 def main():

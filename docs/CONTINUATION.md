@@ -1,3 +1,17 @@
+## Completed native interruption witnesses, catalog-capacity correction
+CI40010080992 terminalFAILURE later in packagedapply: four-catalog retentionfull.
+Artifact12527440273 SHAfbabe530c394940acd0e4792863570b75ff42df7bfdbda2f4cf78ae8f8e6a1ae
+verifiedZIPpr134-b8e9dae-native-failure.zip. IndependentStop andBrokerdeathwithout
+Stop proofs PASSED, rawunknown/intent/fullplan/caps/argv/DBcompared; receipts
+package-apply-stop-b8e9dae-inspection.json andpackage-apply-lost-reply-b8e9dae-
+inspection.json. AggregateCIstillFalse. Actualmappedinventory20controllerfiles
+19905296B and36outside/PID1files30582528B retained; diagnosticNOTprotection.
+Correction: CIadminrepair restoresoriginalAPTmarks atomicallyunderlocks; reuse
+onlyvalidatedcurrentcatalog insteadofspendingaslotonunchangedinputs. No history
+deletion orquotaweakening. ProductRootretention_slot holdsrefreshlockfrombefore
+acquisition tofinalcatalogpublish; fullfourcatalogsdeniedbeforeeffects. Native
+acceptancerequired. SharedtrustedruntimeclosureSTILLUNFIXED/fullgoalACTIVE.
+
 ## Canonical mapped-handle names
 CI40004535234 TERMINALFAILURE before packagework: map_files/00400000-00420000
 ENOENT. Kernelprimarysource dname_to_vma_addr explicitlyrejectsleadingzeroes.

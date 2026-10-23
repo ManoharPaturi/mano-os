@@ -44,31 +44,46 @@ def wait(predicate, seconds=8):
 def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fault="stop"):
     guard()
     assert fault in {"stop", "broker-death"}
-    from mano_broker.package_catalog import summary
+    from mano_broker.package_catalog import EXTENDED, MAX_EXTENDED, read, summary
     from mano_broker.workspaces import create_workspace
     from mano_core.packages import apply_proposal, proposal
     from mano_protocol.actions import ActionRequest, canonical
     from mano_protocol.stop_state import snapshot
-    from mano_runtime import package_attempts
+    from mano_runtime import package_attempts, recovery
     from mano_runtime.package_operator import ACK, RETIRE
 
     assert snapshot().latched and empty()
     view = human(dict(mode="rearm_view"))["view"]
     assert human(dict(mode="rearm_confirm", view=view, password=password))["ok"]
     generation = snapshot().generation
-    # Explicit CI administrator refresh after any prior manual fixture repair.
-    command(
-        "/usr/bin/env",
-        "-i",
-        "PATH=/usr/sbin:/usr/bin:/bin",
-        "LANG=C.UTF-8",
-        "PYTHONPATH=/usr/lib/mano-os",
-        "PYTHONDONTWRITEBYTECODE=1",
-        "/usr/bin/python3",
-        "-P",
-        "-m",
-        "mano_runtime.package_catalog",
-    )
+    # Reuse an already validated current catalog. Do not consume a retained slot
+    # just to run another independent scenario over identical package inputs.
+    try:
+        current_catalog = summary()
+        reused_catalog = True
+    except ValueError as error:
+        if str(error) not in {
+            "Installed package state changed; refresh catalog and approval",
+            "APT package marks changed; refresh catalog and approval",
+        }:
+            raise
+        command(
+            "/usr/bin/env",
+            "-i",
+            "PATH=/usr/sbin:/usr/bin:/bin",
+            "LANG=C.UTF-8",
+            "PYTHONPATH=/usr/lib/mano-os",
+            "PYTHONDONTWRITEBYTECODE=1",
+            "/usr/bin/python3",
+            "-P",
+            "-m",
+            "mano_runtime.package_catalog",
+        )
+        current_catalog = summary()
+        reused_catalog = False
+    original_marks = read(EXTENDED, MAX_EXTENDED)
+    original_marks_mode = EXTENDED.stat().st_mode & 0o777
+    assert original_marks_mode in {0o600, 0o644}
     workspace, fd = create_workspace(human_uid=1002, caller_uid=identity.uid)
     os.close(fd)
     task = rpc(
@@ -91,7 +106,7 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fau
         task_id=task["task_id"],
         resource_id=task["resource_id"],
         names=["sl"],
-        catalog_id=summary()["catalog_id"],
+        catalog_id=current_catalog["catalog_id"],
         key="actual-dpkg-stop-plan",
         reason="Review signed sl install for disposable interruption test",
     )
@@ -312,6 +327,7 @@ finally:client.close()
         task_id=task["task_id"],
         request=request,
         full_plan=plan,
+        current_catalog_reused=reused_catalog,
         request_sha256=request_sha,
         actual_dpkg=observed,
         frozen_package_pids=sorted(package_pids),
@@ -341,6 +357,24 @@ finally:client.close()
         "/usr/bin/dpkg-query", "-W", "-f=${binary:Package} ${db:Status-Status} ${Version}\n"
     ).stdout
     assert before == after
+    # Explicit CI administrator repair includes the original package marks, not
+    # only versions. Preserve the product's four-catalog bound without deleting
+    # any history or silently rewriting the Broker's authority journal.
+    with recovery.locked():
+        stage = EXTENDED.parent / (".mano-ci-restore-marks-" + action)
+        fd = os.open(
+            stage,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+            original_marks_mode,
+        )
+        with os.fdopen(fd, "wb") as stream:
+            os.fchmod(stream.fileno(), original_marks_mode)
+            stream.write(original_marks)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(stage, EXTENDED)
+        package_attempts.sync(EXTENDED.parent)
+        assert read(EXTENDED, MAX_EXTENDED) == original_marks
     retired = terminal(("retire-checkpoint", attempt["intent"]["recovery_id"]), RETIRE)
     assert retired["snapshot_deleted"] is False
     clean = terminal(("create",))
@@ -357,6 +391,7 @@ finally:client.close()
         request=request,
         request_sha256=request_sha,
         full_plan=plan,
+        current_catalog_reused=reused_catalog,
         actual_dpkg=observed,
         frozen_package_pids=sorted(package_pids),
         native_stop_pid=stop_pid,
@@ -379,6 +414,9 @@ finally:client.close()
         product_automatic_repair=False,
         repair_stdout_sha256=hashlib.sha256((repair.stdout + purge.stdout).encode()).hexdigest(),
         package_database_versions_restored=True,
+        package_marks_restored_by_ci_admin=True,
+        original_marks_sha256=hashlib.sha256(original_marks).hexdigest(),
+        restored_marks_sha256=hashlib.sha256(read(EXTENDED, MAX_EXTENDED)).hexdigest(),
         package_database_before=before,
         package_database_after=after,
         all_payload_effects_reversed_verified=False,
