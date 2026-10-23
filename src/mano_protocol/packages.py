@@ -235,3 +235,13 @@ def receipt(value, *, expected, metadata):
         effect_verified=False,
         current_applicability_verified=False,
     )
+
+
+def apply_arguments(value):
+    from .actions import identifier
+
+    if not isinstance(value, dict) or set(value) != {'forecast_action_id', 'plan_sha256'}:
+        raise ValueError('Only an owned forecast action and its exact digest may be applied')
+    identifier(value['forecast_action_id'])
+    digest(value['plan_sha256'])
+    return value

@@ -139,3 +139,54 @@ class PackagePlan:
         if time.time() >= reviewed['expires_at']:
             raise ValueError('Package review expired; no apply authorization exists')
         return reviewed
+
+
+def apply_proposal(*, task_id, resource_id, forecast_action_id, plan_sha256, key, reason):
+    value = dict(schema_version='1.0', task_id=task_id, resource_id=resource_id,
+        capability='packages.apply_install',
+        args=dict(forecast_action_id=forecast_action_id, plan_sha256=plan_sha256),
+        idempotency_key=key, reason=reason)
+    ActionRequest.parse(canonical(value | dict(grant_id='0' * 32)).encode())
+    return value
+
+
+class PackageApply(PackagePlan):
+    """One exact fresh-approved apply; no retry or promotion of unknown results."""
+
+    def __init__(self, client, *, proposed, action_id):
+        request = ActionRequest.parse(canonical(proposed | dict(grant_id='0' * 32)).encode())
+        if request.capability != 'packages.apply_install':
+            raise ValueError('A distinct package apply proposal is required')
+        self.client, self.task_id = client, request.task_id
+        self.expected = json.loads(request.args_json)
+        self.action_id = identifier(action_id)
+        self.proposed = proposed
+        self.digest = hashlib.sha256(canonical(proposed).encode()).hexdigest()
+
+    @staticmethod
+    def request_approval(client, *, proposed):
+        PackageApply(client, proposed=proposed, action_id='0' * 32)
+        reply = client(dict(schema_version='1.0', operation='request_approval', body=proposed))
+        if reply.get('schema_version') != '1.0' or reply.get('ok') is not True:
+            raise ValueError('Fresh package apply approval unavailable')
+        return reply
+
+    def result(self):
+        action = self.status()
+        if action['state'] != 'done' or action['exit_code'] != 0:
+            raise ValueError('Package outcome unavailable or unknown; do not automatically replay')
+        value = self.client(dict(schema_version='1.0', operation='package_apply_result',
+            body=dict(task_id=self.task_id, action_id=self.action_id)))
+        if value.get('ok') is not True or value.get('schema_version') != '1.0':
+            raise ValueError('No authenticated package result')
+        receipt = value['result']['receipt']
+        if (value['result']['state'] != 'done' or not isinstance(receipt, dict)
+                or receipt['outcome']['state'] != 'postconditions-verified'
+                or receipt['outcome']['attempt_id'] != self.action_id
+                or receipt['outcome']['plan_sha256'] != self.expected['plan_sha256']
+                or receipt['outcome']['automatic_replay_allowed'] is not False):
+            raise ValueError('Package result scope changed')
+        return receipt
+
+    def review_install(self):
+        raise ValueError('Apply uses its own fresh native approval, not a forecast review')

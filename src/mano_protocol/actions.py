@@ -18,6 +18,7 @@ class Capability(StrEnum):
     CHECKPOINT = "workspace.checkpoint"
     MCP = "mcp.discover"
     PACKAGE = "packages.plan_install"
+    PACKAGE_APPLY = "packages.apply_install"
     RUN = "terminal.run"
     PTY = "terminal.open_pty"
     PLAN = "model.plan"
@@ -134,6 +135,10 @@ class ActionRequest:
             from .packages import arguments
 
             arguments(args)
+        elif capability == Capability.PACKAGE_APPLY:
+            from .packages import apply_arguments
+
+            apply_arguments(args)
         elif capability == Capability.CHECKPOINT:
             from .checkpoints import EXCLUDED, LEGACY_EXCLUDED
 

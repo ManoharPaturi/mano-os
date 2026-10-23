@@ -1,0 +1,42 @@
+[Unit]
+Description=mano approved system package transaction
+Requires=mano-package.slice mano-stopd.service
+After=mano-package.slice mano-stopd.service
+
+[Service]
+Type=exec
+User=root
+Group=root
+Slice=mano-package.slice
+ExecStart=/usr/bin/python3 -P -m mano_runtime.package_apply
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONPATH=/usr/lib/mano-os
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+RuntimeMaxSec=65
+TimeoutStopSec=1
+KillMode=control-group
+KillSignal=SIGKILL
+Restart=no
+NoNewPrivileges=yes
+# Only the trusted controller constructs namespaces/snapshots. The package child
+# drops SYS_ADMIN and receives only fixed dpkg ownership/identity capabilities.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID
+AmbientCapabilities=
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+TasksMax=64
+MemoryMax=512M
+CPUQuota=50%
+LimitNOFILE=128
+LimitCORE=0

@@ -67,6 +67,10 @@ class Approvals:
             validate(self.state, request, caller_uid=caller_uid, boot_id=boot_id)
             restore = validate_restore(self.state, request, caller_uid=caller_uid, boot_id=boot_id)
             package_catalog = validate_packages(request)
+            from .package_apply import validate as validate_apply
+
+            package_apply = validate_apply(self.state, request, caller_uid=caller_uid,
+                                           boot_id=boot_id)
             prior = self.state.db.execute(
                 "SELECT * FROM approvals WHERE task_id=? AND request_key=?",
                 (request.task_id, request.idempotency_key),
@@ -108,6 +112,10 @@ class Approvals:
                     expires_at=package_catalog['expires_at'],
                     signed_indexes_verified=True,installation_authorized=False,
                     network=False,maintainer_scripts=False)
+            if package_apply is not None:
+                from .package_apply import approval_scope
+
+                view['package_apply_scope'] = approval_scope(package_apply)
             if request.capability.value == 'policy.set_profile':
                 from mano_protocol.profiles import scope
 
@@ -194,9 +202,10 @@ class Approvals:
                 resource_id=view["resource_id"],
                 expires=view["expires"],
                 max_count=1,
-                memory_bytes=256 * 1024**2,
-                pids=32,
-                cpu_percent=20,
+                memory_bytes=(512 if view['capability'] == 'packages.apply_install' else 256)
+                             * 1024**2,
+                pids=64 if view['capability'] == 'packages.apply_install' else 32,
+                cpu_percent=50 if view['capability'] == 'packages.apply_install' else 20,
                 max_timeout_seconds=300,
             )
             if view['capability'] == 'policy.set_profile':

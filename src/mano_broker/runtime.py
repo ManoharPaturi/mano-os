@@ -12,6 +12,7 @@ from .executor import Executor
 from .file_reads import execute as execute_file_read
 from .file_writes import execute as execute_file_write
 from .ipc import dispatch, public_action, receive
+from .package_apply import ApplyWorker
 from .protocol import ActionRequest, Capability, canonical, identifier, unique_object
 from .provider_jobs import ProviderJobs
 from .provider_worker import ProviderWorker
@@ -37,6 +38,8 @@ class Runtime:
         self.file_pending = deque()
         self.checkpoint_pending = deque()
         self.restore_pending = deque()
+        self.package_pending = deque()
+        self.package_worker = ApplyWorker(self)
         self.restorer = Restorer(self)
         self.write_pending = deque()
         self.pty_pending = deque()
@@ -132,6 +135,12 @@ class Runtime:
             from .package_catalog import summary
 
             return dict(schema_version='1.0',ok=True,catalog=summary())
+        if value['operation'] == 'package_apply_result':
+            from .package_apply import result_for
+
+            return dict(schema_version='1.0', ok=True,
+                result=result_for(self.state, value['body'], caller_uid=peer.uid,
+                                  boot_id=self.boot_id))
         if value['operation'] == 'package_install_review':
             from .package_reviews import review
 
@@ -154,6 +163,8 @@ class Runtime:
                     {Capability.RUN, Capability.MCP, Capability.PACKAGE}
                     and self.executor):
                 self.pending.append(row["id"])
+            if prepared is not None and request.capability == Capability.PACKAGE_APPLY:
+                self.package_pending.append(row['id'])
             if prepared is not None and request.capability == Capability.PTY and self.ptys:
                 self.pty_pending.append(row["id"])
             if prepared is not None and request.capability == Capability.RESTORE:
@@ -208,6 +219,21 @@ class Runtime:
 
     def tick(self):
         self.sync_stop()
+        for action_id in list(self.package_worker.pending):
+            try:
+                self.package_worker.poll(action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.state.event(action_id, 'package-result-uncertain',
+                                 {'error_type': type(error).__name__})
+        if self.package_pending and not self.package_worker.pending:
+            action_id = self.package_pending.popleft()
+            try:
+                self.package_worker.launch(action_id)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.settle_model(action_id)
+                self.registry.release(action_id)
+                self.state.event(action_id, 'package-dispatch-denied',
+                                 {'error_type': type(error).__name__})
         for action_id in list(self.restorer.jobs):
             try:
                 self.restorer.poll(action_id)
@@ -293,6 +319,10 @@ class Runtime:
 
     def close_terminal(self):
         try:
+            self.package_worker.close()
+            for action_id in self.package_pending:
+                self.settle_model(action_id)
+            self.package_pending.clear()
             if self.ptys:
                 for action_id in list(self.ptys.jobs):
                     self.ptys.abandon(action_id)

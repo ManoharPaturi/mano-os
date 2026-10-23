@@ -184,51 +184,7 @@ def _resolve_catalog(names, identifier, *, catalog):
             if cache.broken_count or cache.dpkg_journal_dirty:
                 raise ValueError("Installed package state needs operator recovery")
             STAGE = "resolve"
-            requested = resolve_requests(cache, names)
-            changed = cache.get_changes()
-            if len(changed) > 64:
-                raise ValueError("Dependency change set exceeds review budget")
-            STAGE = "forecast"
-            changes = []
-            for package in sorted(changed, key=lambda p: p.name):
-                installed, candidate = package.installed, package.candidate
-                operation = change_operation(package)
-                removal = operation == "remove"
-                selected = installed if removal else candidate
-                if selected is None:
-                    raise ValueError("Resolved package lacks exact version accounting")
-                sha = None if removal else candidate.record.get("SHA256")
-                changes.append(
-                    dict(
-                        name=package.name,
-                        operation=operation,
-                        installed=installed.version if installed else None,
-                        candidate=None if removal else candidate.version,
-                        architecture=selected.architecture,
-                        archive_sha256=sha,
-                        download_bytes=0 if removal else candidate.size,
-                        installed_bytes=selected.installed_size,
-                    )
-                )
-            value = dict(
-                schema_version="1.0",
-                names=names,
-                catalog_id=identifier,
-                status_sha256=manifest["status_sha256"],
-                solver=manifest["solver"],
-                requested=requested,
-                changes=changes,
-                download_bytes=cache.required_download,
-                net_installed_bytes=cache.required_space,
-                peak_space_bytes=None,
-                free_space_bytes_at_catalog=manifest["free_space_bytes"],
-                catalog_expires_at=manifest["expires_at"],
-                install_authorized=False,
-                effect_verified=False,
-                host_archive_cache_considered=False,
-                network_used=False,
-                maintainer_scripts_executed=False,
-            )
+            value = forecast(cache, names, identifier, manifest)
         finally:
             cache.close()
     STAGE = "recheck"
@@ -237,6 +193,57 @@ def _resolve_catalog(names, identifier, *, catalog):
         raise ValueError("Catalog expired during package resolution")
     return value
 
+
+
+def forecast(cache, names, identifier, manifest):
+    """Build the same exact full solution from a marked private APT cache."""
+    global STAGE
+    requested = resolve_requests(cache, names)
+    changed = cache.get_changes()
+    if len(changed) > 64:
+        raise ValueError("Dependency change set exceeds review budget")
+    STAGE = "forecast"
+    changes = []
+    for package in sorted(changed, key=lambda p: p.name):
+        installed, candidate = package.installed, package.candidate
+        operation = change_operation(package)
+        removal = operation == "remove"
+        selected = installed if removal else candidate
+        if selected is None:
+            raise ValueError("Resolved package lacks exact version accounting")
+        sha = None if removal else candidate.record.get("SHA256")
+        changes.append(
+            dict(
+                name=package.name,
+                operation=operation,
+                installed=installed.version if installed else None,
+                candidate=None if removal else candidate.version,
+                architecture=selected.architecture,
+                archive_sha256=sha,
+                download_bytes=0 if removal else candidate.size,
+                installed_bytes=selected.installed_size,
+            )
+        )
+    value = dict(
+        schema_version="1.0",
+        names=names,
+        catalog_id=identifier,
+        status_sha256=manifest["status_sha256"],
+        solver=manifest["solver"],
+        requested=requested,
+        changes=changes,
+        download_bytes=cache.required_download,
+        net_installed_bytes=cache.required_space,
+        peak_space_bytes=None,
+        free_space_bytes_at_catalog=manifest["free_space_bytes"],
+        catalog_expires_at=manifest["expires_at"],
+        install_authorized=False,
+        effect_verified=False,
+        host_archive_cache_considered=False,
+        network_used=False,
+        maintainer_scripts_executed=False,
+    )
+    return value
 
 def main():
     try:

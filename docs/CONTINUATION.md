@@ -1,3 +1,36 @@
+# Current: approved package apply integration DRAFT
+
+Base/main800b72a1f29340495d5c0add3aeda2fd9ff25d89 PR133; exact post-main
+run39830257817 VERIFIED all3SUCCESS. Branch feat/approved-package-apply contains
+new protocol/native approval + Broker scheduler + private Root transaction +
+fixed APT worker/native seccomp guard + operator acknowledgement/retirement.
+ADR0116 explicitly lists native validation still required. Local534tests with
+48Linux-only skips and Ruff/compile/shell/diff pass. Native C not compiled or
+executed on Mac; all Root/VM execution remains CI-only. No paid/key operations.
+
+This branch must stay DRAFT/unmerged until real btrfs Broker/PAM/Root positive,
+namespace/Stop/cancel/lost-ack/packaging evidence is accepted. Do not equate baseline
+CI or unit mocks with privileged execution proof. No new Root grant issuer:
+Broker is trusted authority, fresh separate native apply approval mandatory.
+No model paths/commands/env, no profile auto-approval, no retry on unknown.
+
+Native fixture integration next: probe_broker_service.py runs AFTER actual Root
+recovery, so btrfs Snapper storage already exists but unknown attempt14 blocks
+new effects. In the existing disposable Root controlling-PTY harness explicitly
+acknowledge attempt14 against original checkpointA (preserve unknown), explicitly
+retire coherent checkpointB metadata to free an active slot (retain snapshot),
+then run the real public SDK forecast/fresh native PAM apply of cowsay and verify
+full effects/new catalog/scoped receipt/replay denial. Existing readonly forecast
+witnesses must keep their no-effect claims. Use a separate apply witness. Compile
+and install the new guard and socket/unit in the existing source native fixture;
+clean only those fixture-owned files. Keep all previous Root recovery artifacts
+as historical observations. Do not delete/reset attempts or relax quota/CI.
+
+Three unrelated duplicate-suffix ' 2' files remain untracked; stage only intended
+paths. No Root work or VM/model downloads on Mac. Full goal ACTIVE/incomplete.
+
+## Historical notes (superseded where above differs)
+
 # PR133 native dependency-set correction
 
 Initial b911bf3 CI39825969416 failed before effects: fixture assumed exactly one

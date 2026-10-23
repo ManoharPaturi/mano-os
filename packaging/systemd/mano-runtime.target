@@ -1,6 +1,6 @@
 [Unit]
 Description=mano enrolled prototype runtime
-Requires=mano-broker.socket mano-broker-control.socket mano-broker-provision.socket mano-approve.socket mano-launcher-prepare.socket mano-launcher-control.socket mano-provider.socket mano-egress.socket mano-stopd.socket mano-stopd-control.socket mano-stopd.service
+Requires=mano-broker.socket mano-broker-control.socket mano-broker-provision.socket mano-approve.socket mano-launcher-prepare.socket mano-launcher-control.socket mano-provider.socket mano-egress.socket mano-package-apply.socket mano-stopd.socket mano-stopd-control.socket mano-stopd.service
 After=mano-stopd.service
 
 [Install]
