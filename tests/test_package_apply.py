@@ -91,6 +91,13 @@ class ApplyAuthorityTests(unittest.TestCase):
 
 
 class RootApplyAdmissionTests(unittest.TestCase):
+    def test_launcher_diagnostics_never_echo_paths_or_untrusted_output(self):
+        self.assertEqual(root.launcher_failure(
+            b'bwrap: mknod /private/secret: Operation not permitted\n'),
+            dict(operation='device-node', error='permission'))
+        self.assertEqual(root.launcher_failure(b'script output contains a secret\n'),
+                         dict(operation='unreported', error='other'))
+
     def test_mac_guard_precedes_filesystem_or_network_observation(self):
         with patch.object(root.recovery.sys, 'platform', 'darwin'):
             with patch.object(root, 'acquire') as acquisition:

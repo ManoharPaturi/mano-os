@@ -227,6 +227,31 @@ def sandbox(archives, body):
     return argv + ['--chdir', '/', '/usr/libexec/mano-package-guard']
 
 
+def launcher_failure(output):
+    """Fixed categories only; never forward launcher paths or package output."""
+    for line in output.splitlines():
+        if not line.startswith(b'bwrap: '):
+            continue
+        operation = 'other'
+        for token, category in ((b'mknod', 'device-node'), (b'namespace', 'namespace'),
+                                (b'mount', 'mount'), (b'execvp', 'exec'),
+                                (b'mkdir', 'directory'), (b'read data', 'archive-data')):
+            if token in line:
+                operation = category
+                break
+        error = 'other'
+        for token, category in ((b'Operation not permitted', 'permission'),
+                                (b'Permission denied', 'permission'),
+                                (b'Read-only file system', 'readonly'),
+                                (b'No such file or directory', 'missing'),
+                                (b'Cannot allocate memory', 'memory')):
+            if token in line:
+                error = category
+                break
+        return dict(operation=operation, error=error)
+    return dict(operation='unreported', error='other')
+
+
 def run_child(plan, archives, body, broker_fd):
     child = subprocess.Popen(sandbox(archives, body), stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=ENV, cwd='/',
@@ -250,6 +275,8 @@ def run_child(plan, archives, body, broker_fd):
                         if len(output) > MAX_LOG:
                             raise ValueError('Package child exceeded bounded output')
         if child.wait(timeout=1) != 0:
+            print(canonical(dict(event='package-child-exit', exit_code=child.returncode,
+                                 launcher=launcher_failure(output))), file=sys.stderr, flush=True)
             # Only fixed stage/type diagnostics reach the Root journal, never
             # raw maintainer output, URLs, request data, paths or credentials.
             for line in output.splitlines():
