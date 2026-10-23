@@ -34,7 +34,9 @@ def cache_for(plan, *, actual=False):
     with tempfile.TemporaryDirectory(prefix='mano-apt-') as temporary:
         root = Path(temporary)
         prepare_apt_root(root, catalog=catalog)
-        apt_pkg.config.clear()
+        # This is a fresh fixed worker process, just like the forecast worker.
+        # Configuration.clear requires a key; it is not dict.clear(). Set the
+        # private tree before initialization instead of reading host APT config.
         apt_pkg.config.set('Dir', str(root))
         apt_pkg.config.set('Dir::Etc', str(root / 'etc/apt'))
         apt_pkg.init_config()
