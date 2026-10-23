@@ -138,7 +138,11 @@ def boundary():
                                         (expected_mask.st_dev, expected_mask.st_ino)))
         if not stat.S_ISREG(info.st_mode) or info.st_size or 'ro' not in mounts.get(path, []):
             raise PermissionError('Credential mask must be an empty read-only regular file')
-    run_rows = [row for row in rows if row[4] == '/run']
+    run_device = os.stat('/run').st_dev
+    # mountinfo includes covered lower mounts. Select the filesystem actually
+    # visible through /run, rather than treating a covered host mount as active.
+    run_rows = [row for row in rows if row[4] == '/run' and
+                os.makedev(*map(int, row[2].split(':'))) == run_device]
     BOUNDARY_CHECK = 'runtime-tmpfs'
     BOUNDARY_KERNEL.update(runtime_mounts=len(run_rows))
     if len(run_rows) != 1 or run_rows[0][run_rows[0].index('-') + 1] != 'tmpfs':
@@ -167,7 +171,7 @@ def boundary():
                 native_stop_authority_readonly=True,
                 runtime_infrastructure_readonly=True,
                 capabilities=capabilities, securebits=securebits,
-                run_device=os.stat('/run').st_dev,
+                run_device=run_device,
                 namespaces={kind: os.readlink('/proc/self/ns/' + kind)
                             for kind in ('mnt', 'net', 'ipc', 'pid', 'cgroup')})
 
