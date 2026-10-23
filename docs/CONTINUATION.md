@@ -1,3 +1,28 @@
+# Latest: CI capacity denial identified; approved-apply evidence expanded
+
+PR134 remains DRAFT. bef95ec run39899264546 failed BEFORE acquisition/install:
+Root space-reserve diagnostic available2101223424 < required2147599228 bytes.
+No layout-policy or reserve bypass. Disposable CI root qcow2 grows6G->8G so
+retained recovery snapshots and unchanged2GiB reserve fit. No local VM assets.
+Previous eccde72 APT initialization correction remains native-unproven because
+this capacity denial occurs first. Raw log outputs/pr134-space-diagnostic-failure.log.
+
+New fixture captures/exports full raw dpkg databases before/after approved apply
+and the exact approved request. Outside independent checker compares all package
+states/versions, plan/request digests, bounded acquisition and namespace witnesses.
+Synthetic checker positive+6 altered-case negatives passed; NOT native proof.
+Universal acceptance now has --package-apply; new proof/Stop/restart/lostack and
+packaged lifecycle still required before merge. All prior gates remain.
+
+PR123 CODEOWNERS explicitly authorized for admin review override by user; fresh
+head453b01b7d72121245aa27360d6bdd5848b666f64 CI39899110758 qualitySUCCESS,
+security-lab live. Poll same handle; do not merge until all CI and artifacts pass.
+Base/main542b926cd67c9f4fba56c20bd09b2b845d676ea1 contains external README PR135.
+No reviewer notifications or protection changes. Latest disk25GiB/88%;3untracked
+unrelated duplicate files preserved. Goal active, full original scope incomplete.
+
+--- Historical implementation notes ---
+
 # Native apply fixture now wired; draft remains unvalidated
 
 Local534tests48Linuxskips +staticchecks pass after wiring the actual btrfs

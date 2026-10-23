@@ -26,7 +26,8 @@ chmod 0444 "$lab_dir/runtime-pristine.qcow2"
 sha256sum "$lab_dir/runtime-pristine.qcow2" > "$repo_root/evidence/runtime-pristine-before.sha256"
 qemu-img resize "$lab_dir/$image" 12G
 qemu-img create -f qcow2 "$lab_dir/data.qcow2" 2G
-qemu-img create -f qcow2 "$lab_dir/root.qcow2" 6G
+# Retain recovery snapshots and the package executor's unchanged 2GiB reserve.
+qemu-img create -f qcow2 "$lab_dir/root.qcow2" 8G
 ssh-keygen -q -t ed25519 -N '' -f "$lab_dir/key"
 cat > "$lab_dir/user-data" <<EOF
 #cloud-config
