@@ -15,6 +15,14 @@ def identity(info):
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
+def verify_mapping(named, descriptor, mapping_inode):
+    # /proc/maps uses inode->i_sb->s_dev; Btrfs stat() uses root->anon_dev.
+    # The kernel map_files handle identifies the actual mapped object. Compare
+    # its fstat to the named file, not the two different device-number interfaces.
+    if identity(named) != identity(descriptor) or descriptor.st_ino != mapping_inode:
+        raise ValueError("Mapped object and named runtime file differ")
+
+
 def collect(*, include_init=False, observer=False):
     assert sys.platform == "linux" and os.geteuid() == 0
     assert Path("/etc/mano-lab-disposable").read_text().strip() == "mano-phase0-ci"
@@ -23,6 +31,7 @@ def collect(*, include_init=False, observer=False):
         "kvm",
     }
     records = {}
+    identities = {}
     total = 0
     processes = [("observer" if observer else "controller", os.getpid())]
     if include_init:
@@ -40,22 +49,22 @@ def collect(*, include_init=False, observer=False):
                 continue
             assert not name.endswith(" (deleted)")
             path = Path(name)
-            if name in records:
-                if role not in records[name]["roles"]:
-                    records[name]["roles"].append(role)
-                continue
-            assert len(records) < 256
             before = path.stat()
             assert stat.S_ISREG(before.st_mode) and before.st_uid == 0
             assert not before.st_mode & 0o022 and 0 < before.st_size <= MAX_FILE
             major, minor = map(lambda v: int(v, 16), columns[3].split(":"))
-            assert before.st_dev == os.makedev(major, minor)
-            assert before.st_ino == int(columns[4])
-            total += before.st_size
-            assert total <= MAX_TOTAL
             digest = hashlib.sha256()
-            with path.open("rb") as stream:
-                assert identity(os.fstat(stream.fileno())) == identity(before)
+            mapped_file = Path("/proc", str(pid), "map_files", columns[0])
+            with mapped_file.open("rb") as stream:
+                verify_mapping(before, os.fstat(stream.fileno()), int(columns[4]))
+                if name in records:
+                    assert identity(before) == identities[name]
+                    if role not in records[name]["roles"]:
+                        records[name]["roles"].append(role)
+                    continue
+                assert len(records) < 256
+                total += before.st_size
+                assert total <= MAX_TOTAL
                 read = 0
                 while piece := stream.read(65536):
                     read += len(piece)
@@ -64,6 +73,7 @@ def collect(*, include_init=False, observer=False):
                 assert read == before.st_size
                 assert identity(os.fstat(stream.fileno())) == identity(before)
             assert identity(path.stat()) == identity(before)
+            identities[name] = identity(before)
             records[name] = dict(
                 path=name,
                 resolved_path=str(path.resolve(strict=True)),
@@ -74,6 +84,8 @@ def collect(*, include_init=False, observer=False):
                 mode=stat.S_IMODE(before.st_mode),
                 device=before.st_dev,
                 inode=before.st_ino,
+                maps_device=os.makedev(major, minor),
+                mapped_object_verified=True,
             )
     assert records
     for role, _pid in processes:

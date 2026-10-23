@@ -1,3 +1,12 @@
+## Inventory Btrfs identity correction
+CI40002396890 TERMINALFAILURE at before.st_dev==maps device in newcollector,
+before native packagework. Kernelprimarysource confirms maps uses s_dev but
+Btrfsstat uses rootanon_dev. Correct collector opens kernel map_files handle,
+checks fstat against namedfile andmapsinode, thenhashes actualmappedFD; records
+bothdevnumbers. Rechecks everymapping/role, failschanged/differentinode. Noextra
+capability/permission/probe bypass. Ordinaryunprivileged3regressiontests pass;
+newnativeBtrfs acceptance required. TrustedruntimeclosurestillNOTprotected.
+
 ## f4ac43e native result and TTY fixture correction
 
 CI40000069898 FAILED after actualStop/restart/replay-denial/CI-admin database

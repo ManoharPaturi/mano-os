@@ -163,3 +163,21 @@ are not widened for diagnostics. It reads neither process memory nor credentials
 This is an incomplete dependency inventory, not proof that all Python imports,
 future subprocess dependencies, loader search paths or trusted files are protected.
 The shared system interpreter/library/helper protection finding remains unresolved.
+
+
+The first mapped-file inventory failed in CI40002396890 before package execution:
+it incorrectly equated /proc/maps device numbers with stat(). Linux proc maps
+prints inode superblock s_dev, whereas Btrfs getattr uses the subvolume anon_dev.
+The corrected diagnostic opens each kernel map_files handle and checks that
+handle's fstat identity against the named file and mapped inode before hashing.
+It retains both reported device numbers without falsely requiring equality.
+It also rechecks the descriptor for repeated mappings/roles, not merely the name.
+No extra production capabilities are granted; inability to open the required
+mapped handle remains an error. Ordinary unprivileged tests reject another inode
+with identical bytes, changed metadata and a different mapped inode. These do
+not substitute for the pending actual Btrfs/kernel run.
+
+Primary sources:
+- https://code.googlesource.com/linux/torvalds/linux/+/8abc1c8badc11c859bb4ba43211611347e59c55c/fs/proc/task_mmu.c
+- https://code.googlesource.com/linux/torvalds/linux/+/acda701bf1e8233f982164c8ddbedc055427212d/fs/btrfs/inode.c
+- https://man7.org/linux/man-pages/man5/proc_pid_map_files.5.html
