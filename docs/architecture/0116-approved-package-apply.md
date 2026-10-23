@@ -59,7 +59,12 @@ package database postconditions. Compatibility and adversarial tests are pending
 
 The existing database verifier checks exact before/after transitions and preserves
 write-once history. The Root helper refreshes the package catalog before returning
-a credential-authenticated receipt; a missing/invalid reply, lost Broker, revoked
+a credential-authenticated receipt. Worker streams are bounded to 1MiB total
+and retained separately in Root-only operator custody outside restored roots
+(directory0700, files0600, exclusive creation, at most32 attempt directories).
+They are untrusted diagnostic data, never SDK results or authority records.
+The Broker journal receives only structured fixed diagnostics; disposable CI may
+export logs of its own controlled test attempt. A missing/invalid reply, lost Broker, revoked
 or expired authority, Stop, worker failure or uncertain outcome never retries.
 The public SDK exposes scoped status/result queries, not Root paths or raw logs.
 Legacy installation review objects remain read-only and cannot apply themselves;

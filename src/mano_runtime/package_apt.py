@@ -264,5 +264,9 @@ if __name__ == '__main__':
             detail['reason'] = messages[str(error)]
         if STAGE == 'boundary':
             detail.update(check=BOUNDARY_CHECK, kernel_state=BOUNDARY_KERNEL)
+        # The controller stores this bounded stream in Root-only operator custody.
+        # It never forwards raw exceptions or script output to the Broker journal/API.
+        if STAGE in {'cache', 'archives', 'commit'}:
+            print('MANO_PACKAGE_PRIVATE_ERROR=' + str(error), file=sys.stderr, flush=True)
         print('MANO_PACKAGE_ERROR=' + canonical(detail), file=sys.stderr, flush=True)
         sys.exit(2)

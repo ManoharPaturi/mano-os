@@ -111,6 +111,8 @@ class RootApplyAdmissionTests(unittest.TestCase):
                                                  json.dumps(witness)) + ',flush=True)')
         with patch.object(root, 'sandbox', return_value=[sys.executable, '-c', program]), \
                 patch.object(root, 'observe'), \
+                patch.object(root.package_logs, 'capture',
+                    return_value=contextlib.nullcontext(lambda channel, data: None)), \
                 patch.object(root, 'runtime_device', return_value=0), \
                 patch.object(root.os, 'readlink', return_value='host-namespace'):
             digest, actual = root.run_child({}, [], {}, None)

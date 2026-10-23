@@ -20,7 +20,7 @@ from mano_protocol.actions import ActionRequest, canonical, identifier, unique_o
 from mano_protocol.packages import result_digest
 from mano_protocol.stop_state import snapshot
 from mano_protocol.transport import receive
-from mano_runtime import package_archives, package_attempts, package_catalog, recovery
+from mano_runtime import package_archives, package_attempts, package_catalog, package_logs, recovery
 from mano_runtime.package_resolution import current_plan, expected
 
 SOCKET = '/run/mano-package-apply/request.sock'
@@ -282,6 +282,11 @@ def runtime_device():
 
 
 def run_child(plan, archives, body, broker_fd):
+    with package_logs.capture(body.get('action_id')) as emit:
+        return _run_child(plan, archives, body, broker_fd, emit)
+
+
+def _run_child(plan, archives, body, broker_fd, emit):
     child = subprocess.Popen(sandbox(archives, body), stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=ENV, cwd='/',
         pass_fds=tuple(row['fd'] for row in archives), start_new_session=True)
@@ -305,6 +310,7 @@ def run_child(plan, archives, body, broker_fd):
                         (protocol if key.fileobj is child.stdout else errors).extend(data)
                         if len(output) > MAX_LOG:
                             raise ValueError('Package child exceeded bounded output')
+                        emit('stdout' if key.fileobj is child.stdout else 'stderr', data)
         if child.wait(timeout=1) != 0:
             print(canonical(dict(event='package-child-exit', exit_code=child.returncode,
                                  launcher=launcher_failure(errors))), file=sys.stderr, flush=True)

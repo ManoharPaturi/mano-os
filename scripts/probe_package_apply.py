@@ -175,6 +175,27 @@ finally:with_client.close()
                 Path("/var/lib/dpkg/status").read_bytes()
             ).hexdigest(),
         )
+        # This guest contains only controlled CI data. Export its own attempt's
+        # bounded operator logs for debugging, never through the product SDK.
+        from mano_broker.package_catalog import read, trusted
+        from mano_runtime import package_logs
+
+        matching = [row for row in failure['attempts']
+                    if row['intent']['request_sha256'] == failure['request_sha256']]
+        if matching:
+            assert len(matching) == 1
+            directory = package_logs.BASE / matching[0]['intent']['attempt_id']
+            if directory.exists():
+                assert trusted(directory, directory=True).st_mode & 0o777 == 0o700
+                failure['private_operator_logs'] = {}
+                for channel in ('stdout', 'stderr'):
+                    path = directory / channel
+                    assert trusted(path).st_mode & 0o777 == 0o600
+                    data = read(path, package_logs.MAX_BYTES)
+                    (ROOT / ('evidence/package-apply-worker-' + channel)).write_bytes(data)
+                    failure['private_operator_logs'][channel] = dict(
+                        bytes=len(data), sha256=hashlib.sha256(data).hexdigest(),
+                        root_only_operator_custody=True)
         (ROOT / "evidence/package-apply-failure.json").write_text(
             json.dumps(failure, indent=2) + "\n"
         )
