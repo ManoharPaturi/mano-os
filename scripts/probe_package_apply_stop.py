@@ -41,8 +41,9 @@ def wait(predicate, seconds=8):
     raise AssertionError("Actual package interruption witness timed out")
 
 
-def run(rpc, human, identity, password, ready, launcher_pid, stop_client):
+def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fault="stop"):
     guard()
+    assert fault in {"stop", "broker-death"}
     from mano_broker.package_catalog import summary
     from mano_broker.workspaces import create_workspace
     from mano_core.packages import apply_proposal, proposal
@@ -54,6 +55,7 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client):
     assert snapshot().latched and empty()
     view = human(dict(mode="rearm_view"))["view"]
     assert human(dict(mode="rearm_confirm", view=view, password=password))["ok"]
+    generation = snapshot().generation
     workspace, fd = create_workspace(human_uid=1002, caller_uid=identity.uid)
     os.close(fd)
     task = rpc(
@@ -218,13 +220,21 @@ finally:client.close()
         assert observed["pid"] in package_pids and os.getpid() not in package_pids
         for pid in package_pids | set(authorities):
             wait_stopped(Path("/proc") / str(pid))
-        result = command("/usr/sbin/runuser", "-u", "mano-human", "--", str(stop_client))
-        assert "Emergency Stop acknowledged" in result.stdout
+        if fault == "stop":
+            result = command("/usr/sbin/runuser", "-u", "mano-human", "--", str(stop_client))
+            assert "Emergency Stop acknowledged" in result.stdout
+        else:
+            # Pin-kill only the frozen Broker. BindsTo must drain even a frozen
+            # Root controller when its authenticated caller dies, without Stop.
+            signal.pidfd_send_signal(descriptors[authorities[0]], signal.SIGKILL)
+            wait(lambda: select.select([descriptors[authorities[0]]], [], [], 0)[0])
         wait(empty)
         for pid in package_pids:
             wait(lambda pid=pid: select.select([descriptors[pid]], [], [], 0)[0])
-        for pid in authorities:
+        for pid in authorities if fault == "stop" else authorities[1:]:
             wait_stopped(Path("/proc") / str(pid))
+        if fault == "broker-death":
+            assert not snapshot().latched and snapshot().generation == generation
         assert (
             int(
                 command(
@@ -244,6 +254,8 @@ finally:client.close()
     stdout, stderr = child.communicate(timeout=8)
     assert child.returncode == 0, stderr[-4096:]
     action = json.loads(stdout)["action_id"]
+    if fault == "broker-death":
+        ready(previous=authorities[0])
     query = dict(
         schema_version="1.0",
         operation="status",
@@ -266,8 +278,9 @@ finally:client.close()
     subprocess.run(["systemctl", "restart", "mano-broker.service"], check=True, timeout=15)
     ready()
     assert unknown()["verified"] == 0 and empty()
-    view = human(dict(mode="rearm_view"))["view"]
-    assert human(dict(mode="rearm_confirm", view=view, password=password))["ok"]
+    if snapshot().latched:
+        view = human(dict(mode="rearm_view"))["view"]
+        assert human(dict(mode="rearm_confirm", view=view, password=password))["ok"]
     replay = rpc(
         "request",
         dict(schema_version="1.0", operation="propose", body=request),
@@ -295,6 +308,7 @@ finally:client.close()
     command("/usr/sbin/runuser", "-u", "mano-human", "--", str(stop_client))
     assert snapshot().latched and empty()
     return dict(
+        fault=fault,
         action_id=action,
         task_id=task["task_id"],
         request=request,
@@ -303,10 +317,15 @@ finally:client.close()
         actual_dpkg=observed,
         frozen_package_pids=sorted(package_pids),
         native_stop_pid=stop_pid,
-        broker_and_launcher_stayed_frozen=True,
+        broker_and_launcher_stayed_frozen=fault == "stop",
+        launcher_stayed_frozen=True,
+        native_stop_not_used_to_drain=fault == "broker-death",
+        broker_killed_by_observer=fault == "broker-death",
+        native_generation_at_apply=generation,
         root_domain_drained=True,
         package_pidfds_dead=True,
-        controller_reply_lost_on_stop=True,
+        controller_reply_lost_on_stop=fault == "stop",
+        controller_reply_lost_on_broker_death=fault == "broker-death",
         restart_unknown_no_replay=True,
         unknown_record_sha256=hashlib.sha256(unknown_bytes).hexdigest(),
         unknown_record_preserved=True,

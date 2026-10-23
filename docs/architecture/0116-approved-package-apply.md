@@ -108,7 +108,11 @@ installs the signed sl plan, preserves raw before/after database evidence, and
 retires checkpoint metadata explicitly without deleting snapshots. This exercises
 installed apply before the existing runtime reinstall/removal lifecycle checks;
 it does not prove a fresh-image btrfs installation or physical input provenance. Losing the controller reply during Stop is covered by that scenario;
-independent reply loss without Stop remains a separate requirement. New fixtures
+a separate second fixture kills the pinned frozen Broker while the Root package
+controller and dpkg remain frozen. It requires Root-domain drainage through the
+production service dependency without pressing Stop, followed by restarted
+unknown/no-replay checks. This covers caller death before a reply; losing a reply
+after successful commit remains a separate requirement. New fixtures
 require their own successful native CI and artifact inspection before acceptance.
 
 Stop during actual work, restart/lost-ack behavior, packaged apply lifecycle,

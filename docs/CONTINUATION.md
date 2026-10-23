@@ -1,3 +1,13 @@
+## Independent Broker-death interruption fixture (native validation pending)
+
+The actual-dpkg fixture now has two faults: native Stop, and pinned SIGKILL of
+frozen Broker while Root controller/dpkg/launcher stay frozen. The second must
+drain via production BindsTo without nativeStopgeneration changing, preserve
+unknown after Broker restart, and refuse replay. Both use explicit CI-admin
+same-signed-sl repair/purge plus typedRootTTY acknowledgement; neither claims
+product automatic repair or all-effects reversal. New artifact package-apply-lost-
+reply.json exported. Successful-commit reply loss remains separately unverified.
+
 ## Additional packaged apply fixture (native acceptance pending)
 
 Current local follow-up requires actual --unpack argv (not any dpkg query),

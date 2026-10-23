@@ -2633,6 +2633,14 @@ s.close()
     terminal_report['native_stop_generation'] = apply_stop['final_generation']
     (ROOT / 'evidence/package-apply-stop.json').write_text(
         json.dumps(apply_stop, indent=2) + '\n')
+    apply_lost = stop_actual_package_apply(rpc, human, identity, password, ready,
+                                          replacement_launcher, STOP_CLIENT,
+                                          fault='broker-death')
+    terminal_report['package_apply_broker_death_drains_frozen_root_without_stop'] = True
+    terminal_report['package_apply_lost_reply_witness'] = apply_lost
+    terminal_report['native_stop_generation'] = apply_lost['final_generation']
+    (ROOT / 'evidence/package-apply-lost-reply.json').write_text(
+        json.dumps(apply_lost, indent=2) + '\n')
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
