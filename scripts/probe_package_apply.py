@@ -23,11 +23,10 @@ def terminal(arguments, answer):
     return rows[0]
 
 
-def run(rpc, human, identity, password, task):
+def run(rpc, human, identity, password, task, *, setup):
     guard()
-    from probe_package_sandbox import run as probe_sandbox
-
-    setup = probe_sandbox()
+    assert setup['private_setup_reached_fixed_worker'] is True
+    assert setup['invalid_plan_rejected'] is True and setup['package_execution'] is False
     from mano_broker.package_catalog import summary
     from mano_core.packages import apply_proposal, proposal
     from mano_protocol.actions import ActionRequest, canonical

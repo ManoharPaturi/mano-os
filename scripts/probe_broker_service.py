@@ -412,6 +412,10 @@ try:
     provision = rpc("provision", envelope, actor="root", directory=WORK)
     assert provision["ok"]
     pid = ready()
+    # Fail on namespace setup before spending time on unrelated adapter/PAM probes.
+    from probe_package_sandbox import run as probe_package_sandbox
+
+    package_setup = probe_package_sandbox()
     assert "broker-mutation-filters-verified" in command(
         "journalctl", "-u", "mano-broker.service", "--no-pager"
     )
@@ -1892,7 +1896,8 @@ finally:client.close()
     (ROOT/'evidence/package-plans.json').write_text(json.dumps(package_records,indent=2)+'\n')
     from probe_package_apply import run as probe_package_apply
 
-    apply_record = probe_package_apply(rpc, human, identity, password, package_records['task'])
+    apply_record = probe_package_apply(rpc, human, identity, password, package_records['task'],
+                                       setup=package_setup)
     terminal_report['package_apply_native_pam_root_namespace_and_postconditions'] = True
     terminal_report['package_apply_witness'] = apply_record
     (ROOT/'evidence/package-apply.json').write_text(json.dumps(apply_record, indent=2)+'\n')
