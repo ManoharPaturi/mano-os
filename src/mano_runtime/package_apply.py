@@ -205,11 +205,17 @@ def sandbox(archives, body):
                  '/etc/passwd', '/etc/group', '/etc/sudoers', '/etc/sudoers.d'):
         if Path(path).exists():
             argv += ['--ro-bind', path, path]
+    # Protect the directories, including future names and global drop-ins. RO
+    # mounts of only existing mano-* files do not prevent creating overrides.
+    for path in ('/etc/systemd', '/usr/lib/systemd'):
+        if Path(path).exists():
+            argv += ['--ro-bind', path, path]
     for path in ('/etc/shadow', '/etc/gshadow', '/etc/shadow-', '/etc/gshadow-',
                  '/etc/ld.so.preload'):
         if Path(path).exists():
             argv += ['--ro-bind', '/usr/lib/mano-os/empty-credential', path]
-    for directory in ('/usr/bin', '/usr/libexec', '/usr/lib/systemd/system', '/etc/systemd/system'):
+    for directory in ('/usr/bin', '/usr/sbin', '/usr/libexec',
+                      '/usr/lib/systemd/system', '/etc/systemd/system'):
         for path in Path(directory).glob('mano-*'):
             argv += ['--ro-bind', str(path), str(path)]
     argv += ['--tmpfs', '/etc/dpkg', '--dir', '/etc/dpkg/dpkg.cfg.d',
@@ -335,7 +341,8 @@ def _run_child(plan, archives, body, broker_fd, emit):
                         if detail.get('check') in {'identity', 'native-restrictions',
                                 'capabilities', 'network', 'protected-objects', 'secrets',
                                 'mount-ancestry', 'runtime-infrastructure', 'credential-mask',
-                                'runtime-tmpfs', 'approval-ipc', 'thread-creation'}:
+                                'runtime-tmpfs', 'approval-ipc', 'thread-creation',
+                                'service-configuration'}:
                             diagnostic['check'] = detail['check']
                             state = detail.get('kernel_state')
                             allowed = {'pid', 'NoNewPrivs', 'Seccomp', 'CapEff', 'CapPrm',
@@ -343,7 +350,8 @@ def _run_child(plan, archives, body, broker_fd, emit):
                                        'shadow_empty', 'approval_ipc_present', 'credential_index',
                                        'credential_size', 'credential_regular',
                                        'credential_readonly', 'credential_matches_asset',
-                                       'runtime_mounts'}
+                                       'runtime_mounts', 'service_directory_index',
+                                       'service_directory_readonly'}
                             if (isinstance(state, dict) and set(state) <= allowed and
                                     all(type(v) is int and 0 <= v < 2**64
                                         for v in state.values())):
@@ -360,7 +368,8 @@ def _run_child(plan, archives, body, broker_fd, emit):
         fields = {'network_socket_denied', 'protected_code_readonly', 'cgroup_control_readonly',
                   'host_shadow_hidden', 'approval_ipc_hidden', 'protected_ancestors_mounted',
                   'no_new_privileges', 'seccomp_active', 'native_stop_authority_readonly',
-                  'runtime_infrastructure_readonly', 'ordinary_thread_creation'}
+                  'runtime_infrastructure_readonly', 'ordinary_thread_creation',
+                  'trusted_service_configuration_readonly'}
         caps = {'CapEff', 'CapPrm', 'CapInh', 'CapBnd', 'CapAmb'}
         if (set(witness) != fields | {'namespaces', 'capabilities', 'securebits', 'run_device'}
                 or any(witness[key] is not True for key in fields)

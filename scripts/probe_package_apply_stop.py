@@ -56,6 +56,19 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fau
     view = human(dict(mode="rearm_view"))["view"]
     assert human(dict(mode="rearm_confirm", view=view, password=password))["ok"]
     generation = snapshot().generation
+    # Explicit CI administrator refresh after any prior manual fixture repair.
+    command(
+        "/usr/bin/env",
+        "-i",
+        "PATH=/usr/sbin:/usr/bin:/bin",
+        "LANG=C.UTF-8",
+        "PYTHONPATH=/usr/lib/mano-os",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "/usr/bin/python3",
+        "-P",
+        "-m",
+        "mano_runtime.package_catalog",
+    )
     workspace, fd = create_workspace(human_uid=1002, caller_uid=identity.uid)
     os.close(fd)
     task = rpc(
@@ -85,18 +98,21 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fau
     forecast = client(identity, planned, approve(rpc, human, identity, password, planned))
     assert forecast["state"] == "done"
     plan = forecast["result"]["plan"]
-    # Keep test-only manual recovery narrow: no upgrade/removal or dependency undo.
-    assert len(plan["changes"]) == 1
-    change = plan["changes"][0]
-    assert change["name"] == "sl" and change["operation"] == "install"
-    assert change["installed"] is None
-    cached = [
-        p
-        for p in Path("/var/cache/apt/archives").glob("*.deb")
-        if p.stat().st_size == change["download_bytes"]
-        and hashlib.sha256(p.read_bytes()).hexdigest() == change["archive_sha256"]
-    ]
-    assert len(cached) == 1
+    # Exercise the complete real dependency solution, not a pre-seeded library.
+    # Test-only administrator recovery permits only fresh sl/libncurses6 installs.
+    assert 1 <= len(plan["changes"]) <= 2
+    assert {"sl"} <= {row["name"] for row in plan["changes"]} <= {"sl", "libncurses6"}
+    cached = []
+    for change in plan["changes"]:
+        assert change["operation"] == "install" and change["installed"] is None
+        matches = [
+            p
+            for p in Path("/var/cache/apt/archives").glob("*.deb")
+            if p.stat().st_size == change["download_bytes"]
+            and hashlib.sha256(p.read_bytes()).hexdigest() == change["archive_sha256"]
+        ]
+        assert len(matches) == 1
+        cached.append(matches[0])
     before = command(
         "/usr/bin/dpkg-query", "-W", "-f=${binary:Package} ${db:Status-Status} ${Version}\n"
     ).stdout
@@ -290,10 +306,11 @@ finally:client.close()
     assert empty() and unknown_path.read_bytes() == unknown_bytes
 
     # Explicit CI administrator recovery, NOT product/model auto-repair. Use only
-    # the same signed sl archive, then purge this no-conffile fixture package.
-    assert hashlib.sha256(cached[0].read_bytes()).hexdigest() == change["archive_sha256"]
-    repair = command("/usr/bin/dpkg", "--install", str(cached[0]))
-    purge = command("/usr/bin/dpkg", "--purge", "sl")
+    # the same complete signed archive set, then purge only its new fixture packages.
+    for path, change in zip(cached, plan["changes"], strict=True):
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == change["archive_sha256"]
+    repair = command("/usr/bin/dpkg", "--install", *map(str, cached))
+    purge = command("/usr/bin/dpkg", "--purge", *(row["name"] for row in reversed(plan["changes"])))
     after = command(
         "/usr/bin/dpkg-query", "-W", "-f=${binary:Package} ${db:Status-Status} ${Version}\n"
     ).stdout

@@ -47,7 +47,17 @@ solution equals the approved forecast before effects. It has only sealed archive
 private PID/network/IPC/mount/cgroup namespaces, a read-only root with fixed writable
 mount ancestors, masked human data/credentials/approval IPC, protected mano code
 and policy, including bundled runtime dependencies and shared session files, and
-only the fixed dpkg ownership/identity capability subset. The child checks kernel
+only the fixed dpkg ownership/identity capability subset. Service configuration directories
+/etc/systemd and /usr/lib/systemd are read-only as complete trees, including
+future override names and global drop-ins. Protecting existing mano unit files
+alone would allow new drop-ins to change trusted execution on restart. The native
+preflight requires read-only filesystem flags and actual EROFS from attempts to
+create fresh names in both parent and system-unit directories. Existing mano
+administration wrappers in /usr/sbin are protected too. The native approval view
+explicitly says service-configuration changes are not allowed. Packages requiring
+those writes need a separately mediated service-management path; this helper
+must not silently relax the protected trees for compatibility. That broader
+capability and its compatibility evidence remain part of the unfinished project. The child checks kernel
 read-only mount flags for installed runtime infrastructure before APT runs. A native
 fixed-command seccomp guard denies namespace escape, mount, ptrace, keyring,
 network, kernel/device administration and related operations. clone3 is denied
@@ -123,3 +133,16 @@ release completion. The original v2.1 phases and deferred physical gates remain.
 Primary API references:
 - https://apt-team.pages.debian.net/python-apt/library/apt_pkg.html#apt_pkg.PackageManager
 - https://manpages.debian.org/trixie/bubblewrap/bwrap.1.en.html
+
+
+The first interruption fixture run (CI39997472282, head1f81e0c) stopped before
+applying because its single-package assumption was wrong: the signed sl solution
+also installs libncurses6. The fixture now uses that complete plan, seals/checks
+all archives, and its explicit CI-administrator recovery installs then purges only
+the fresh approved fixture packages. Every database package/version/state must
+match the original afterward; all-effects reversal is still not asserted.
+It refreshes the catalog explicitly after manual repair before the next scenario.
+The installed-runtime fixture and independent verifier also inspect the complete
+solution instead of assuming the requested program is its only change. The signed
+cowsay payload comparison from that failed run was independently verified; that
+partial success does not make the failed run or draft merge eligible.

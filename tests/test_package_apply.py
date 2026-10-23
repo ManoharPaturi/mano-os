@@ -53,6 +53,7 @@ class ApplyAuthorityTests(unittest.TestCase):
         self.assertEqual(scope['plan'], self.fixture.plan)
         self.assertTrue(scope['system_root_operation'])
         self.assertFalse(scope['profile_auto_approval_allowed'])
+        self.assertFalse(scope['system_service_configuration_changes_allowed'])
         self.assertIsNone(scope['peak_space_bytes'])
         grant = approvals.approve(result['approval_id'], authenticated_human_uid=1002,
             nonce=view['nonce'], operation_digest=view['operation_digest'], now=12, boot_id='boot')
@@ -99,7 +100,7 @@ class RootApplyAdmissionTests(unittest.TestCase):
             'cgroup_control_readonly', 'host_shadow_hidden', 'approval_ipc_hidden',
             'protected_ancestors_mounted', 'no_new_privileges', 'seccomp_active',
             'native_stop_authority_readonly', 'runtime_infrastructure_readonly',
-            'ordinary_thread_creation'), True)
+            'ordinary_thread_creation', 'trusted_service_configuration_readonly'), True)
         witness['namespaces'] = {kind: kind + ':[123]' for kind in
                                 ('mnt', 'net', 'ipc', 'pid', 'cgroup')}
         witness['capabilities'] = dict.fromkeys(('CapEff', 'CapPrm', 'CapInh',
@@ -215,3 +216,22 @@ class PackageNativeAuthorityTests(unittest.TestCase):
                          ['--ro-bind', '/var/lib/mano-stopd', '/var/lib/mano-stopd'])
         self.assertIn('MANO_PACKAGE_GENERATION', argv)
         self.assertIn('MANO_PACKAGE_EXPIRES', argv)
+
+    def test_future_service_overrides_and_root_cli_wrappers_are_protected(self):
+        # Inspect only argument construction. No native sandbox or Root execution.
+        with patch.object(root.Path, 'exists', return_value=True), \
+                patch.object(root.Path, 'glob',
+                    lambda path, pattern: iter([path / 'mano-runtime-setup'])):
+            argv = root.sandbox([], dict(native_generation=3, expires=130))
+        for directory in ('/etc/systemd', '/usr/lib/systemd'):
+            writable = argv.index(directory)
+            readonly = next(index for index in range(len(argv) - 2)
+                            if argv[index:index+3] == ['--ro-bind', directory, directory])
+            self.assertGreater(readonly, writable)
+            # Its system child must not be rebound writable after the RO parent.
+            self.assertNotIn(['--bind', directory + '/system', directory + '/system'],
+                             [argv[index:index+3]
+                              for index in range(readonly + 3, len(argv) - 2)])
+        self.assertIn(['--ro-bind', '/usr/sbin/mano-runtime-setup',
+                       '/usr/sbin/mano-runtime-setup'],
+                      [argv[index:index+3] for index in range(len(argv) - 2)])

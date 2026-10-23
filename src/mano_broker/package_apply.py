@@ -58,6 +58,7 @@ def approval_scope(plan):
                 maintainer_script_network=False, external_effects_reversible=False,
                 conffile_policy='preserve-existing', peak_space_bytes=None,
                 checkpoint_required=True, native_stop_required=True,
+                system_service_configuration_changes_allowed=False,
                 profile_auto_approval_allowed=False,
                 limits=dict(memory_bytes=512*1024**2, pids=64, cpu_percent=50,
                             maximum_runtime_seconds=60))

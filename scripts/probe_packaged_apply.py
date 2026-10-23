@@ -93,8 +93,11 @@ finally:c.close()
     grant, _ = approvals.approval(managed, proposed, password)
     forecast = sdk("forecast", proposed=proposed, grant=grant)
     plan = forecast["result"]["plan"]
-    assert len(plan["changes"]) == 1 and plan["changes"][0]["name"] == "sl"
-    assert plan["changes"][0]["operation"] == "install"
+    assert 1 <= len(plan["changes"]) <= 2
+    assert {"sl"} <= {row["name"] for row in plan["changes"]} <= {"sl", "libncurses6"}
+    assert all(
+        row["operation"] == "install" and row["installed"] is None for row in plan["changes"]
+    )
     proposed = sdk(
         "apply-proposal",
         task_id=context["task_id"],
@@ -120,7 +123,8 @@ finally:c.close()
     package = subprocess.check_output(
         ["/usr/bin/dpkg-query", "-W", "-f=${Version}", "sl"], text=True
     )
-    assert package == plan["changes"][0]["candidate"]
+    selected = next(row for row in plan["changes"] if row["name"] == "sl")
+    assert package == selected["candidate"]
     # Retire only metadata after successful receipt; preserve its snapshot/history.
     terminal(
         ("retire-checkpoint", receipt["checkpoint"]),

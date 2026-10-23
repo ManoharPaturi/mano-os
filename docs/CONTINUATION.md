@@ -1,3 +1,30 @@
+## Current correction: full signed sl dependency solution
+
+CI39997472282 FAILED before actualStop: fixture incorrectly expected onechange;
+realplan adds sl ANDlibncurses6. Preserve actualdependencytest, don'tpreinstalllib.
+Stop fixture now validates allfresh changes in fixedsl/libncurses6 testset, checks
+allcachedsignedarchives, CI-admin repairs/purges entireapprovedfreshset, compares
+alloriginalpackageversions/states, explicitcatalogrefreshbeforeeachscenario.
+Packagedfixture+independentchecks handle fullplan too. Include preparedsystemdRO
+fixinnewhead; newnativeCI required. Priorcowpayload independentlyPASSED from
+artifact12520584032 SHA5eacc5be6b994a3c0f81eb0aa49a97bf695db1f1dd0fb3e0741289e0a1a78504;
+this doesn't acceptStop/packaged/aggregateCI. FullgoalACTIVE/incomplete.
+
+## Prepared local systemd protection fix (NOT YET PUSHED)
+
+While CI39997472282 runs at1f81e0c, tracked local changes protect complete
+/etc/systemd and /usr/lib/systemd trees RO, including new override names. Native
+preflight requires readonly statvfs and actual EROFS from mkdir freshnames in
+parent/systemdirs; adds strict trusted_service_configuration_readonly witness.
+Parent exactschema, framingfixture, and regressiontest updated. /usr/sbin mano-*
+wrappers nowprotected. Approval view says serviceconfiguration changes disallowed.
+Unit compatibility remains unfinished; do not weaken infrastructure for green.
+Need update independentaccept_package_apply.py flag set for nexthead AFTER
+currenthead native inspection (don't accidentally reject currenthead's oldschema).
+Targeted13testsPASS; full542tests/48Linuxskips+Ruff/compile/shell/diffPASS.
+Regression fails currentCI sandbox construction, passes preparedfix. Keep currentCI fixed until
+firstnativeoutcome, then include fixes+any actualfailurecorrection in nextpush.
+
 ## Independent Broker-death interruption fixture (native validation pending)
 
 The actual-dpkg fixture now has two faults: native Stop, and pinned SIGKILL of

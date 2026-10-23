@@ -173,11 +173,30 @@ def boundary():
     for path in ('/usr/lib/mano-runtime', '/usr/share/mano-runtime'):
         if Path(path).exists() and 'ro' not in mounts.get(path, []):
             raise PermissionError('Installed mano runtime infrastructure is writable')
+    BOUNDARY_CHECK = 'service-configuration'
+    for index, path in enumerate(('/etc/systemd', '/usr/lib/systemd')):
+        readonly = bool(Path(path).is_dir() and os.statvfs(path).f_flag & os.ST_RDONLY)
+        BOUNDARY_KERNEL.update(service_directory_index=index,
+                               service_directory_readonly=int(readonly))
+        if not readonly:
+            raise PermissionError('Trusted service configuration directory is writable')
+        # Check new names as well as existing unit leaves. No probe path is
+        # created under the required RO mount; an unexpected success fails closed.
+        for directory in (path, path + '/system'):
+            candidate = directory + '/.mano-package-boundary-' + os.urandom(16).hex()
+            try:
+                os.mkdir(candidate, 0o700)
+            except OSError as error:
+                if error.errno != errno.EROFS:
+                    raise
+            else:
+                raise PermissionError('New trusted service override directory was writable')
     return dict(network_socket_denied=True, protected_code_readonly=True,
                 cgroup_control_readonly=True, host_shadow_hidden=True, approval_ipc_hidden=True,
                 protected_ancestors_mounted=True, no_new_privileges=True, seccomp_active=True,
                 native_stop_authority_readonly=True,
                 runtime_infrastructure_readonly=True,
+                trusted_service_configuration_readonly=True,
                 ordinary_thread_creation=True,
                 capabilities=capabilities, securebits=securebits,
                 run_device=run_device,
