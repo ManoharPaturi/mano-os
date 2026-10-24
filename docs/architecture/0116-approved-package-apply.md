@@ -213,3 +213,19 @@ kernel-owned lock. The four-catalog ceiling remains unchanged. This prevents a
 known-full store from allowing installation then failing only at final refresh.
 Temporary-file tests verify actual lock exclusion/CLOEXEC/exception release and
 refusal before acquisition; native lifecycle acceptance is still required.
+
+
+The next CI-only scenario targets loss after database commit rather than during
+unpack. It observes a real durable verified.json, freezes the authenticated Root
+controller/Broker/launcher before catalog publication, checks via read-only SQLite
+that the Broker is still executing with no recorded acknowledgement, then kills
+only the pinned Broker. It requires service-bound Root drainage without Stop,
+Broker unknown after restart, preserved Root completion history and replay denial.
+Raw before/after package databases are exported for independent plan comparison.
+
+The fixture explicitly repairs its own signed sl/libncurses6 installation/marks
+and retires only checkpoint metadata afterward. The saved Root completion record
+is then historical; it does not assert that the installation is still present or
+all payload effects were reversed. It uses no production pause hook, journal
+editing, extra service capability or automatic retry. This fixture is prepared
+locally and still requires exact-head native validation before any claim.

@@ -215,7 +215,7 @@ if [ "$result" = 0 ]; then
     exit "$broker_result"
   fi
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
-    'sudo tar -cf - -C /opt/mano-lab/evidence live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt mcp-discovery.json package-plans.json package-sandbox-setup.json package-apply.json package-apply-before-status package-apply-after-status package-apply-signed.deb package-apply-installed-cowsay package-apply-stop.json package-apply-lost-reply.json git-workspace-checkpoint.json git-workspace-checkpoint.tar' | tar -xf - -C "$repo_root/evidence"
+    'sudo tar -cf - -C /opt/mano-lab/evidence live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt mcp-discovery.json package-plans.json package-sandbox-setup.json package-apply.json package-apply-before-status package-apply-after-status package-apply-signed.deb package-apply-installed-cowsay package-apply-stop.json package-apply-lost-reply.json package-commit-reply-loss.json package-commit-reply-before-status package-commit-reply-after-status git-workspace-checkpoint.json git-workspace-checkpoint.tar' | tar -xf - -C "$repo_root/evidence"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_resource_pins.py' \
     > "$repo_root/evidence/resource-pins.json"

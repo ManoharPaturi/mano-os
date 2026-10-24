@@ -41,15 +41,64 @@ def wait(predicate, seconds=8):
     raise AssertionError("Actual package interruption witness timed out")
 
 
+def repair_fixture(plan, cached, before, original_marks, original_marks_mode, action):
+    """Explicit disposable CI administrator repair; never installed or model callable."""
+    guard()
+    assert empty()
+    from mano_broker.package_catalog import EXTENDED, MAX_EXTENDED, read
+    from mano_runtime import package_attempts, recovery
+
+    assert 1 <= len(plan["changes"]) <= 2
+    assert {"sl"} <= {row["name"] for row in plan["changes"]} <= {"sl", "libncurses6"}
+    assert all(
+        row["operation"] == "install" and row["installed"] is None for row in plan["changes"]
+    )
+    assert len(original_marks) <= MAX_EXTENDED and original_marks_mode in {0o600, 0o644}
+    # Explicit CI administrator recovery, NOT product/model auto-repair. Use only
+    # the same complete signed archive set, then purge only its new fixture packages.
+    for path, change in zip(cached, plan["changes"], strict=True):
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == change["archive_sha256"]
+    repair = command("/usr/bin/dpkg", "--install", *map(str, cached))
+    purge = command("/usr/bin/dpkg", "--purge", *(row["name"] for row in reversed(plan["changes"])))
+    after = command(
+        "/usr/bin/dpkg-query", "-W", "-f=${binary:Package} ${db:Status-Status} ${Version}\n"
+    ).stdout
+    assert before == after
+    # Explicit CI administrator repair includes the original package marks, not
+    # only versions. Preserve the product's four-catalog bound without deleting
+    # any history or silently rewriting the Broker's authority journal.
+    with recovery.locked():
+        stage = EXTENDED.parent / (".mano-ci-restore-marks-" + action)
+        fd = os.open(
+            stage,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+            original_marks_mode,
+        )
+        with os.fdopen(fd, "wb") as stream:
+            os.fchmod(stream.fileno(), original_marks_mode)
+            stream.write(original_marks)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(stage, EXTENDED)
+        package_attempts.sync(EXTENDED.parent)
+        assert read(EXTENDED, MAX_EXTENDED) == original_marks
+    return dict(
+        package_database_after=after,
+        stdout_sha256=hashlib.sha256((repair.stdout + purge.stdout).encode()).hexdigest(),
+        original_marks_sha256=hashlib.sha256(original_marks).hexdigest(),
+        restored_marks_sha256=hashlib.sha256(read(EXTENDED, MAX_EXTENDED)).hexdigest(),
+    )
+
+
 def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fault="stop"):
     guard()
-    assert fault in {"stop", "broker-death"}
+    assert fault in {"stop", "broker-death", "commit-reply-loss"}
     from mano_broker.package_catalog import EXTENDED, MAX_EXTENDED, read, summary
     from mano_broker.workspaces import create_workspace
     from mano_core.packages import apply_proposal, proposal
     from mano_protocol.actions import ActionRequest, canonical
     from mano_protocol.stop_state import snapshot
-    from mano_runtime import package_attempts, recovery
+    from mano_runtime import package_attempts
     from mano_runtime.package_operator import ACK, RETIRE
 
     assert snapshot().latched and empty()
@@ -84,6 +133,7 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fau
     original_marks = read(EXTENDED, MAX_EXTENDED)
     original_marks_mode = EXTENDED.stat().st_mode & 0o777
     assert original_marks_mode in {0o600, 0o644}
+    catalog_ids_before = sorted(p.name for p in Path("/var/lib/mano-packages/catalogs").iterdir())
     workspace, fd = create_workspace(human_uid=1002, caller_uid=identity.uid)
     os.close(fd)
     task = rpc(
@@ -131,6 +181,8 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fau
     before = command(
         "/usr/bin/dpkg-query", "-W", "-f=${binary:Package} ${db:Status-Status} ${Version}\n"
     ).stdout
+    before_status = Path("/var/lib/dpkg/status").read_bytes()
+    assert hashlib.sha256(before_status).hexdigest() == plan["status_sha256"]
     proposed = apply_proposal(
         task_id=task["task_id"],
         resource_id=task["resource_id"],
@@ -182,6 +234,28 @@ finally:client.close()
     child.stdin.write(json.dumps(dict(proposed=proposed, grant=grant["grant_id"])))
     child.stdin.close()
     child.stdin = None
+    if fault == "commit-reply-loss":
+        from probe_package_commit_reply import run as committed_loss
+
+        return committed_loss(
+            rpc,
+            identity,
+            ready,
+            launcher_pid,
+            stop_client,
+            child,
+            task=task,
+            plan=plan,
+            request=request,
+            request_sha=request_sha,
+            cached=cached,
+            before_query=before,
+            before_status=before_status,
+            original_marks=original_marks,
+            original_marks_mode=original_marks_mode,
+            generation=generation,
+            catalog_ids_before=catalog_ids_before,
+        )
     descriptors = {}
     authorities = (ready(), launcher_pid)
     stop_pid = int(
@@ -347,34 +421,7 @@ finally:client.close()
         json.dumps(progress, indent=2) + "\n"
     )
 
-    # Explicit CI administrator recovery, NOT product/model auto-repair. Use only
-    # the same complete signed archive set, then purge only its new fixture packages.
-    for path, change in zip(cached, plan["changes"], strict=True):
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == change["archive_sha256"]
-    repair = command("/usr/bin/dpkg", "--install", *map(str, cached))
-    purge = command("/usr/bin/dpkg", "--purge", *(row["name"] for row in reversed(plan["changes"])))
-    after = command(
-        "/usr/bin/dpkg-query", "-W", "-f=${binary:Package} ${db:Status-Status} ${Version}\n"
-    ).stdout
-    assert before == after
-    # Explicit CI administrator repair includes the original package marks, not
-    # only versions. Preserve the product's four-catalog bound without deleting
-    # any history or silently rewriting the Broker's authority journal.
-    with recovery.locked():
-        stage = EXTENDED.parent / (".mano-ci-restore-marks-" + action)
-        fd = os.open(
-            stage,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
-            original_marks_mode,
-        )
-        with os.fdopen(fd, "wb") as stream:
-            os.fchmod(stream.fileno(), original_marks_mode)
-            stream.write(original_marks)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(stage, EXTENDED)
-        package_attempts.sync(EXTENDED.parent)
-        assert read(EXTENDED, MAX_EXTENDED) == original_marks
+    repaired = repair_fixture(plan, cached, before, original_marks, original_marks_mode, action)
     retired = terminal(("retire-checkpoint", attempt["intent"]["recovery_id"]), RETIRE)
     assert retired["snapshot_deleted"] is False
     clean = terminal(("create",))
@@ -412,13 +459,13 @@ finally:client.close()
         operator_acknowledgement=ack,
         manual_ci_admin_repair=True,
         product_automatic_repair=False,
-        repair_stdout_sha256=hashlib.sha256((repair.stdout + purge.stdout).encode()).hexdigest(),
+        repair_stdout_sha256=repaired["stdout_sha256"],
         package_database_versions_restored=True,
         package_marks_restored_by_ci_admin=True,
-        original_marks_sha256=hashlib.sha256(original_marks).hexdigest(),
-        restored_marks_sha256=hashlib.sha256(read(EXTENDED, MAX_EXTENDED)).hexdigest(),
+        original_marks_sha256=repaired["original_marks_sha256"],
+        restored_marks_sha256=repaired["restored_marks_sha256"],
         package_database_before=before,
-        package_database_after=after,
+        package_database_after=repaired["package_database_after"],
         all_payload_effects_reversed_verified=False,
         physical_input_provenance=None,
         final_generation=snapshot().generation,

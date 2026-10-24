@@ -1,3 +1,17 @@
+## Prepared commit-after-effects reply-loss fixture (LOCAL, NOT PUSHED)
+WhileCI40013441358 runs fixed3d8c203, newprobe_package_commit_reply.py prepared.
+CommonStop setup gains faultcommit-reply-loss; sharedguardedrepair extracted.
+WaitRootverified.json, freezeRootcontroller/Broker/launcher, requireBrokerrow
+executing/verified0/ackevents0 byreadonlySQLite andnocatalogpublicationyet,
+killpinnedBroker; requireRootdrainwithoutStop+Brokerrestartunknown+noreplay,
+preserveRootverifiedrecord andexportbefore/afterDB. ThenexplicitCIadminrepair/
+marksrestore andmetadataretire; recordbecomeshistorical, currentInstallFalse.
+No producttesthook/journalmutation/extraRootcapability. Integrateddriver/export
+butUNCOMMITTED; nativeunverified. Independenthelperpreparedoutputs/
+accept_commit_reply_loss.py, notyetwiredtofullaccept untilnexthead. KeepcurrentCI
+fixeduntiloutcome. Full551tests48skips/staticPASS forpreparedchanges; future
+nativeoutcomestillrequired. SharedtrustedruntimeclosureSTILLUNFIXED.
+
 ## Completed native interruption witnesses, catalog-capacity correction
 CI40010080992 terminalFAILURE later in packagedapply: four-catalog retentionfull.
 Artifact12527440273 SHAfbabe530c394940acd0e4792863570b75ff42df7bfdbda2f4cf78ae8f8e6a1ae

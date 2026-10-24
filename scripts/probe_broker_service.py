@@ -2641,6 +2641,14 @@ s.close()
     terminal_report['native_stop_generation'] = apply_lost['final_generation']
     (ROOT / 'evidence/package-apply-lost-reply.json').write_text(
         json.dumps(apply_lost, indent=2) + '\n')
+    committed_loss = stop_actual_package_apply(rpc, human, identity, password, ready,
+                                               replacement_launcher, STOP_CLIENT,
+                                               fault='commit-reply-loss')
+    terminal_report['package_apply_commit_survives_broker_reply_loss_without_replay'] = True
+    terminal_report['package_apply_commit_reply_loss_witness'] = committed_loss
+    terminal_report['native_stop_generation'] = committed_loss['final_generation']
+    (ROOT / 'evidence/package-commit-reply-loss.json').write_text(
+        json.dumps(committed_loss, indent=2) + '\n')
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
