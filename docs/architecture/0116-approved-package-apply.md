@@ -236,8 +236,11 @@ Existing Debian Python path protection now binds the mandatory interpreter
 as well as existing /etc/python3 and /etc/python3.13 directories. Mount anchors
 prevent substitution of the directories above these binds. Missing required paths
 refuse namespace construction. Before package effects, the constrained worker
-requires read-only filesystem flags and EROFS from interpreter write-open and
-fresh directory creation in every protected module tree. The authenticated Root
+requires read-only filesystem flags and denied interpreter write-open, plus
+EROFS from fresh directory creation in every protected module tree. Linux can
+return ETXTBSY before EROFS for the active interpreter; that exception applies only
+to the fixed interpreter, and never substitutes for the independent ST_RDONLY
+check. Other file and directory probes still require EROFS. The authenticated Root
 parent requires the new exact boundary flag. Upgrading these protected runtime
 paths requires a separately mediated runtime update; package scripts cannot relax
 these mounts. Native compatibility evidence for this change is pending.

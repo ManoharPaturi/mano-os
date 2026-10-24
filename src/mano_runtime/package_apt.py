@@ -24,6 +24,7 @@ from mano_protocol.stop_state import STATE_FILE, snapshot
 from mano_runtime.package_attempts import guard
 from mano_runtime.package_python import OPTIONAL as PYTHON_OPTIONAL
 from mano_runtime.package_python import REQUIRED as PYTHON_REQUIRED
+from mano_runtime.package_python import verify_readonly
 from mano_runtime.package_resolution import expected
 
 ARCHIVES = Path('/run/mano-package-archives')
@@ -197,26 +198,7 @@ def boundary():
     paths = list(PYTHON_REQUIRED) + [path for path in PYTHON_OPTIONAL if Path(path).exists()]
     for index, path in enumerate(paths):
         BOUNDARY_KERNEL['python_path_index'] = index
-        if not os.statvfs(path).f_flag & os.ST_RDONLY:
-            raise PermissionError('Existing trusted Python path is writable')
-        if Path(path).is_dir():
-            candidate = path + '/.mano-package-boundary-' + os.urandom(16).hex()
-            try:
-                os.mkdir(candidate, 0o700)
-            except OSError as error:
-                if error.errno != errno.EROFS:
-                    raise
-            else:
-                raise PermissionError('New Python module directory was writable')
-        else:
-            try:
-                fd = os.open(path, os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
-            except OSError as error:
-                if error.errno != errno.EROFS:
-                    raise
-            else:
-                os.close(fd)
-                raise PermissionError('Existing Python interpreter opened for writing')
+        verify_readonly(path)
     return dict(network_socket_denied=True, protected_code_readonly=True,
                 cgroup_control_readonly=True, host_shadow_hidden=True, approval_ipc_hidden=True,
                 protected_ancestors_mounted=True, no_new_privileges=True, seccomp_active=True,

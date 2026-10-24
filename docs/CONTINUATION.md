@@ -1,9 +1,22 @@
+## Native Python write-probe correction
+CI40059764904 at5fb7bcf terminalFAILURE before package effects. The independent
+read-only filesystem flag passed; write-open on the executing Python ELF returned
+ETXTBSY(errno26), notEROFS. Native checker now always requires ST_RDONLY FIRST,
+then accepts ETXTBSY only for the exact executing /usr/bin/python3.13. Otherfile
+and newdirectory probes retain EROFS-only. Four regression tests reject treating
+busy alone as readonly, broadeningbusyexceptions, or substituting EACCES. No mount,
+capability, privilege or package boundary is relaxed. CorrectednativeCIrequired.
+Previous failure rawlog outputs/pr134-python-native-failure.log; artifact12546823432
+serverdigestadd2bb3ad49e80f87422f00bb9e84b7de1e08cfc31a41c288462ab12d4d16de3
+not downloaded/no ZIP verification claim. Prior watcher83707 terminal, noactive
+exec sessions aftervalidation completes. Full runtime closure remains unresolved.
+
 ## Existing Python path protection prepared for native CI
 
 Current feature branch adds read-only bindings for Debian13's existing interpreter,
 stdlib, distribution Python modules, /usr/local, and existing /etc/python3* trees.
 Required paths must exist; the worker preflight checks read-only flags and actual
-EROFS for interpreter write-open/new module-directory creation. The Root parent
+write denial for interpreter open and EROFS for new module-directory creation. The Root parent
 requires existing_python_paths_readonly in the exact boundary frame. Two ordinary
 unit regressions check mount ordering/ancestry and mandatory-path refusal.
 This closes existing path overwrite routes only. Absent Python search-path entries,
