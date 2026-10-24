@@ -15,7 +15,7 @@ PATH = '/run/mano-broker/request.sock'
 OPERATIONS = {'request_approval', 'approval_status', 'propose', 'status', 'artifact_read',
               'model_result', 'file_result', 'terminal_output', 'terminal_output_read',
               'checkpoint_result', 'checkpoint_read', 'checkpoint_layout', 'restore_result',
-              'package_catalog', 'package_install_review',
+              'package_catalog', 'package_install_review', 'package_apply_result',
               'pty_status', 'pty_read', 'pty_write', 'pty_resize', 'pty_close', 'file_write_result'}
 
 

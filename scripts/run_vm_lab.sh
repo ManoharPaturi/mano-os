@@ -26,7 +26,8 @@ chmod 0444 "$lab_dir/runtime-pristine.qcow2"
 sha256sum "$lab_dir/runtime-pristine.qcow2" > "$repo_root/evidence/runtime-pristine-before.sha256"
 qemu-img resize "$lab_dir/$image" 12G
 qemu-img create -f qcow2 "$lab_dir/data.qcow2" 2G
-qemu-img create -f qcow2 "$lab_dir/root.qcow2" 6G
+# Retain recovery snapshots and the package executor's unchanged 2GiB reserve.
+qemu-img create -f qcow2 "$lab_dir/root.qcow2" 8G
 ssh-keygen -q -t ed25519 -N '' -f "$lab_dir/key"
 cat > "$lab_dir/user-data" <<EOF
 #cloud-config
@@ -195,17 +196,40 @@ cmp "$repo_root/evidence/bootstrap-preserved-before.sha256" \
 if [ "$result" = 0 ]; then
   PYTHONPATH="$repo_root/src" python3 "$repo_root/scripts/audit_phase0.py" \
     --evidence "$repo_root/evidence"
+  # Synthetic pathname-policy experiment only; no production profile is loaded.
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_package_path_policy.py' \
+    > "$repo_root/evidence/package-path-policy-mechanism.json"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_state.py' \
     > "$repo_root/evidence/broker-state.json"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_ipc.py' \
     > "$repo_root/evidence/broker-ipc.json"
+  set +e
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_service.py' \
     > "$repo_root/evidence/broker-service.json"
+  broker_result=$?
+  set -e
+  if [ "$broker_result" != 0 ]; then
+    # Keep failure custody before exiting with the actual broker probe failure.
+    ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+      'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
+    exit "$broker_result"
+  fi
+  # Progress belongs on stderr. A successful probe must emit one JSON object,
+  # rather than letting a later independent acceptance discover broken framing.
+  python3 - "$repo_root/evidence/broker-service.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+if not isinstance(json.loads(Path(sys.argv[1]).read_text()), dict):
+    raise SystemExit('Broker probe must emit one JSON object')
+PY
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
-    'sudo tar -cf - -C /opt/mano-lab/evidence live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt mcp-discovery.json package-plans.json git-workspace-checkpoint.json git-workspace-checkpoint.tar' | tar -xf - -C "$repo_root/evidence"
+    'sudo tar -cf - -C /opt/mano-lab/evidence live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt mcp-discovery.json package-plans.json package-sandbox-setup.json package-apply.json package-apply-before-status package-apply-after-status package-apply-signed.deb package-apply-installed-cowsay package-apply-stop.json package-apply-lost-reply.json package-commit-reply-loss.json package-commit-reply-before-status package-commit-reply-after-status git-workspace-checkpoint.json git-workspace-checkpoint.tar' | tar -xf - -C "$repo_root/evidence"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_resource_pins.py' \
     > "$repo_root/evidence/resource-pins.json"
@@ -228,7 +252,7 @@ if [ "$result" = 0 ]; then
     'sudo env PYTHONPATH=/opt/mano-lab/src PYTHONDONTWRITEBYTECODE=1 python3 /opt/mano-lab/scripts/probe_runtime_package.py' \
     > "$repo_root/evidence/runtime-package.json"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
-    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json packaged-root-recovery.json mano-runtime_0.1.0~prototype2_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
+    'sudo tar -cf - -C /opt/mano-lab/evidence runtime-package.json packaged-root-recovery.json packaged-package-apply.json packaged-apply-before-status packaged-apply-after-status mano-runtime_0.1.0~prototype2_amd64.deb live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt' | tar -xf - -C "$repo_root/evidence"
 
 fi
 if [ "$result" = 0 ]; then

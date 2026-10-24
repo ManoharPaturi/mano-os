@@ -1,0 +1,48 @@
+[Unit]
+Description=mano approved system package transaction
+Requires=mano-package.slice mano-stopd.service
+BindsTo=mano-broker.service
+After=mano-package.slice mano-stopd.service mano-broker.service
+
+[Service]
+Type=exec
+User=root
+Group=root
+Slice=mano-package.slice
+ExecStart=/usr/bin/python3 -P -m mano_runtime.package_apply
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONPATH=/usr/lib/mano-os
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+RuntimeMaxSec=65
+TimeoutStopSec=1
+KillMode=control-group
+KillSignal=SIGKILL
+Restart=no
+NoNewPrivileges=yes
+# Only the trusted controller constructs namespaces/snapshots. NET_ADMIN lets
+# bubblewrap configure loopback in its new private network namespace. The package
+# native guard uses SETPCAP to lock securebits/bounding, drops every setup
+# capability, and gives the worker only the fixed six dpkg capabilities.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_SETPCAP CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID
+# Preserve the required identity capability through the controller's fixed exec
+# chain. The native guard clears ambient state and rebuilds the six-worker set.
+AmbientCapabilities=CAP_SETUID
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+# No additional mount under /usr: recovery validates one coherent root tree.
+# Module capability is absent and the package child separately denies module syscalls.
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+TasksMax=64
+MemoryMax=512M
+CPUQuota=50%
+LimitNOFILE=128
+LimitCORE=0

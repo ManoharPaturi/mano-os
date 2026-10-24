@@ -14,7 +14,7 @@ APT security updates remain enabled; installed versions are recorded. Require
 bubblewrap >= 0.12.0-1~deb13u1 and xdg-dbus-proxy >= 0.1.6-1+deb13u3 on Debian 13.
 Never downgrade these floors for a green test.
 
-The VM has 4 GiB RAM, two vCPUs, 12 GiB sparse bootstrap, 2 GiB btrfs data and 6 GiB btrfs root disks.
+The VM has 4 GiB RAM, two vCPUs, 12 GiB sparse bootstrap, 2 GiB btrfs data and 8 GiB btrfs root disks.
 After preparation, a second boot uses the installed Debian kernel/initrd and real
 btrfs root; the bootstrap disk is read-only and hash-checked.
 SSH is key-only, forwarded on runner loopback; keys never leave the runner.

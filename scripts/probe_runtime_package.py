@@ -260,6 +260,10 @@ print(json.dumps(control_request('prompt_context',dict(prompt_id=json.load(sys.s
         proof = Path(managed["workspace"]) / "package-proof"
         assert proof.read_text() == "package-ok"
         assert task["task_id"] == live["prompt"]["task_id"]
+        from probe_packaged_apply import run as packaged_apply
+
+        applied_package = packaged_apply(managed, password, installed_python, query,
+                                        packaged_recovery)
         edited = Path("/etc/mano/controller.json")
         edited.write_text(json.dumps(json.loads(edited.read_text()), indent=2) + "\n")
         before_uid = POLICY.read_bytes()
@@ -317,6 +321,7 @@ print(json.dumps(control_request('prompt_context',dict(prompt_id=json.load(sys.s
             package_owned_production_gui_pam_profile=True,
             package_owned_langgraph_mock_effect=True,
             package_owned_root_recovery_snapshot=True,
+            package_owned_native_pam_root_apply=applied_package,
             effect_verified=False,
             policy_data_preserved_on_reinstall=True,
             reinstall_no_old_authority=True,

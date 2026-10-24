@@ -414,6 +414,7 @@ def run(rpc, human, identity, password):
     } == initial
     records["corrupt-input"] = corrupted
     return dict(
+        task=dict(task_id=task['task_id'], resource_id=task['resource_id']),
         catalog=catalog,
         catalog_manifest=catalog_manifest,
         records=records,

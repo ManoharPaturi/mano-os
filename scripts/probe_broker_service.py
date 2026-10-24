@@ -31,6 +31,7 @@ LIBRARY = Path("/usr/lib/mano-broker/libmano-resources.so")
 NATIVE = Path("/usr/libexec/mano-approve")
 STOP_NATIVE = Path("/usr/libexec/mano-stopd")
 STOP_CLIENT = Path("/usr/libexec/mano-stop")
+PACKAGE_GUARD = Path("/usr/libexec/mano-package-guard")
 STOP_STATE = Path("/var/lib/mano-stopd")
 POLICY = Path("/etc/mano/human.uid")
 PAM = Path("/etc/pam.d/mano-approve")
@@ -59,6 +60,8 @@ UNITS = (
     "mano-stopd-control.socket",
     "mano-core.slice",
     "mano-package.slice",
+    "mano-package-apply.socket",
+    "mano-package-apply@.service",
     "mano-provider.socket",
     "mano-provider@.service",
     "mano-controller.service",
@@ -74,7 +77,8 @@ assert subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip
     "qemu",
 }
 assert all(
-    not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, POLICY, PAM, GUARD, BASE,
+    not p.exists() for p in (STATE, CODE, WORK, LIBRARY, NATIVE, PACKAGE_GUARD,
+                           POLICY, PAM, GUARD, BASE,
                            CONTROLLER_POLICY, EGRESS_POLICY,
                            LOCK, STOP_NATIVE, STOP_CLIENT, STOP_STATE, *SOCKETS.values())
 )
@@ -274,6 +278,8 @@ try:
     subprocess.run(["usermod", "-a", "-G", "mano-request", "mano-worker"], check=True)
     joined = True
     CODE.mkdir(mode=0o755)
+    shutil.copyfile(ROOT / 'packaging/runtime/empty-credential', CODE / 'empty-credential')
+    (CODE / 'empty-credential').chmod(0o444)
     for package in ("mano_broker", "mano_prompt", "mano_lab", "mano_core", "mano_protocol",
                     "mano_provider", "mano_egress", "mano_runtime"):
         shutil.copytree(
@@ -338,6 +344,11 @@ try:
         check=True,
     )
     NATIVE.chmod(0o755)
+    subprocess.run(['cc', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+        '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', str(ROOT/'native/mano_package_guard.c'),
+        '-lseccomp', '-Wl,-z,relro,-z,now', '-o', str(PACKAGE_GUARD)], check=True)
+    PACKAGE_GUARD.chmod(0o755)
+    installed.append(PACKAGE_GUARD)
     STATE.parent.chmod(0o711)
     WORK.mkdir()
     os.chown(WORK, broker_uid, 1004)
@@ -391,6 +402,7 @@ try:
             "mano-launcher-control.socket",
             "mano-provider.socket",
             "mano-egress.socket",
+            "mano-package-apply.socket",
         ],
         check=True,
     )
@@ -402,6 +414,10 @@ try:
     provision = rpc("provision", envelope, actor="root", directory=WORK)
     assert provision["ok"]
     pid = ready()
+    # Fail on namespace setup before spending time on unrelated adapter/PAM probes.
+    from probe_package_sandbox import run as probe_package_sandbox
+
+    package_setup = probe_package_sandbox()
     assert "broker-mutation-filters-verified" in command(
         "journalctl", "-u", "mano-broker.service", "--no-pager"
     )
@@ -1880,6 +1896,14 @@ finally:client.close()
     terminal_report['root_package_archives_signed_hash_identity_and_kernel_seals'] = True
     terminal_report['package_plan_witness'] = package_records
     (ROOT/'evidence/package-plans.json').write_text(json.dumps(package_records,indent=2)+'\n')
+    from probe_package_apply import run as probe_package_apply
+
+    apply_record = probe_package_apply(rpc, human, identity, password, package_records['task'],
+                                       setup=package_setup)
+    terminal_report['package_apply_native_pam_root_namespace_and_postconditions'] = True
+    terminal_report['package_apply_witness'] = apply_record
+    (ROOT/'evidence/package-apply.json').write_text(json.dumps(apply_record, indent=2)+'\n')
+
     from probe_checkpoints import run as probe_checkpoints
 
     checkpoint_report = probe_checkpoints(rpc, human, identity, password,
@@ -2600,6 +2624,31 @@ s.close()
     except PermissionError as error:
         assert 'Native Stop is latched' in str(error)
     terminal_report['root_package_resolution_native_stop_latched_denied'] = True
+    from probe_package_apply_stop import run as stop_actual_package_apply
+
+    apply_stop = stop_actual_package_apply(rpc, human, identity, password, ready,
+                                          replacement_launcher, STOP_CLIENT)
+    terminal_report['package_apply_actual_dpkg_native_stop_restart_no_replay'] = True
+    terminal_report['package_apply_stop_witness'] = apply_stop
+    terminal_report['native_stop_generation'] = apply_stop['final_generation']
+    (ROOT / 'evidence/package-apply-stop.json').write_text(
+        json.dumps(apply_stop, indent=2) + '\n')
+    apply_lost = stop_actual_package_apply(rpc, human, identity, password, ready,
+                                          replacement_launcher, STOP_CLIENT,
+                                          fault='broker-death')
+    terminal_report['package_apply_broker_death_drains_frozen_root_without_stop'] = True
+    terminal_report['package_apply_lost_reply_witness'] = apply_lost
+    terminal_report['native_stop_generation'] = apply_lost['final_generation']
+    (ROOT / 'evidence/package-apply-lost-reply.json').write_text(
+        json.dumps(apply_lost, indent=2) + '\n')
+    committed_loss = stop_actual_package_apply(rpc, human, identity, password, ready,
+                                               replacement_launcher, STOP_CLIENT,
+                                               fault='commit-reply-loss')
+    terminal_report['package_apply_commit_survives_broker_reply_loss_without_replay'] = True
+    terminal_report['package_apply_commit_reply_loss_witness'] = committed_loss
+    terminal_report['native_stop_generation'] = committed_loss['final_generation']
+    (ROOT / 'evidence/package-commit-reply-loss.json').write_text(
+        json.dumps(committed_loss, indent=2) + '\n')
     native_report = dict(
         real_pam_authenticated=True,
         wrong_password_denied=True,
@@ -2678,7 +2727,7 @@ except BaseException:
 finally:
     provider_units = [line.split()[0] for line in command("systemctl", "list-units", "--all",
         "--plain", "--no-legend", "mano-provider@*.service",
-        "mano-egress@*.service").splitlines() if line.strip()]
+        "mano-egress@*.service", "mano-package-apply@*.service").splitlines() if line.strip()]
     if pty_units:
         subprocess.run(["systemctl", "stop", *pty_units], check=False,
                        capture_output=True, timeout=5)
@@ -2739,6 +2788,9 @@ finally:
     egress_dir = Path("/run/mano-egress")
     if egress_dir.exists():
         egress_dir.rmdir()
+    package_dir = Path("/run/mano-package-apply")
+    if package_dir.exists():
+        package_dir.rmdir()
     provider_dir = Path("/run/mano-provider")
     if provider_dir.exists():
         provider_dir.rmdir()

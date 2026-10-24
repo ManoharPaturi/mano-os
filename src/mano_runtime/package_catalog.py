@@ -1,5 +1,6 @@
 """Explicit Root-only offline catalog refresh; no download, package install or hooks."""
 
+import contextlib
 import email.parser
 import email.utils
 import fcntl
@@ -42,6 +43,7 @@ REPOS = (
     ),
 )
 ENV = {"PATH": "/usr/sbin:/usr/bin:/bin", "LANG": "C.UTF-8"}
+_RESERVED_LOCK = None
 
 
 def guard():
@@ -138,7 +140,17 @@ def signed_release(source, target, suite, now):
 
 
 def build():
+    with retention_slot():
+        return build_locked()
+
+
+@contextlib.contextmanager
+def retention_slot():
+    """Reserve one of the unchanged four catalog slots before package effects."""
+    global _RESERVED_LOCK
     guard()
+    if _RESERVED_LOCK is not None:
+        raise PermissionError('Catalog reservation cannot be nested')
     # Fixed paths only; never caller-supplied mirrors, shell commands or destinations.
     for directory in (BASE, BASE / "catalogs"):
         created = False
@@ -167,7 +179,13 @@ def build():
         ):
             raise ValueError("Unexpected package catalog lock custody")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return build_locked()
+        if len(list((BASE / 'catalogs').iterdir())) >= 4:
+            raise ValueError('Catalog retention exhausted; explicit operator retention required')
+        _RESERVED_LOCK = lock
+        try:
+            yield
+        finally:
+            _RESERVED_LOCK = None
     finally:
         os.close(lock)
 
@@ -183,6 +201,8 @@ def repository_prefix(suite, prefixes):
 
 
 def build_locked():
+    if _RESERVED_LOCK is None:
+        raise PermissionError('Owned catalog retention reservation required')
     if len(list((BASE / "catalogs").iterdir())) >= 4:
         raise ValueError("Catalog retention exhausted; explicit operator retention required")
     disk = os.statvfs(BASE)

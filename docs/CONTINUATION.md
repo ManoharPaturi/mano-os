@@ -1,3 +1,295 @@
+## Current source: report framing correction and synthetic policy experiment
+CI40066848533 atb3c50de ALL3SUCCESS. Artifact12549468984,13307876B,
+SHA d2ce4650e4b2d5659c517f06de180a3e71c1657e782c595208c7d1fb6e7e3070
+freshserverdigest/bytesverified: outputs/pr134-b3c50de-native-success.zip.
+FULL ACCEPTANCE FAILED: three fixed cooldown progress lines prefixed the intended
+broker-service.json. OriginalartifactJSONcontractinvalid; do not strip/normalize
+it toclaimfullacceptance. Framingreceiptpr134-b3c50de-broker-report-framing.json.
+CI-only cooldown print nowstderr; driverstrictly parses one JSONobject immediately
+after Broker probe succeeds, so this defect cannot leave that jobgreen again.
+Independent package-specific acceptance PASSED from unmodified ZIP: exactsigned
+payload/DB/fullplans, nativePythonROflag, actualStop, separateBrokerdeath,
+successfulCOMMITreplyloss, installed-runtime normalPAM apply/cancel. Receipt
+pr134-b3c50de-package-only-inspection.json. This is NOT full54hash/45flag/currentGUI
+acceptance. b3GUIimages NOT viewed; globalimagesstilloldd7. No mergeeligible.
+Prepared syntheticAppArmorprobe below also joins nexthead; no productionprofile
+or completeclosureclaim. Nativevalidation needed for both changes. Ruff/compile/
+shell/diff and both embedded-program compilechecksPASS; existing557tests48skips
+lastpassed before these CI-only edits. Watcher72120terminalfailure atstrictreport
+JSONparse; do notresume. Disk19GiB91percentWARNED, no deletion/large localdownload.
+
+## CI-only AppArmor path-mechanism experiment (native validation pending)
+Prior tested head b3c50de has terminal CI success but invalid report framing.
+New local scripts/probe_package_path_policy.py uses only synthetic fresh /run/
+mano-lab-path-policy files, never real interpreter/libraries/authority objects.
+CI-only AppArmor profile tests write/unlink/replace of protected synthetic Python
+alias, parent rename, hardlink writable alias, absent zip entry, chmod; ordinary
+new-file/rename/hardlink must still work; inherited child exec must stayconfined.
+Requires actualenforce label and checks fixture bytes/link/parents unchanged.
+Profile namedmano-package-path-policy-ci, no unconfinedexec or changeprofile rule.
+No production policy/confinement change and no completeclosureclaim. AppArmor
+package added ONLY to disposable guest setup; driver emits independentmechanism
+JSON BEFORE broker tests. Prior CI was allowed to finish; no cancellation/restart.
+Ruff/compile/shell/diff PASS; both embeddedfixedprograms compile, NOTexecutedonMac.
+Do not claim actual AppArmor support/enforcement until fresh nativeCI passes.
+Missing searchentries/symlinkaliases/loadercache/sharedELF/helpers/fullcompatibility
+remainunfinished. This mechanism experiment is groundwork, not substitute goal.
+Disk~19GiBfree91% WARNED again; no cleanup orlocalVM/modeldownloads.
+
+## CI fault-scenario spacing correction prepared
+CI40060316590 at7a6113b TERMINALFAILURE: Python boundary passed and actual package
+scenarios ran, but successful-COMMIT reply-loss restart hit Broker's unchanged
+StartLimitIntervalSec60/StartLimitBurst5. Journal shows multiple intentional suite
+restarts within60seconds, then "Start request repeated too quickly". Readywait20s
+cannot recover when no new restart scheduled. NOT a Python boundary failure.
+New CI-only fixture waits61seconds under latched Stop/empty package domain BEFORE
+creating any fresh grant/deadline; each independent scenario gets a full quiet
+start-limit window. Checks Broker remains same activePID and Stop stayslatched.
+No production unit/policy change, noreset-failed, no automatic action retry. This
+keeps default crash-loop protection and death/unknown assertions intact.
+Local557tests48skips/staticPASS. CorrectednativeCIrequired. Rawlog outputs/
+pr134-7a6113b-native-failure.log. Artifact12547418058 serverSHA
+b4f8fbc11b8d5f449cb34083e8caa97bc7ea52f1006fadea9397ad80d9db2fb5,2497692B.
+Two ZIPdownload attempts resetbyremote; NOT saved/byteverified/accepted. Do not
+claim fullnativeacceptance. Allwatchers terminal, noactiveexecsessions now.
+
+## Native Python write-probe correction
+CI40059764904 at5fb7bcf terminalFAILURE before package effects. The independent
+read-only filesystem flag passed; write-open on the executing Python ELF returned
+ETXTBSY(errno26), notEROFS. Native checker now always requires ST_RDONLY FIRST,
+then accepts ETXTBSY only for the exact executing /usr/bin/python3.13. Otherfile
+and newdirectory probes retain EROFS-only. Four regression tests reject treating
+busy alone as readonly, broadeningbusyexceptions, or substituting EACCES. No mount,
+capability, privilege or package boundary is relaxed. CorrectednativeCIrequired.
+Previous failure rawlog outputs/pr134-python-native-failure.log; artifact12546823432
+serverdigestadd2bb3ad49e80f87422f00bb9e84b7de1e08cfc31a41c288462ab12d4d16de3
+not downloaded/no ZIP verification claim. Prior watcher83707 terminal, noactive
+exec sessions aftervalidation completes. Full runtime closure remains unresolved.
+
+## Existing Python path protection prepared for native CI
+
+Current feature branch adds read-only bindings for Debian13's existing interpreter,
+stdlib, distribution Python modules, /usr/local, and existing /etc/python3* trees.
+Required paths must exist; the worker preflight checks read-only flags and actual
+write denial for interpreter open and EROFS for new module-directory creation. The Root parent
+requires existing_python_paths_readonly in the exact boundary frame. Two ordinary
+unit regressions check mount ordering/ancestry and mandatory-path refusal.
+This closes existing path overwrite routes only. Absent Python search-path entries,
+shared ELF libraries/loader configuration and full dependency closure remain
+unresolved. No complete-closure or merge-eligibility claim. Native validation pending.
+Local553tests48Linuxskips, Ruff/compile/shell/diff PASS.
+
+Prior d7e319931f96582e315d0776612e4c9217ab1963 CI40057602757 ALL3SUCCESS.
+Artifact12546940682 SHA6f3a48113f24535f9f428846e9e47f9c3084e5d347fb96d2e279136066b46783
+independently accepted:54hashes45flags plus full approved apply, payload, actual
+Stop, separate Broker-death drain, packaged native PAM apply and successful-COMMIT
+reply loss. Last proof observes completed Root record/raw DB while Broker executing,
+kills pinned Broker, verifies domain drainage without Stop, restartunknown/noreplay.
+Explicit CIadmin repair restores packages/APTmarks; no product auto-repair or
+all-effects reversal/current-installation claim. Six fresh d7 originals/four crops
+actually visually inspected; receipt outputs/acceptance-pr134-committed-reply/.
+After-stock pending numeric duration clips lastdigit; effective shows120.
+PR134 remains DRAFT/unmerged; no reviewer notifications. FullgoalACTIVE/incomplete.
+
+## Completed native interruption witnesses, catalog-capacity correction
+CI40010080992 terminalFAILURE later in packagedapply: four-catalog retentionfull.
+Artifact12527440273 SHAfbabe530c394940acd0e4792863570b75ff42df7bfdbda2f4cf78ae8f8e6a1ae
+verifiedZIPpr134-b8e9dae-native-failure.zip. IndependentStop andBrokerdeathwithout
+Stop proofs PASSED, rawunknown/intent/fullplan/caps/argv/DBcompared; receipts
+package-apply-stop-b8e9dae-inspection.json andpackage-apply-lost-reply-b8e9dae-
+inspection.json. AggregateCIstillFalse. Actualmappedinventory20controllerfiles
+19905296B and36outside/PID1files30582528B retained; diagnosticNOTprotection.
+Correction: CIadminrepair restoresoriginalAPTmarks atomicallyunderlocks; reuse
+onlyvalidatedcurrentcatalog insteadofspendingaslotonunchangedinputs. No history
+deletion orquotaweakening. ProductRootretention_slot holdsrefreshlockfrombefore
+acquisition tofinalcatalogpublish; fullfourcatalogsdeniedbeforeeffects. Native
+acceptancerequired. SharedtrustedruntimeclosureSTILLUNFIXED/fullgoalACTIVE.
+
+## Canonical mapped-handle names
+CI40004535234 TERMINALFAILURE before packagework: map_files/00400000-00420000
+ENOENT. Kernelprimarysource dname_to_vma_addr explicitlyrejectsleadingzeroes.
+Collector nowvalidatesbounded/increasinghexrange thenformats400000-420000.
+MappedFD/name/inode/hashchecksunchanged; nofallback/privilegeincrease. Two new
+regressions exactfailedrange andmalformed/path-likeinput; nativeCIstillrequired.
+
+## Inventory Btrfs identity correction
+CI40002396890 TERMINALFAILURE at before.st_dev==maps device in newcollector,
+before native packagework. Kernelprimarysource confirms maps uses s_dev but
+Btrfsstat uses rootanon_dev. Correct collector opens kernel map_files handle,
+checks fstat against namedfile andmapsinode, thenhashes actualmappedFD; records
+bothdevnumbers. Rechecks everymapping/role, failschanged/differentinode. Noextra
+capability/permission/probe bypass. Ordinaryunprivileged3regressiontests pass;
+newnativeBtrfs acceptance required. TrustedruntimeclosurestillNOTprotected.
+
+## f4ac43e native result and TTY fixture correction
+
+CI40000069898 FAILED after actualStop/restart/replay-denial/CI-admin database
+repair checks, at directrecovery.create(): trustedRootcontrollingTTYrequired.
+Correction uses terminal(('create',)) withrealRootPTY, no guardweakening.
+Native systemdROpreflight+signedcowpayload independentlyPASSED; partialreceipt
+outputs/pr134-f4ac43e-partial-inspection.json, artifact12522132167 SHA
+ca8b3e49c53ff27ea1a51be97369803021017bc1a826adaa990f6e291aa44ac1.
+CompleteStopwitness/packagedapply NOTaccepted. Newprogressartifactwrittenbefore
+CIadminrepair. NewCI-onlymappedfilecollector: constrainedcontrollerself only;
+outsideRootCIobserverseparatelyreadsPID1/self. No productionptracecapabilityadded,
+no processmemory/credentials; incompleteinventoryNOTfulltrustedclosureproof.
+Sharedruntimeclosurefindingstillunfixed, fullgoalACTIVE/incomplete.
+
+## Current correction: full signed sl dependency solution
+
+CI39997472282 FAILED before actualStop: fixture incorrectly expected onechange;
+realplan adds sl ANDlibncurses6. Preserve actualdependencytest, don'tpreinstalllib.
+Stop fixture now validates allfresh changes in fixedsl/libncurses6 testset, checks
+allcachedsignedarchives, CI-admin repairs/purges entireapprovedfreshset, compares
+alloriginalpackageversions/states, explicitcatalogrefreshbeforeeachscenario.
+Packagedfixture+independentchecks handle fullplan too. Include preparedsystemdRO
+fixinnewhead; newnativeCI required. Priorcowpayload independentlyPASSED from
+artifact12520584032 SHA5eacc5be6b994a3c0f81eb0aa49a97bf695db1f1dd0fb3e0741289e0a1a78504;
+this doesn't acceptStop/packaged/aggregateCI. FullgoalACTIVE/incomplete.
+
+## Prepared local systemd protection fix (NOT YET PUSHED)
+
+While CI39997472282 runs at1f81e0c, tracked local changes protect complete
+/etc/systemd and /usr/lib/systemd trees RO, including new override names. Native
+preflight requires readonly statvfs and actual EROFS from mkdir freshnames in
+parent/systemdirs; adds strict trusted_service_configuration_readonly witness.
+Parent exactschema, framingfixture, and regressiontest updated. /usr/sbin mano-*
+wrappers nowprotected. Approval view says serviceconfiguration changes disallowed.
+Unit compatibility remains unfinished; do not weaken infrastructure for green.
+Need update independentaccept_package_apply.py flag set for nexthead AFTER
+currenthead native inspection (don't accidentally reject currenthead's oldschema).
+Targeted13testsPASS; full542tests/48Linuxskips+Ruff/compile/shell/diffPASS.
+Regression fails currentCI sandbox construction, passes preparedfix. Keep currentCI fixed until
+firstnativeoutcome, then include fixes+any actualfailurecorrection in nextpush.
+
+## Independent Broker-death interruption fixture (native validation pending)
+
+The actual-dpkg fixture now has two faults: native Stop, and pinned SIGKILL of
+frozen Broker while Root controller/dpkg/launcher stay frozen. The second must
+drain via production BindsTo without nativeStopgeneration changing, preserve
+unknown after Broker restart, and refuse replay. Both use explicit CI-admin
+same-signed-sl repair/purge plus typedRootTTY acknowledgement; neither claims
+product automatic repair or all-effects reversal. New artifact package-apply-lost-
+reply.json exported. Successful-commit reply loss remains separately unverified.
+
+## Additional packaged apply fixture (native acceptance pending)
+
+Current local follow-up requires actual --unpack argv (not any dpkg query),
+exports unknown/intent and full database comparison for independent acceptance,
+and tolerates only helpers that exit and leave final cgroup membership before
+freeze. New probe_packaged_apply.py uses installed SDK/native human TTY/PAM
+(including cancellation), signed sl apply on btrfs after real .deb install, before
+existing reinstall/removal checks. Retires only checkpoint metadata explicitly;
+never deletes snapshots or claims automatic repair/all-effects rollback.
+New native CI is mandatory; local checks do not establish these runtime claims.
+
+## PR134 payload and actual-dpkg interruption fixtures (2026-10-23)
+
+Base implementation bd7aa20 CI39991219242 completed all three jobs SUCCESS;
+independent full acceptance54hashes/45flags+approved apply passed. Six fresh GUI
+originals and four numeric crops viewed; after-stock pending clips final digit.
+Receipts in workspace outputs/pr134-full-acceptance.json and acceptance-pr134/.
+New fixture adds signed archive vs installed cowsay bytes/mode/UID comparison.
+New scripts/probe_package_apply_stop.py (CI-only, not shipped) observes real dpkg,
+freezes Root package controller/all members+Broker/launcher, invokes native Stop,
+requires drained domain/dead pidfds, restart unknown/no replay, explicit narrow
+CI-admin signed sl repair/purge, and Root-TTY acknowledge/metadata retirement.
+No product automatic repair or all-effects-reversed claim. Controller reply lost
+with Stop is distinct from independent lost reply. Native validation pending for
+these new changes; PR remains draft. Full v2.1 phases0-7 remain active/incomplete.
+
+# CI8GiB fixture guard correction
+
+9903ebb run39901316581 failed during migration, before Root/APT execution.
+Initial normal Snapper warning was misleading: artifact snapper.txt/mounts.json/
+memory-before.txt prove exact sentinel restore and guest setup passed. Actual
+failure: migrate_btrfs_root.sh exact blank-device guard still expected6442450944
+bytes after image grew8GiB. Change guard to exact8589934592; keepblank/unmounted/
+disposable checks. Rawlogoutputs/pr134-8g-native-failure.log; smallartifact
+pr134-8g-prepare-failure.zip. No recoveryprobe or productreserve relaxation.
+PR123 MERGED65fdfc0; postmain39902326558 live. Merge origin/main CODEOWNERS into
+134 before nextCI. Fullapplynativevalidation still pending, remainsDRAFT.
+
+# Latest: CI capacity denial identified; approved-apply evidence expanded
+
+PR134 remains DRAFT. bef95ec run39899264546 failed BEFORE acquisition/install:
+Root space-reserve diagnostic available2101223424 < required2147599228 bytes.
+No layout-policy or reserve bypass. Disposable CI root qcow2 grows6G->8G so
+retained recovery snapshots and unchanged2GiB reserve fit. No local VM assets.
+Previous eccde72 APT initialization correction remains native-unproven because
+this capacity denial occurs first. Raw log outputs/pr134-space-diagnostic-failure.log.
+
+New fixture captures/exports full raw dpkg databases before/after approved apply
+and the exact approved request. Outside independent checker compares all package
+states/versions, plan/request digests, bounded acquisition and namespace witnesses.
+Synthetic checker positive+6 altered-case negatives passed; NOT native proof.
+Universal acceptance now has --package-apply; new proof/Stop/restart/lostack and
+packaged lifecycle still required before merge. All prior gates remain.
+
+PR123 CODEOWNERS explicitly authorized for admin review override by user; fresh
+head453b01b7d72121245aa27360d6bdd5848b666f64 CI39899110758 qualitySUCCESS,
+security-lab live. Poll same handle; do not merge until all CI and artifacts pass.
+Base/main542b926cd67c9f4fba56c20bd09b2b845d676ea1 contains external README PR135.
+No reviewer notifications or protection changes. Latest disk25GiB/88%;3untracked
+unrelated duplicate files preserved. Goal active, full original scope incomplete.
+
+--- Historical implementation notes ---
+
+# Native apply fixture now wired; draft remains unvalidated
+
+Local534tests48Linuxskips +staticchecks pass after wiring the actual btrfs
+publicSDK/nativePAM/Root service fixture. Prior draft head78ad23b CI39891652319
+qualitySUCCESS (including new native C guard compilation); security-lab live.
+New fixture goes immediately after the existing readonly package plan witness.
+It shares that existing task/resource to avoid increasing live-resource quotas.
+Operator Root controlling-PTY acknowledges fixtureunknown14 against originalA,
+archives coherentB metadata without snapshot deletion, then forecasts cowsay,
+preserves one fixture cache archive in a holdingdir to force bounded real HTTPS,
+rejects private-socket untrustedUID +forecastgrant +wrongPAMpassword, obtainsfresh
+nativePAM apply approval, runspublicSDK, requiresactualinstallation/newcatalog/
+namespaceboundary/emptyRootStopdomain/scopedreceipt/replay-noeffect/unknownkept.
+
+Source fixture now compiles/installs guard+new private socket/unit and cleansonly
+those fixture-owned resources. Parent unit cannot add a mount within /usr because
+recovery.layout rejects split critical trees; module capability remains absent,
+and child native guard denies module syscalls. Archive offsets reset beforebwrap.
+Acquisition receipt nowrecords actual network-used/downloadedSHA/bytes. Rootworker
+host workspaces masked. This native proof has NOT run on the new head yet.
+DO NOT merge or claim validated privileged execution before it and allgatespass.
+
+# Current: approved package apply integration DRAFT
+
+Base/main800b72a1f29340495d5c0add3aeda2fd9ff25d89 PR133; exact post-main
+run39830257817 VERIFIED all3SUCCESS. Branch feat/approved-package-apply contains
+new protocol/native approval + Broker scheduler + private Root transaction +
+fixed APT worker/native seccomp guard + operator acknowledgement/retirement.
+ADR0116 explicitly lists native validation still required. Local534tests with
+48Linux-only skips and Ruff/compile/shell/diff pass. Native C not compiled or
+executed on Mac; all Root/VM execution remains CI-only. No paid/key operations.
+
+This branch must stay DRAFT/unmerged until real btrfs Broker/PAM/Root positive,
+namespace/Stop/cancel/lost-ack/packaging evidence is accepted. Do not equate baseline
+CI or unit mocks with privileged execution proof. No new Root grant issuer:
+Broker is trusted authority, fresh separate native apply approval mandatory.
+No model paths/commands/env, no profile auto-approval, no retry on unknown.
+
+Native fixture integration next: probe_broker_service.py runs AFTER actual Root
+recovery, so btrfs Snapper storage already exists but unknown attempt14 blocks
+new effects. In the existing disposable Root controlling-PTY harness explicitly
+acknowledge attempt14 against original checkpointA (preserve unknown), explicitly
+retire coherent checkpointB metadata to free an active slot (retain snapshot),
+then run the real public SDK forecast/fresh native PAM apply of cowsay and verify
+full effects/new catalog/scoped receipt/replay denial. Existing readonly forecast
+witnesses must keep their no-effect claims. Use a separate apply witness. Compile
+and install the new guard and socket/unit in the existing source native fixture;
+clean only those fixture-owned files. Keep all previous Root recovery artifacts
+as historical observations. Do not delete/reset attempts or relax quota/CI.
+
+Three unrelated duplicate-suffix ' 2' files remain untracked; stage only intended
+paths. No Root work or VM/model downloads on Mac. Full goal ACTIVE/incomplete.
+
+## Historical notes (superseded where above differs)
+
 # PR133 native dependency-set correction
 
 Initial b911bf3 CI39825969416 failed before effects: fixture assumed exactly one

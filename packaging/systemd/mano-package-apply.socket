@@ -1,0 +1,17 @@
+[Unit]
+Description=mano Broker-only privileged package transaction socket
+
+[Socket]
+ListenSequentialPacket=/run/mano-package-apply/request.sock
+SocketUser=root
+SocketGroup=mano-broker
+SocketMode=0660
+DirectoryMode=0755
+PassCredentials=yes
+Accept=yes
+MaxConnections=1
+Backlog=1
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

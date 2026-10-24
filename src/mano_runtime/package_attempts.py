@@ -147,16 +147,7 @@ def begin_locked(attempt_id, request_sha256, recovery_id):
         sync(BASE.parent)
     except FileExistsError:
         pass
-    existing = inventory()
-    if attempt_id in existing:
-        raise FileExistsError("Package attempt ID is already reserved")
-    if len(existing) >= MAX_ATTEMPTS:
-        raise ValueError("Package attempt retention needs operator review")
-    for prior in existing:
-        previous = BASE / prior
-        if {p.name for p in previous.iterdir()} != {"intent.json", "verified.json"}:
-            raise ValueError("Unresolved package attempt requires operator recovery")
-        verified_record(previous / "verified.json", record(previous / "intent.json"))
+    ensure_available_locked(attempt_id)
     directory = BASE / attempt_id
     directory.mkdir(mode=0o700)  # Never reuse an ID after a lost acknowledgement.
     sync(BASE)
@@ -194,6 +185,7 @@ def reconcile():
                 {"intent.json"},
                 {"intent.json", "unknown.json"},
                 {"intent.json", "verified.json"},
+                {"intent.json", "unknown.json", "operator.json"},
             ):
                 raise ValueError("Incomplete or foreign package attempt files; inspect custody")
             intent = record(directory / "intent.json")
@@ -232,7 +224,12 @@ def reconcile():
                 "[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}", observed
             ):
                 raise ValueError("Invalid reconciliation boot identity")
-            results.append(dict(intent=intent, outcome=outcome))
+            item = dict(intent=intent, outcome=outcome)
+            if (directory / 'operator.json').exists() or (directory / 'operator.json').is_symlink():
+                from mano_runtime.package_operator import resolution
+
+                item['operator_resolution'] = resolution(directory, intent)
+            results.append(item)
         return results
 
 
@@ -314,3 +311,29 @@ def complete_locked(attempt_id, request_sha256, plan):
                  postconditions=proof)
     recovery.save(directory / "verified.json", value)
     return verified_record(directory / "verified.json", intent)
+
+
+def ensure_available_locked(attempt_id):
+    """Check history before acquisition/checkpoint effects; no retry or data deletion."""
+    guard()
+    recovery.require_locked()
+    identifier(attempt_id)
+    if not BASE.exists() and not BASE.is_symlink():
+        return
+    existing = inventory()
+    if attempt_id in existing:
+        raise FileExistsError('Package attempt ID is already reserved')
+    if len(existing) >= MAX_ATTEMPTS:
+        raise ValueError('Package attempt retention needs operator review')
+    for prior in existing:
+        directory = BASE / prior
+        files = {p.name for p in directory.iterdir()}
+        intent = record(directory / 'intent.json')
+        if files == {'intent.json', 'verified.json'}:
+            verified_record(directory / 'verified.json', intent)
+        elif files == {'intent.json', 'unknown.json', 'operator.json'}:
+            from mano_runtime.package_operator import resolution
+
+            resolution(directory, intent)
+        else:
+            raise ValueError('Unresolved package attempt requires operator recovery')

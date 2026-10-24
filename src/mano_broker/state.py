@@ -382,6 +382,20 @@ class State:
             from .package_catalog import validate as validate_packages
 
             validate_packages(request)
+            if request.capability == Capability.PACKAGE_APPLY:
+                from .package_apply import validate as validate_apply
+
+                validate_apply(self, request, caller_uid=caller_uid, boot_id=boot_id)
+                origin = self.db.execute("SELECT view_json FROM approvals "
+                    "WHERE grant_id=? AND state='approved'", (request.grant_id,)).fetchone()
+                if origin is None:
+                    raise Denied('Package apply requires a distinct fresh native approval')
+                view = json.loads(origin['view_json'])
+                if (view['capability'] != request.capability.value
+                        or canonical(view['args']) != request.args_json
+                        or view['task_id'] != request.task_id
+                        or view['resource_id'] != request.resource_id):
+                    raise Denied('Native package approval scope differs')
             # All profiles retain the same boundaries. Network, external effects,
             # devices, credentials and host-system mutation have no capability here.
             action_id = secrets.token_hex(16)

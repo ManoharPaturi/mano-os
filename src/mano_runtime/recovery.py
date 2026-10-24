@@ -338,7 +338,10 @@ def create_locked():
 def recovery_record(identifier):
     if not re.fullmatch("[a-f0-9]{32}", identifier):
         raise ValueError("Exact recovery ID required")
-    value = json.loads(read(BASE / (identifier + ".json"), 16384), object_pairs_hook=unique_object)
+    path = BASE / (identifier + '.json')
+    if not path.exists() and not path.is_symlink():
+        path = BASE / 'retired' / path.name
+    value = json.loads(read(path, 16384), object_pairs_hook=unique_object)
     if (
         value["recovery_id"] != identifier
         or value["snapshot_read_only"] is not True
@@ -470,9 +473,23 @@ def main():
     sub.add_parser("create")
     prepare_parser = sub.add_parser("prepare-boot")
     prepare_parser.add_argument("recovery_id")
+    acknowledge_parser = sub.add_parser('acknowledge-attempt')
+    acknowledge_parser.add_argument('attempt_id')
+    acknowledge_parser.add_argument('recovery_id')
+    retire_parser = sub.add_parser('retire-checkpoint')
+    retire_parser.add_argument('recovery_id')
     args = parser.parse_args()
     try:
-        value = create() if args.operation == "create" else prepare(args.recovery_id)
+        if args.operation == 'acknowledge-attempt':
+            from mano_runtime.package_operator import acknowledge
+
+            value = acknowledge(args.attempt_id, args.recovery_id)
+        elif args.operation == 'retire-checkpoint':
+            from mano_runtime.package_operator import retire
+
+            value = retire(args.recovery_id)
+        else:
+            value = create() if args.operation == "create" else prepare(args.recovery_id)
     except subprocess.CalledProcessError as error:
         # Fixed tools report bounded diagnostics to the explicit Root terminal;
         # never exposed through a task/model endpoint or privileged service log.
