@@ -1,3 +1,20 @@
+## CI fault-scenario spacing correction prepared
+CI40060316590 at7a6113b TERMINALFAILURE: Python boundary passed and actual package
+scenarios ran, but successful-COMMIT reply-loss restart hit Broker's unchanged
+StartLimitIntervalSec60/StartLimitBurst5. Journal shows multiple intentional suite
+restarts within60seconds, then "Start request repeated too quickly". Readywait20s
+cannot recover when no new restart scheduled. NOT a Python boundary failure.
+New CI-only fixture waits61seconds under latched Stop/empty package domain BEFORE
+creating any fresh grant/deadline; each independent scenario gets a full quiet
+start-limit window. Checks Broker remains same activePID and Stop stayslatched.
+No production unit/policy change, noreset-failed, no automatic action retry. This
+keeps default crash-loop protection and death/unknown assertions intact.
+Local557tests48skips/staticPASS. CorrectednativeCIrequired. Rawlog outputs/
+pr134-7a6113b-native-failure.log. Artifact12547418058 serverSHA
+b4f8fbc11b8d5f449cb34083e8caa97bc7ea52f1006fadea9397ad80d9db2fb5,2497692B.
+Two ZIPdownload attempts resetbyremote; NOT saved/byteverified/accepted. Do not
+claim fullnativeacceptance. Allwatchers terminal, noactiveexecsessions now.
+
 ## Native Python write-probe correction
 CI40059764904 at5fb7bcf terminalFAILURE before package effects. The independent
 read-only filesystem flag passed; write-open on the executing Python ELF returned

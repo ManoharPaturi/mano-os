@@ -102,6 +102,21 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fau
     from mano_runtime.package_operator import ACK, RETIRE
 
     assert snapshot().latched and empty()
+    # These independent scenarios deliberately kill/restart the Broker. Do not
+    # let preceding CI faults consume the production five-start/60-second budget
+    # of this scenario. Wait out that window while Stop is latched, BEFORE any
+    # new grant/approval/deadline. Never reset-failed or relax the service limit.
+    broker_before_cooldown = ready()
+    cooldown = time.monotonic() + 61
+    print('CI package fault cooldown: native Stop latched; preserving Broker start limit',
+          flush=True)
+    while True:
+        remaining = cooldown - time.monotonic()
+        if remaining <= 0:
+            break
+        assert snapshot().latched and empty()
+        time.sleep(min(1, remaining))
+    assert snapshot().latched and empty() and ready() == broker_before_cooldown
     view = human(dict(mode="rearm_view"))["view"]
     assert human(dict(mode="rearm_confirm", view=view, password=password))["ok"]
     generation = snapshot().generation

@@ -252,3 +252,13 @@ successful-commit reply-loss fixture has separately passed CI40057602757 and
 independent full database/record inspection; explicit administrator repair does
 not turn its preserved completion record into current installation verification.
 PR134 remains draft until the remaining runtime/compatibility gates pass.
+
+
+CI40060316590 passed the corrected Python boundary and reached the successful
+commit reply-loss fault. Repeated deliberate suite restarts then exhausted the
+unchanged Broker start limit (five starts per 60 seconds), preventing its expected
+restart. The CI-only package-fault fixture now waits a full 61-second quiet window
+with native Stop latched and the package domain empty before new approvals or
+execution deadlines exist. It checks the Broker stays active with the same PID.
+This preserves production crash-loop protection; no limit reset, unit relaxation
+or action replay is added. The spaced scenarios require a fresh successful run.
