@@ -262,3 +262,42 @@ with native Stop latched and the package domain empty before new approvals or
 execution deadlines exist. It checks the Broker stays active with the same PID.
 This preserves production crash-loop protection; no limit reset, unit relaxation
 or action replay is added. The spaced scenarios require a fresh successful run.
+
+
+A separate CI-only path-policy experiment is prepared for the next native run.
+It confines fixed Python probes under an AppArmor profile over fresh synthetic
+/run files, testing symlink unlink/replacement, parent-directory rename, hard-link
+aliases, absent search entries, mode changes and inherited child execution.
+Ordinary sibling creation/rename/hard-link operations must continue to work. This
+is not a production package profile or a complete runtime closure. No real system
+interpreter, library or authority record is an attack target. A successful native
+mechanism result is required before integrating the policy into package execution.
+
+Debian's AppArmor policy reference documents that file write permission controls
+unlink, while directory write permission is not required just to create/rename
+entries inside it. Link-subset rules prevent a new hard-link path from granting
+more permissions than the original target. These are useful mechanisms for
+protecting path names which read-only file bind mounts alone do not cover; their
+actual integration and adversarial coverage remain unproven here.
+
+References:
+- https://manpages.debian.org/trixie/apparmor/apparmor.d.5.en.html
+- https://docs.kernel.org/admin-guide/LSM/apparmor.html
+
+Systemd's AppArmorProfile setting can be ignored when AppArmor is disabled, so
+future product integration must check actual kernel enforcement and process label;
+a configured unit property alone is insufficient evidence. No product unit setting
+is added by this synthetic experiment.
+- https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#AppArmorProfile=
+
+
+At b3c50de, all three CI jobs passed, but strict independent acceptance rejected
+broker-service.json because the cooldown diagnostic had been printed to stdout.
+That diagnostic now goes to stderr. The CI driver parses the Broker report as one
+JSON object immediately after successful execution. The original artifact is
+preserved unchanged and is not accepted by stripping its prefix. Separate
+package-specific inspection did verify the native Python boundary, payload and
+complete database/Stop/Broker-death/commit-reply-loss/installed-runtime apply
+witnesses, which remain narrower evidence than complete artifact acceptance.
+A fresh native run must verify clean report framing and the synthetic path-policy
+experiment before either change is accepted.

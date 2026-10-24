@@ -196,6 +196,10 @@ cmp "$repo_root/evidence/bootstrap-preserved-before.sha256" \
 if [ "$result" = 0 ]; then
   PYTHONPATH="$repo_root/src" python3 "$repo_root/scripts/audit_phase0.py" \
     --evidence "$repo_root/evidence"
+  # Synthetic pathname-policy experiment only; no production profile is loaded.
+  ssh "${ssh_opts[@]}" lab@127.0.0.1 \
+    'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_package_path_policy.py' \
+    > "$repo_root/evidence/package-path-policy-mechanism.json"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo env PYTHONPATH=/opt/mano-lab/src python3 /opt/mano-lab/scripts/probe_broker_state.py' \
     > "$repo_root/evidence/broker-state.json"
@@ -214,6 +218,16 @@ if [ "$result" = 0 ]; then
       'sudo tar -cf - -C /opt/mano-lab/evidence .' | tar -xf - -C "$repo_root/evidence"
     exit "$broker_result"
   fi
+  # Progress belongs on stderr. A successful probe must emit one JSON object,
+  # rather than letting a later independent acceptance discover broken framing.
+  python3 - "$repo_root/evidence/broker-service.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+if not isinstance(json.loads(Path(sys.argv[1]).read_text()), dict):
+    raise SystemExit('Broker probe must emit one JSON object')
+PY
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \
     'sudo tar -cf - -C /opt/mano-lab/evidence live-human-permissions.json live-permissions-pending.png live-permissions-effective.png live-human-driver.txt live-human-sway.txt mcp-discovery.json package-plans.json package-sandbox-setup.json package-apply.json package-apply-before-status package-apply-after-status package-apply-signed.deb package-apply-installed-cowsay package-apply-stop.json package-apply-lost-reply.json package-commit-reply-loss.json package-commit-reply-before-status package-commit-reply-after-status git-workspace-checkpoint.json git-workspace-checkpoint.tar' | tar -xf - -C "$repo_root/evidence"
   ssh "${ssh_opts[@]}" lab@127.0.0.1 \

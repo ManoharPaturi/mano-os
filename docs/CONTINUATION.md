@@ -1,3 +1,41 @@
+## Current source: report framing correction and synthetic policy experiment
+CI40066848533 atb3c50de ALL3SUCCESS. Artifact12549468984,13307876B,
+SHA d2ce4650e4b2d5659c517f06de180a3e71c1657e782c595208c7d1fb6e7e3070
+freshserverdigest/bytesverified: outputs/pr134-b3c50de-native-success.zip.
+FULL ACCEPTANCE FAILED: three fixed cooldown progress lines prefixed the intended
+broker-service.json. OriginalartifactJSONcontractinvalid; do not strip/normalize
+it toclaimfullacceptance. Framingreceiptpr134-b3c50de-broker-report-framing.json.
+CI-only cooldown print nowstderr; driverstrictly parses one JSONobject immediately
+after Broker probe succeeds, so this defect cannot leave that jobgreen again.
+Independent package-specific acceptance PASSED from unmodified ZIP: exactsigned
+payload/DB/fullplans, nativePythonROflag, actualStop, separateBrokerdeath,
+successfulCOMMITreplyloss, installed-runtime normalPAM apply/cancel. Receipt
+pr134-b3c50de-package-only-inspection.json. This is NOT full54hash/45flag/currentGUI
+acceptance. b3GUIimages NOT viewed; globalimagesstilloldd7. No mergeeligible.
+Prepared syntheticAppArmorprobe below also joins nexthead; no productionprofile
+or completeclosureclaim. Nativevalidation needed for both changes. Ruff/compile/
+shell/diff and both embedded-program compilechecksPASS; existing557tests48skips
+lastpassed before these CI-only edits. Watcher72120terminalfailure atstrictreport
+JSONparse; do notresume. Disk19GiB91percentWARNED, no deletion/large localdownload.
+
+## CI-only AppArmor path-mechanism experiment (native validation pending)
+Prior tested head b3c50de has terminal CI success but invalid report framing.
+New local scripts/probe_package_path_policy.py uses only synthetic fresh /run/
+mano-lab-path-policy files, never real interpreter/libraries/authority objects.
+CI-only AppArmor profile tests write/unlink/replace of protected synthetic Python
+alias, parent rename, hardlink writable alias, absent zip entry, chmod; ordinary
+new-file/rename/hardlink must still work; inherited child exec must stayconfined.
+Requires actualenforce label and checks fixture bytes/link/parents unchanged.
+Profile namedmano-package-path-policy-ci, no unconfinedexec or changeprofile rule.
+No production policy/confinement change and no completeclosureclaim. AppArmor
+package added ONLY to disposable guest setup; driver emits independentmechanism
+JSON BEFORE broker tests. Prior CI was allowed to finish; no cancellation/restart.
+Ruff/compile/shell/diff PASS; both embeddedfixedprograms compile, NOTexecutedonMac.
+Do not claim actual AppArmor support/enforcement until fresh nativeCI passes.
+Missing searchentries/symlinkaliases/loadercache/sharedELF/helpers/fullcompatibility
+remainunfinished. This mechanism experiment is groundwork, not substitute goal.
+Disk~19GiBfree91% WARNED again; no cleanup orlocalVM/modeldownloads.
+
 ## CI fault-scenario spacing correction prepared
 CI40060316590 at7a6113b TERMINALFAILURE: Python boundary passed and actual package
 scenarios ran, but successful-COMMIT reply-loss restart hit Broker's unchanged

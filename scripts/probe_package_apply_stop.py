@@ -6,6 +6,7 @@ import os
 import select
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -109,7 +110,7 @@ def run(rpc, human, identity, password, ready, launcher_pid, stop_client, *, fau
     broker_before_cooldown = ready()
     cooldown = time.monotonic() + 61
     print('CI package fault cooldown: native Stop latched; preserving Broker start limit',
-          flush=True)
+          file=sys.stderr, flush=True)
     while True:
         remaining = cooldown - time.monotonic()
         if remaining <= 0:
