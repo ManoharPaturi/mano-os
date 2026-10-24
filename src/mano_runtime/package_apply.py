@@ -21,6 +21,8 @@ from mano_protocol.packages import result_digest
 from mano_protocol.stop_state import snapshot
 from mano_protocol.transport import receive
 from mano_runtime import package_archives, package_attempts, package_catalog, package_logs, recovery
+from mano_runtime.package_python import OPTIONAL as PYTHON_OPTIONAL
+from mano_runtime.package_python import REQUIRED as PYTHON_REQUIRED
 from mano_runtime.package_resolution import current_plan, expected
 
 SOCKET = '/run/mano-package-apply/request.sock'
@@ -210,6 +212,17 @@ def sandbox(archives, body):
     for path in ('/etc/systemd', '/usr/lib/systemd'):
         if Path(path).exists():
             argv += ['--ro-bind', path, path]
+    # Pin complete existing module trees, including new names within them.
+    # /usr and /usr/lib are mount anchors above these descendants. The fixed
+    # Debian interpreter is mandatory: missing it must not silently omit a bind.
+    # This does not yet protect absent zip search entries or shared ELF loaders.
+    for path in PYTHON_REQUIRED:
+        if not Path(path).exists():
+            raise PermissionError('Required Debian Python runtime path absent')
+        argv += ['--ro-bind', path, path]
+    for path in PYTHON_OPTIONAL:
+        if Path(path).exists():
+            argv += ['--ro-bind', path, path]
     for path in ('/etc/shadow', '/etc/gshadow', '/etc/shadow-', '/etc/gshadow-',
                  '/etc/ld.so.preload'):
         if Path(path).exists():
@@ -342,7 +355,7 @@ def _run_child(plan, archives, body, broker_fd, emit):
                                 'capabilities', 'network', 'protected-objects', 'secrets',
                                 'mount-ancestry', 'runtime-infrastructure', 'credential-mask',
                                 'runtime-tmpfs', 'approval-ipc', 'thread-creation',
-                                'service-configuration'}:
+                                'service-configuration', 'existing-python-paths'}:
                             diagnostic['check'] = detail['check']
                             state = detail.get('kernel_state')
                             allowed = {'pid', 'NoNewPrivs', 'Seccomp', 'CapEff', 'CapPrm',
@@ -351,7 +364,7 @@ def _run_child(plan, archives, body, broker_fd, emit):
                                        'credential_size', 'credential_regular',
                                        'credential_readonly', 'credential_matches_asset',
                                        'runtime_mounts', 'service_directory_index',
-                                       'service_directory_readonly'}
+                                       'service_directory_readonly', 'python_path_index'}
                             if (isinstance(state, dict) and set(state) <= allowed and
                                     all(type(v) is int and 0 <= v < 2**64
                                         for v in state.values())):
@@ -369,7 +382,7 @@ def _run_child(plan, archives, body, broker_fd, emit):
                   'host_shadow_hidden', 'approval_ipc_hidden', 'protected_ancestors_mounted',
                   'no_new_privileges', 'seccomp_active', 'native_stop_authority_readonly',
                   'runtime_infrastructure_readonly', 'ordinary_thread_creation',
-                  'trusted_service_configuration_readonly'}
+                  'trusted_service_configuration_readonly', 'existing_python_paths_readonly'}
         caps = {'CapEff', 'CapPrm', 'CapInh', 'CapBnd', 'CapAmb'}
         if (set(witness) != fields | {'namespaces', 'capabilities', 'securebits', 'run_device'}
                 or any(witness[key] is not True for key in fields)

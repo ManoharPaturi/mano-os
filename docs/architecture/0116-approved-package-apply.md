@@ -1,4 +1,4 @@
-# Approved package apply integration (draft; interruption validation pending)
+# Approved package apply integration (draft; runtime protection incomplete)
 
 packages.apply_install is distinct from the read-only packages.plan_install
 capability. Its only arguments are an owned forecast action ID and exact plan
@@ -229,3 +229,23 @@ is then historical; it does not assert that the installation is still present or
 all payload effects were reversed. It uses no production pause hook, journal
 editing, extra service capability or automatic retry. This fixture is prepared
 locally and still requires exact-head native validation before any claim.
+
+
+Existing Debian Python path protection now binds the mandatory interpreter
+/usr/bin/python3.13, /usr/lib/python3.13, /usr/lib/python3 and /usr/local read-only,
+as well as existing /etc/python3 and /etc/python3.13 directories. Mount anchors
+prevent substitution of the directories above these binds. Missing required paths
+refuse namespace construction. Before package effects, the constrained worker
+requires read-only filesystem flags and EROFS from interpreter write-open and
+fresh directory creation in every protected module tree. The authenticated Root
+parent requires the new exact boundary flag. Upgrading these protected runtime
+paths requires a separately mediated runtime update; package scripts cannot relax
+these mounts. Native compatibility evidence for this change is pending.
+
+This protects existing paths, not a complete trusted execution closure. Missing
+Python zip search entries, shared ELF dependencies, dynamic loader configuration
+and helper dependencies still need protection and adversarial validation. The
+successful-commit reply-loss fixture has separately passed CI40057602757 and
+independent full database/record inspection; explicit administrator repair does
+not turn its preserved completion record into current installation verification.
+PR134 remains draft until the remaining runtime/compatibility gates pass.

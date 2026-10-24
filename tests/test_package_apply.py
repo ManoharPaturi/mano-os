@@ -100,7 +100,8 @@ class RootApplyAdmissionTests(unittest.TestCase):
             'cgroup_control_readonly', 'host_shadow_hidden', 'approval_ipc_hidden',
             'protected_ancestors_mounted', 'no_new_privileges', 'seccomp_active',
             'native_stop_authority_readonly', 'runtime_infrastructure_readonly',
-            'ordinary_thread_creation', 'trusted_service_configuration_readonly'), True)
+            'ordinary_thread_creation', 'trusted_service_configuration_readonly',
+            'existing_python_paths_readonly'), True)
         witness['namespaces'] = {kind: kind + ':[123]' for kind in
                                 ('mnt', 'net', 'ipc', 'pid', 'cgroup')}
         witness['capabilities'] = dict.fromkeys(('CapEff', 'CapPrm', 'CapInh',
@@ -237,3 +238,29 @@ class PackageNativeAuthorityTests(unittest.TestCase):
         self.assertIn(['--ro-bind', '/usr/sbin/mano-runtime-setup',
                        '/usr/sbin/mano-runtime-setup'],
                       [argv[index:index+3] for index in range(len(argv) - 2)])
+
+    def test_python_trees_cannot_be_shadowed_by_later_writable_mounts(self):
+        # Command construction only. Native EROFS checks run in disposable CI.
+        with patch.object(root.Path, 'exists', return_value=True), \
+                patch.object(root.Path, 'glob', return_value=[]):
+            argv = root.sandbox([], dict(native_generation=3, expires=130))
+        for path in (*root.PYTHON_REQUIRED, *root.PYTHON_OPTIONAL):
+            index = next(i for i in range(len(argv) - 2)
+                         if argv[i:i+3] == ['--ro-bind', path, path])
+            for i in range(index + 3, len(argv) - 2):
+                if argv[i] == '--bind':
+                    self.assertFalse(argv[i+2] == path or argv[i+2].startswith(path + '/'))
+        # Ancestors must be distinct mount points, so renaming an ancestor cannot
+        # substitute the directory containing a protected interpreter/module tree.
+        for path in ('/usr', '/usr/bin', '/usr/lib'):
+            self.assertIn(['--bind', path, path],
+                          [argv[i:i+3] for i in range(len(argv) - 2)])
+
+    def test_missing_required_python_path_refuses_namespace_construction(self):
+        for missing in root.PYTHON_REQUIRED:
+            with self.subTest(missing=missing), \
+                    patch.object(root.Path, 'exists', lambda path, absent=missing:
+                                 str(path) != absent), \
+                    patch.object(root.Path, 'glob', return_value=[]):
+                with self.assertRaisesRegex(PermissionError, 'Python runtime path absent'):
+                    root.sandbox([], dict(native_generation=3, expires=130))

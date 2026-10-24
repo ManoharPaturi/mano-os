@@ -1,16 +1,27 @@
-## Prepared commit-after-effects reply-loss fixture (LOCAL, NOT PUSHED)
-WhileCI40013441358 runs fixed3d8c203, newprobe_package_commit_reply.py prepared.
-CommonStop setup gains faultcommit-reply-loss; sharedguardedrepair extracted.
-WaitRootverified.json, freezeRootcontroller/Broker/launcher, requireBrokerrow
-executing/verified0/ackevents0 byreadonlySQLite andnocatalogpublicationyet,
-killpinnedBroker; requireRootdrainwithoutStop+Brokerrestartunknown+noreplay,
-preserveRootverifiedrecord andexportbefore/afterDB. ThenexplicitCIadminrepair/
-marksrestore andmetadataretire; recordbecomeshistorical, currentInstallFalse.
-No producttesthook/journalmutation/extraRootcapability. Integrateddriver/export
-butUNCOMMITTED; nativeunverified. Independenthelperpreparedoutputs/
-accept_commit_reply_loss.py, notyetwiredtofullaccept untilnexthead. KeepcurrentCI
-fixeduntiloutcome. Full551tests48skips/staticPASS forpreparedchanges; future
-nativeoutcomestillrequired. SharedtrustedruntimeclosureSTILLUNFIXED.
+## Existing Python path protection prepared for native CI
+
+Current feature branch adds read-only bindings for Debian13's existing interpreter,
+stdlib, distribution Python modules, /usr/local, and existing /etc/python3* trees.
+Required paths must exist; the worker preflight checks read-only flags and actual
+EROFS for interpreter write-open/new module-directory creation. The Root parent
+requires existing_python_paths_readonly in the exact boundary frame. Two ordinary
+unit regressions check mount ordering/ancestry and mandatory-path refusal.
+This closes existing path overwrite routes only. Absent Python search-path entries,
+shared ELF libraries/loader configuration and full dependency closure remain
+unresolved. No complete-closure or merge-eligibility claim. Native validation pending.
+Local553tests48Linuxskips, Ruff/compile/shell/diff PASS.
+
+Prior d7e319931f96582e315d0776612e4c9217ab1963 CI40057602757 ALL3SUCCESS.
+Artifact12546940682 SHA6f3a48113f24535f9f428846e9e47f9c3084e5d347fb96d2e279136066b46783
+independently accepted:54hashes45flags plus full approved apply, payload, actual
+Stop, separate Broker-death drain, packaged native PAM apply and successful-COMMIT
+reply loss. Last proof observes completed Root record/raw DB while Broker executing,
+kills pinned Broker, verifies domain drainage without Stop, restartunknown/noreplay.
+Explicit CIadmin repair restores packages/APTmarks; no product auto-repair or
+all-effects reversal/current-installation claim. Six fresh d7 originals/four crops
+actually visually inspected; receipt outputs/acceptance-pr134-committed-reply/.
+After-stock pending numeric duration clips lastdigit; effective shows120.
+PR134 remains DRAFT/unmerged; no reviewer notifications. FullgoalACTIVE/incomplete.
 
 ## Completed native interruption witnesses, catalog-capacity correction
 CI40010080992 terminalFAILURE later in packagedapply: four-catalog retentionfull.
